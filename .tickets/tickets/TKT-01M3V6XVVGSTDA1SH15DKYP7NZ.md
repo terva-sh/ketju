@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:40Z
-updated_at: 2026-10-03T03:34:06Z
+updated_at: 2026-10-03T04:06:45Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -49,11 +49,11 @@ This needs a design line first. The open questions are the endpoint, the bio's l
 
 ## Acceptance criteria
 
-- [ ] GET and PATCH /settings/profile follow docs/05 Display name and bio: 100 characters for the display name and 2000 for the bio, counted as characters; wrong_type, too_long and invalid_text refusals write nothing; an agent by credential and a pre-user are forbidden and anonymous unauthenticated (TestUpdateProfileValidates, TestSettingsRoutesRefuseAgentsAndAnonymous; golden, dto.ts and docs/07 rows)
-- [ ] An agent's display name and a member's are checked by one function (TestDisplayNameRuleIsShared)
-- [ ] /settings/profile edits the display name and bio and sends only what changed; the profile then shows both, and the own profile's Account block links to Edit profile
-- [ ] A display-name change misses the response cache, and the next thread page carries the new name (TestDisplayNameChangeMissesTheResponseCache)
-- [ ] e2e/settings.spec.ts covers the screen at 390 px and 1440 px, with one axe scan per test, and puts carol's name and bio back after
+- [x] GET and PATCH /settings/profile follow docs/05 Display name and bio: 100 characters for the display name and 2000 for the bio, counted as characters; wrong_type, too_long and invalid_text refusals write nothing; an agent by credential and a pre-user are forbidden and anonymous unauthenticated (TestUpdateProfileValidates, TestSettingsRoutesRefuseAgentsAndAnonymous; golden, dto.ts and docs/07 rows)
+- [x] An agent's display name and a member's are checked by one function (TestDisplayNameRuleIsShared)
+- [x] /settings/profile edits the display name and bio and sends only what changed; the profile then shows both, and the own profile's Account block links to Edit profile
+- [x] A display-name change misses the response cache, and the next thread page carries the new name (TestDisplayNameChangeMissesTheResponseCache)
+- [x] e2e/settings.spec.ts covers the screen at 390 px and 1440 px, with one axe scan per test, and puts carol's name and bio back after
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
@@ -133,3 +133,17 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
 **agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:21:26Z
 
 run decision: pending maintainer review. A member edits their display name and bio on /settings/profile through GET and PATCH /settings/profile. The display name follows the agent rule (100 characters, no control character, empty allowed). The bio is Markdown of at most 2000 characters. It is a member session only, with no audit row. Recorded with the alternatives in docs/05 'Display name and bio' (2026-10-02). The avatar is split out to TKT-01M3YSQ4CR (Let a member set an avatar), because who may fetch an avatar's blob is a class 1 question docs/07 'Attachments' does not answer. The title keeps 'avatar' because docs/15's scope names this ticket that way. Staff reset of a display name or bio is filed as TKT-01M3YT04ST (Let staff reset a member's display name and bio), with no milestone.
+
+**agent:claude-code/phase4-run-6xvvg** at 2026-10-03T04:06:45Z
+
+Implemented (Phase A, before the dist), as planned, with these readings:
+
+- `users.Service.Profile` and `UpdateProfile` (`internal/service/users/profile.go`) serve the routes through the service, and the handlers in `internal/web/api/settings.go` keep to the layering test. The handlers refuse an agent by credential and a stranger with `ownSession` before the body is read, as the session and identity routes do. The write is one statement, `UpdateUserProfile` in `queries/identity.sql`, which keeps a field sent as null.
+- **One display-name rule.** `users.CheckDisplayName` answers the trimmed name or a forms code (`too_long`, `invalid_text`), and `CreateAgent` now calls it. Its refusals keep their validation-failed shape with no field list, as before. TestDisplayNameRuleIsShared holds the two callers together.
+- **The bio** rejects any control character but tab, LF and CR (`invalid_text`), and counts characters as runes. JSON decoding already replaces invalid UTF-8 with U+FFFD, so the UTF-8 check guards other callers only, and the test has no case for it.
+- **A mention in a bio now links.** docs/05 "Display name and bio" says "A mention in it links and notifies nobody". `threads.Service.Profile` rendered the bio with no handle resolver, so mentions were plain text. It now resolves them with the rule a post's mentions follow (`handleMemo.resolveNow`), quotes still pointing nowhere (`noPosts`). Nothing notifies: only a post's create path notifies, and TestProfileSettingsThroughTheAPI pins that no notification row is written. docs/07's `GET /users/{handle}` row says so.
+- **The response-cache invariant** is pinned by TestDisplayNameChangeMissesTheResponseCache (respcache_test.go). The change goes through `users.Service.UpdateProfile` directly, because the thread world has no session store. The next page is a fresh draw (Inserts+1, no hit) carrying the new name.
+- **Client.** `screens/account/ProfileSettingsScreen.tsx` sits at `/settings/profile`, first in the settings links. Save sends only changed keys. The name is compared trimmed, so whitespace alone is not a change. A bio over 2000 characters is refused locally, without sending. The count region (`aria-live="polite"`) is empty until 200 characters are left. `refreshViewer` runs only when the name changed. The textarea's class is `settings-bio`, because `.profile-bio` is the profile page's rendered bio. The own profile's Account block gains "Edit profile" above "Settings".
+- **e2e:** a `profile` describe in `e2e/settings.spec.ts` on carol's stored session, with `afterEach` putting back "Carol Ruiz" and an empty bio. It passed at 390 px and 1440 px locally.
+- **Reader bundle:** 81492 B on main at 88b12b3, 82499 B with this change (+1007 B; the plan estimated +1000).
+- **Local runs:** `go test -race -p 4 ./...` timed out once in `cmd/ketju` at the default 10 minutes under a load average of 21 to 26. Run alone it passed in 331 s. Every other package passed.
