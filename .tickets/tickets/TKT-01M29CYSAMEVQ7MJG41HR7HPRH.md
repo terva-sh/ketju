@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSAMEVQ7MJG41HR7HPRH
 title: Implement split posts into a new thread
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -23,15 +23,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:359
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-cysam
+  branch: run/cysam-split-posts
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
+  commit: c0563a5904a98570a5c3336e19da0561cff94b1b
+  session: null
+  claimed_at: 2026-10-03T02:42:59Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T18:36:08Z
+updated_at: 2026-10-03T02:43:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-moving-posts
+  id: agent:claude-code/phase4-run-cysam
   name: ""
 extensions: {}
 ---
