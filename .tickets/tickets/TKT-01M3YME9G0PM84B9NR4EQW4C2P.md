@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9G0PM84B9NR4EQW4C2P
 title: Golden-test what every API endpoint actually serves
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-me9g0
+  branch: run/me9g0-served-goldens
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-me9g0
+  commit: 2f2f914df101afe6e7a2f4dd9e4c9004319130c5
+  session: null
+  claimed_at: 2026-10-03T03:41:37Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T17:29:05Z
+updated_at: 2026-10-03T03:41:38Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-me9g0
   name: ""
 extensions: {}
 ---
