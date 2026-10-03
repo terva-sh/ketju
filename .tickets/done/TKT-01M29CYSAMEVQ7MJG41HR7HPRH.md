@@ -23,10 +23,12 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:359
     path: null
+  - ref: pr:397
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T07:50:04Z
+updated_at: 2026-10-03T08:00:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
