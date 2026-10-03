@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"log/slog"
 	"maps"
@@ -321,6 +324,8 @@ var servedCases = map[string]servedCase{
 	"POST /api/v1/settings/deactivate":        at("carol", "/api/v1/settings/deactivate"),
 	"PUT /api/v1/settings/handle":             sending("carol", "/api/v1/settings/handle", `{"handle":"caroline"}`),
 	"PATCH /api/v1/settings/profile":          sending("carol", "/api/v1/settings/profile", `{"display_name":"Carol R.","bio":"Ask me about @alice's garden."}`),
+	"PUT /api/v1/settings/avatar":             {viewer: "carol", req: servedAvatar, ctype: "multipart/form-data; boundary=" + servedBoundary},
+	"DELETE /api/v1/settings/avatar":          {viewer: "carol", req: then(servedSetAvatar, "/api/v1/settings/avatar", "")},
 	"POST /api/v1/apply":                      sending("pre-user", "/api/v1/apply", validAnswers),
 	"POST /api/v1/apply/withdraw":             {viewer: "pre-user", req: servedWithdraw},
 	// The admin routes, each as the least viewer its gate admits: dana for
@@ -344,6 +349,7 @@ var servedCases = map[string]servedCase{
 	"GET /api/v1/admin/users":                           at("bob", "/api/v1/admin/users?prefix=c"),
 	"GET /api/v1/admin/users/{handle}":                  at("bob", "/api/v1/admin/users/carol"),
 	"PUT /api/v1/admin/users/{handle}/role":             sending("dana", "/api/v1/admin/users/carol/role", `{"role":"moderator"}`),
+	"DELETE /api/v1/admin/users/{handle}/avatar":        {viewer: "bob", req: then(servedSetAvatar, "/api/v1/admin/users/carol/avatar", "")},
 	"GET /api/v1/admin/groups":                          at("dana", "/api/v1/admin/groups"),
 	"POST /api/v1/admin/groups":                         sending("dana", "/api/v1/admin/groups", servedGroupBody),
 	"GET /api/v1/admin/groups/{id}":                     {viewer: "dana", req: inGroup("", "")},
@@ -534,6 +540,45 @@ func servedUpload(w *servedWorld) (string, string) {
 	fw.Write([]byte("Notes for the thread.\n"))
 	mw.Close()
 	return "/api/v1/blobs?forum=general", b.String()
+}
+
+// servedAvatarBody is a multipart body whose one part, file, is a 4 px
+// red PNG.
+func servedAvatarBody(w *servedWorld) string {
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for x := range 4 {
+		for y := range 4 {
+			img.Set(x, y, color.RGBA{R: 200, A: 255})
+		}
+	}
+	var b bytes.Buffer
+	mw := multipart.NewWriter(&b)
+	if err := mw.SetBoundary(servedBoundary); err != nil {
+		w.t.Fatal(err)
+	}
+	fw, err := mw.CreateFormFile("file", "me.png")
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	if err := png.Encode(fw, img); err != nil {
+		w.t.Fatal(err)
+	}
+	mw.Close()
+	return b.String()
+}
+
+// servedAvatar is carol setting her avatar.
+func servedAvatar(w *servedWorld) (string, string) {
+	return "/api/v1/settings/avatar", servedAvatarBody(w)
+}
+
+// servedSetAvatar has carol set her avatar, for the cases that clear it.
+func servedSetAvatar(w *servedWorld) {
+	w.t.Helper()
+	if rec := w.send("carol", http.MethodPut, "/api/v1/settings/avatar",
+		"multipart/form-data; boundary="+servedBoundary, servedAvatarBody(w)); rec.Code/100 != 2 {
+		w.t.Fatalf("seeding carol's avatar: %d %s", rec.Code, rec.Body)
+	}
 }
 
 // servedGroup is a system group's id.

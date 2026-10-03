@@ -6,6 +6,7 @@
     "Content-Type": "application/json"
   },
   "body": {
+    "avatar": "",
     "bio": "",
     "display_name": "Carol Ruiz"
   }

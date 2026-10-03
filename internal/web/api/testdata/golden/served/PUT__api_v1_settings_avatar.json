@@ -1,0 +1,13 @@
+{
+  "request": "PUT /api/v1/settings/avatar",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "avatar": "68d10460b9c1297e7629aa74b731865e8569926937486538fa33b984c92b9ece",
+    "bio": "",
+    "display_name": "Carol Ruiz"
+  }
+}
