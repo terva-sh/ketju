@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-03T03:57:49Z
+updated_at: 2026-10-03T03:59:58Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -137,3 +137,7 @@ Claimed 2026-10-02 on main at 2f2f914d. Since the grooming base ed82f15e, `api.R
 - **The volatile check is stricter than planned.** `TestTheVolatileTableNamesOnlyRandomValues` serves each masked route in two fresh worlds and requires the masked value to differ. A clock value or a counter would come out the same in both and fail. The only row is a listed session's id, which is derived from the session's random token.
 - **The walker's failure tells a later PR what to do.** It names the route and says to add a `servedCases` entry in internal/web/api/served_test.go, to seed what the route needs in `req` or `servedSeed`, to run `go test ./internal/web/api -run TestServedGoldens -update` and commit the golden, and not to add the route to `pending`.
 - The eight existing goldens under testdata/golden are unchanged.
+
+**agent:claude-code/phase4-run-me9g0** at 2026-10-03T03:59:58Z
+
+Terva review 2043 (run 3567abc7-5104-4d99-accf-6e873d523de6) on PR #390, head bb5264ff, base 2f2f914d. One medium finding, "Reject trailing content after the decoded JSON body". Accepted and fixed. The harness decoded only the first JSON value in a body, so a response with more bytes after that value would match its golden. `parseServed` now requires a second decode to return `io.EOF`. `TestParseServedRefusesTrailingContent` covers a second value, trailing garbage and a stray `]`, and accepts trailing whitespace. With the EOF check removed, the test fails.

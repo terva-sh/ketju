@@ -403,20 +403,51 @@ func (w *servedWorld) stable(path string) string {
 	return strings.NewReplacer(w.thread.String(), "{thread}", w.other.String(), "{other}").Replace(path)
 }
 
-// decodeServed decodes a JSON body with its numbers kept as written, or
-// nil for an empty one.
+// decodeServed is parseServed, failing t on an error.
 func decodeServed(t *testing.T, b []byte) any {
 	t.Helper()
+	v, err := parseServed(b)
+	if err != nil {
+		t.Fatalf("%v:\n%s", err, b)
+	}
+	return v
+}
+
+// parseServed decodes a JSON body with its numbers kept as written, or nil
+// for an empty one. The body must be one JSON value and nothing after it
+// but whitespace: a client reads the whole body, so trailing bytes are part
+// of what is served (review 2043).
+func parseServed(b []byte) (any, error) {
 	if len(bytes.TrimSpace(b)) == 0 {
-		return nil
+		return nil, nil
 	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
-		t.Fatalf("the body is not JSON: %v\n%s", err, b)
+		return nil, fmt.Errorf("the body is not JSON: %w", err)
 	}
-	return v
+	if err := dec.Decode(new(any)); err != io.EOF {
+		return nil, fmt.Errorf("the body has more after its JSON value (%v)", err)
+	}
+	return v, nil
+}
+
+// TestParseServedRefusesTrailingContent: a second value or garbage after
+// the body's JSON fails, and trailing whitespace does not.
+func TestParseServedRefusesTrailingContent(t *testing.T) {
+	for body, ok := range map[string]bool{
+		`{"a":1}`:         true,
+		"{\"a\":1}\n":     true,
+		"":                true,
+		`{"a":1}{"b":2}`:  false,
+		`{"a":1} garbage`: false,
+		`{"a":1}` + "\n]": false,
+	} {
+		if _, err := parseServed([]byte(body)); (err == nil) != ok {
+			t.Errorf("parseServed(%q) = %v, want ok %v", body, err, ok)
+		}
+	}
 }
 
 // maskPath applies fn to every value at path under v, and reports how many
