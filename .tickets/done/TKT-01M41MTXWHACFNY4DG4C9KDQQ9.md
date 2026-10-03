@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M41MTXWHACFNY4DG4C9KDQQ9
 title: Keep truncation detection on the first start after migration 0025
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase4-run-m0025
-  branch: run/01M41MTXWH-m0025-truncation
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a2221cbd8175652eb
-  commit: 2877483e58cc089ac2bc7e7af21bdcfd63603b67
-  session: null
-  claimed_at: 2026-10-03T20:16:44Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-03T19:46:10Z
-updated_at: 2026-10-03T20:16:45Z
+updated_at: 2026-10-03T20:21:18Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -57,10 +50,10 @@ The same review could not judge several paths, because their code was not in its
 
 ## Acceptance criteria
 
-- [ ] A thread log truncated before the upgrade, at a frame boundary above its header or to exactly its header, is classified corrupt and quarantined on the first start after the backlinks migration, as it would be on any other start (an upgrade test from a pre-0025 fixture shows it)
-- [ ] Every intact log still gets its quote backlinks backfilled on that first start, and the backfill runs once
-- [ ] Replaying every log over an existing database leaves every projection table, blobs.refcount, audit_log, notifications and the search index equal to a fresh ketju reindex of the same logs (a test compares them table by table)
-- [ ] The migration's comment and docs/03 or docs/04 say how the backfill keeps the truncation check, and the v1.0 checklist's part 2 records the outcome
+- [x] A thread log truncated before the upgrade, at a frame boundary above its header or to exactly its header, is classified corrupt and quarantined on the first start after the backlinks migration, as it would be on any other start (an upgrade test from a pre-0025 fixture shows it)
+- [x] Every intact log still gets its quote backlinks backfilled on that first start, and the backfill runs once
+- [x] Replaying every log over an existing database leaves every projection table, blobs.refcount, audit_log, notifications and the search index equal to a fresh ketju reindex of the same logs (a test compares them table by table)
+- [x] The migration's comment and docs/03 or docs/04 say how the backfill keeps the truncation check, and the v1.0 checklist's part 2 records the outcome
 
 ## Implementation plan
 
@@ -106,3 +99,17 @@ The third criterion's test confirms each of these against a world written throug
 ### Known limit
 
 The response cache keys a thread page on `threads.log_length_projected`, which a backfill does not move. At startup the backfill runs before the listener opens, so nothing is cached first. If a thread's backfill fails at startup and is paid later while serving, a page cached in between can show a `quoted_by` without the backfilled links until the thread's next write. It shows less than the truth, never more, and it needs a failed replay first.
+
+## Summary
+
+Fixed with a new migration, 0030, rather than an edit of 0025, because the migration runner refuses a database whose recorded migration text changed (`TestMigrateRefusesChecksumDrift`), and 0025 has been on main since #380.
+
+- `0030_projection_backfill.sql` adds `projection_state.backfill`, gives every row 0025 moved back to 64 its length again from `threads.log_length_projected`, and sets the flag. A row a catch-up already replayed under 0025 is left alone.
+- `ProjectThread` replays a flagged thread from its header to at least the recorded length and clears the flag with the length (`SetProjectionState`). Every projection path pays an owed backfill.
+- `CatchUp` classifies against the real length first: a cut log is quarantined and keeps its flag and its rows; any other flagged thread is replayed, gap or not. `Report.Backfilled` and the log lines count them.
+- The notifier reads no range of a thread whose backfill is owed.
+- docs/03 "Durability and recovery", docs/04 "post_quotes" and "projection_state", the v1.0 checklist's part 2 and the release notes say how.
+
+Tests: `TestUpgradeKeepsTruncationDetection` (ed82f15e fixture, cut at a frame boundary and to the header), `TestBackfillReplayEqualsReindex` (a world written through serve: every projection table, blobs, blob_uploads, audit_log, notifications, notification_progress and the search index equal to `reindex --projections --search` and to the rows before), `TestBackfillMigrationKeepsTheProjectedLength`, `TestBackfillKeepsTheCorruptionCheck`, `TestAnyProjectionPaysAnOwedBackfill`, and the notifier's "a backfill still owed". The replay test found no apply that is not idempotent: the projection never writes `blobs`, no trigger exists on `post_attachments`, audit rows are looked up by record, the projection writes no notifications, and search keeps its own state.
+
+Known limit, in the plan: a backfill that fails at startup and is paid later while serving can leave a cached page whose `quoted_by` lacks the backfilled links until the thread's next write.
