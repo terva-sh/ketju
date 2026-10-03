@@ -1,8 +1,9 @@
 {
-  "_ApplyRoot-B3ETubv-.js": {
-    "file": "assets/ApplyRoot-B3ETubv-.js",
+  "_ApplyRoot-C009Z5Bt.js": {
+    "file": "assets/ApplyRoot-C009Z5Bt.js",
     "name": "ApplyRoot",
     "imports": [
+      "_Icon-3Osv4awK.js",
       "index.html"
     ],
     "css": [
@@ -12,6 +13,10 @@
   "_ApplyRoot-C_SWIqcC.css": {
     "file": "assets/ApplyRoot-C_SWIqcC.css",
     "src": "_ApplyRoot-C_SWIqcC.css"
+  },
+  "_Icon-3Osv4awK.js": {
+    "file": "assets/Icon-3Osv4awK.js",
+    "name": "Icon"
   },
   "_icon-192-BjNXmPh-.png": {
     "file": "assets/icon-192-BjNXmPh-.png",
@@ -30,16 +35,20 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-BklGEMn4.js",
+    "file": "assets/index-DCU6ltKf.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
+    "imports": [
+      "_Icon-3Osv4awK.js"
+    ],
     "dynamicImports": [
+      "src/components/thread/MovePosts.tsx",
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-B3ETubv-.js"
+      "_ApplyRoot-C009Z5Bt.js"
     ],
     "css": [
-      "assets/index-C_eq5J2G.css"
+      "assets/index-BKZCB4ol.css"
     ],
     "assets": [
       "assets/ibm-plex-sans-latin-400-normal-CDDApCn2.woff2",
@@ -99,13 +108,27 @@
     "file": "assets/icon-CpaC7DhZ.svg",
     "src": "src/assets/icon/icon.svg"
   },
+  "src/components/thread/MovePosts.tsx": {
+    "file": "assets/MovePosts-CBqFgyIR.js",
+    "name": "MovePosts",
+    "src": "src/components/thread/MovePosts.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Icon-3Osv4awK.js",
+      "index.html"
+    ],
+    "css": [
+      "assets/MovePosts-D7dwtpWf.css"
+    ]
+  },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-BRh10QXj.js",
+    "file": "assets/AdminRoot-DGME1j92.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-B3ETubv-.js",
+      "_ApplyRoot-C009Z5Bt.js",
+      "_Icon-3Osv4awK.js",
       "index.html"
     ],
     "css": [
