@@ -63,6 +63,26 @@
   box-shadow: inset 3px 0 0 var(--unread);
 }
 
+/* The tags field (TKT-01M3YSQPZX): the title's row, in plain type, with a
+   hint and what was refused under it. */
+.new-thread-tags input {
+  font-size: 15px;
+  font-weight: 400;
+  font-family: var(--font-mono);
+}
+.new-thread-tags .field-hint,
+.new-thread-tags .field-errors {
+  margin: 0;
+  font-size: 13px;
+}
+.new-thread-tags .field-hint {
+  color: var(--muted);
+}
+.new-thread-tags .field-errors {
+  padding-left: 18px;
+  color: var(--ink);
+}
+
 .new-thread-notice {
   margin: 0;
   padding: 10px 20px;

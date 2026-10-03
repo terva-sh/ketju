@@ -5,6 +5,7 @@ import { isProblem } from '../api/problem';
 import { checkOwner } from './composer';
 import { draftNote, draftStatus, drop, load, resetDrafts, watch, type DraftKey } from './drafts';
 import { clearFiles, filesIn, hashes, newFiles, uploading, type Files } from './files';
+import { splitTags } from './tagErrors';
 import { viewer } from './viewer';
 
 // The new-thread composer's state, one per forum (docs/06 "Composer",
@@ -16,6 +17,12 @@ import { viewer } from './viewer';
 // Its files (Files) are the attachments that go with the first post.
 export interface NewThread extends Files {
   title: Signal<string>;
+  // tags is the Tags field's text (TKT-01M3YSQPZX). It is not autosaved:
+  // a forum draft has no tags (docs/07 "Drafts"), and adding them is a
+  // server change nobody has asked for. tagsSent is the list the last
+  // attempt sent, which a refusal's tags.N indexes.
+  tags: Signal<string>;
+  tagsSent: string[];
   source: Signal<string>;
   caret: Signal<number>;
   // summoned is the composer body's; nothing summons a new thread's, so it
@@ -57,6 +64,8 @@ export function newThreadFor(forum: string): NewThread {
   if (!n) {
     const s: NewThread = {
       title: signal(''),
+      tags: signal(''),
+      tagsSent: [],
       source: signal(''),
       caret: signal(0),
       summoned: signal(0),
@@ -129,18 +138,22 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
   const title = n.title.value;
   const source = n.source.value;
   if (n.posting.value || !title.trim() || !source.trim() || uploading(n)) return null;
+  const tags = splitTags(n.tags.value);
   n.posting.value = true;
   n.failure.value = null;
+  n.tagsSent = tags;
   try {
     const res = await apiSend<CreatedThread>('POST', `/api/v1/forums/${encodeURIComponent(forum)}/threads`, {
       title,
       source,
+      ...(tags.length ? { tags } : {}),
       ...hashes(n.attachments.value),
     });
     if (!current(forum, n, at)) return null;
     drop(draftKey(forum));
     batch(() => {
       n.title.value = '';
+      n.tags.value = '';
       n.source.value = '';
       clearFiles(n);
       n.caret.value = 0;
@@ -178,6 +191,7 @@ export function discardNewThread(forum: string) {
   drop(draftKey(forum));
   batch(() => {
     n.title.value = '';
+    n.tags.value = '';
     n.source.value = '';
     clearFiles(n);
     n.caret.value = 0;

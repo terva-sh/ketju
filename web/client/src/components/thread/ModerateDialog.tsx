@@ -5,6 +5,7 @@ import type { Forum, ForumTree, Pinned, SlowMode, ThreadHeader } from '../../api
 import { asProblem, isProblem, problemMessage, revokesAccess } from '../../api/problem';
 import { forumsUrl } from '../../screens/ForumIndex';
 import type { PanelKind } from '../../shell/threadActions';
+import { splitTags, tagMessages } from '../../state/tagErrors';
 import { storeThreadHeader } from '../../state/threads';
 import { canonicalThreadUrl } from '../../view';
 
@@ -41,6 +42,7 @@ const titles: Record<PanelKind, string> = {
   rename: 'Rename this thread',
   move: 'Move this thread',
   'slow-mode': 'Slow mode for this thread',
+  tags: 'Edit tags',
 };
 const buttons: Record<PanelKind, string> = {
   lock: 'Lock',
@@ -50,12 +52,15 @@ const buttons: Record<PanelKind, string> = {
   rename: 'Rename',
   move: 'Move',
   'slow-mode': 'Save',
+  tags: 'Save',
 };
 
 export const moderateChanged = 'This thread changed while you were working.';
 export const moderateForbidden = 'You can no longer moderate this thread.';
 export const slowModeConflict = 'Slow mode is already set to that, or the thread is archived.';
 export const slowModeInvalid = `Enter a whole number of seconds from 0 to ${slowModeMax}.`;
+export const tagsConflict = 'The thread already has these tags, or it is archived.';
+export const tagsInvalid = 'A tag was refused. The Tags field says which.';
 
 // moderateRefusal is what a refused action says. A conflict is another
 // moderator, or an archive, getting there first; forbidden is a grant
@@ -69,14 +74,21 @@ export const slowModeInvalid = `Enter a whole number of seconds from 0 to ${slow
 // loaded.
 //
 // Slow mode is conflict for the value the thread already has too, which the
-// client cannot foresee: a thread with no value of its own takes any.
+// client cannot foresee: a thread with no value of its own takes any. So
+// are tags: another moderator may have set the same ones.
 export function moderateRefusal(kind: PanelKind, err: unknown): string {
   const p = asProblem(err);
   const named = kind === 'rename' || kind === 'move';
   const slow = kind === 'slow-mode';
   switch (p.type) {
     case 'conflict':
-      return named ? 'This thread changed while you were working, or is already there.' : slow ? slowModeConflict : moderateChanged;
+      return named
+        ? 'This thread changed while you were working, or is already there.'
+        : slow
+          ? slowModeConflict
+          : kind === 'tags'
+            ? tagsConflict
+            : moderateChanged;
     case 'forbidden':
       return kind === 'move' ? 'You cannot move this thread there.' : named ? problemMessage(p).text : moderateForbidden;
     case 'validation-failed':
@@ -86,7 +98,9 @@ export function moderateRefusal(kind: PanelKind, err: unknown): string {
           ? `Enter a title of 1 to ${maxTitle} characters.`
           : slow
             ? slowModeInvalid
-            : problemMessage(p).text;
+            : kind === 'tags'
+              ? tagsInvalid
+              : problemMessage(p).text;
     case 'not-found':
       return kind === 'move' ? 'That forum is no longer there.' : problemMessage(p).text;
     default:
@@ -131,6 +145,13 @@ export function destinations(forums: Forum[], current: string, admin: boolean): 
 // for again, and its viewer block, whose change changes the ETag, shows
 // the new value.
 //
+// Edit tags (TKT-01M3YSQPZX) is the new thread screen's Tags field,
+// prefilled with the thread's tags (current.tags), and sends the whole set
+// as PUT /api/v1/admin/threads/{id}/tags. Its answer is a header, stored as
+// a rename's is. Save is off while the field holds the tags the thread has,
+// as the server would fold them, and a refused tag is named under the field
+// (state/tagErrors.ts).
+//
 // It is inline, not modal: it keeps the thread head, where the lock and pin
 // notes change, in view, and needs no focus trap. Focus goes to its first
 // control when it opens, and to returnTo, the thread's title, when it closes
@@ -166,8 +187,9 @@ export function ModerateDialog({
   returnTo: () => HTMLElement | null;
   onChanged: () => void;
   onClose: () => void;
-  // current is the thread's title and forum slug, for rename and move.
-  current?: { title: string; forum: string };
+  // current is the thread's title and forum slug, for rename and move, and
+  // its tags, for Edit tags.
+  current?: { title: string; forum: string; tags?: string[] };
   admin?: boolean;
   onWindowClosed?: () => void;
 }) {
@@ -175,6 +197,10 @@ export function ModerateDialog({
   const { route } = useLocation();
   const [reason, setReason] = useState('');
   const [title, setTitle] = useState(current.title);
+  const had = current.tags ?? [];
+  const [tagText, setTagText] = useState(() => had.join(' '));
+  // The refused tags' words, and the list they index.
+  const [tagErrors, setTagErrors] = useState<string[]>([]);
   const [dest, setDest] = useState('');
   const [forums, setForums] = useState(() => peekGet<ForumTree>(forumsUrl)?.forums);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -227,8 +253,12 @@ export function ModerateDialog({
   // A title's length in code points, as the server counts runes.
   const trimmed = title.trim();
   const length = [...trimmed].length;
+  const tags = splitTags(tagText);
+  const sameTags = [...new Set(tags.map((t) => t.toLowerCase()))].sort().join(' ') === had.join(' ');
   const unready =
-    (kind === 'rename' && (length === 0 || length > maxTitle || trimmed === current.title)) || (kind === 'move' && !dest);
+    (kind === 'rename' && (length === 0 || length > maxTitle || trimmed === current.title)) ||
+    (kind === 'move' && !dest) ||
+    (kind === 'tags' && sameTags);
   // The seconds chosen: NaN for a Custom value that is not a whole number.
   const typed = custom.trim();
   const seconds = choice === 'custom' ? (/^\d+$/.test(typed) ? Number(typed) : NaN) : Number(choice);
@@ -248,6 +278,8 @@ export function ModerateDialog({
         return { forum: dest };
       case 'slow-mode':
         return { seconds };
+      case 'tags':
+        return { tags };
     }
   };
 
@@ -260,6 +292,8 @@ export function ModerateDialog({
     inFlight.current = true;
     setSending(true);
     setRefused(null);
+    setTagErrors([]);
+    const sent = tags;
     try {
       const t = encodeURIComponent(thread);
       if (kind === 'slow-mode') {
@@ -269,7 +303,7 @@ export function ModerateDialog({
         return;
       }
       const header = await apiSend<ThreadHeader>(
-        kind === 'rename' ? 'PATCH' : 'POST',
+        kind === 'rename' ? 'PATCH' : kind === 'tags' ? 'PUT' : 'POST',
         kind === 'rename' ? `/api/v1/threads/${t}` : `/api/v1/admin/threads/${t}/${kind}`,
         body(),
         { status: 200 },
@@ -282,6 +316,7 @@ export function ModerateDialog({
       onClose();
     } catch (err) {
       setRefused(moderateRefusal(kind, err));
+      if (kind === 'tags') setTagErrors(tagMessages(asProblem(err).fieldErrors, sent));
       if (isProblem(err, 'rename-window-closed')) onWindowClosed?.();
       if (isProblem(err, 'conflict') || revokesAccess(err)) onChanged();
     } finally {
@@ -319,7 +354,7 @@ export function ModerateDialog({
       onKeyDown={onKeyDown}
     >
       <h2 id={heading}>{titles[kind]}</h2>
-      {offered || ((kind === 'rename' || kind === 'move') && refused) ? (
+      {offered || ((kind === 'rename' || kind === 'move' || kind === 'tags') && refused) ? (
         <form onSubmit={send}>
           {(kind === 'lock' || kind === 'unlock') && (
             <label class="moderate-field">
@@ -389,6 +424,33 @@ export function ModerateDialog({
               <p id={hint} class="moderate-hint">
                 Up to {maxTitle} characters.
               </p>
+            </>
+          )}
+          {kind === 'tags' && (
+            <>
+              <label class="moderate-field">
+                Tags
+                <input
+                  type="text"
+                  value={tagText}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellcheck={false}
+                  aria-describedby={tagErrors.length ? `${hint} ${hint}-tags` : hint}
+                  aria-invalid={tagErrors.length > 0 || undefined}
+                  onInput={(e) => setTagText(e.currentTarget.value)}
+                />
+              </label>
+              <p id={hint} class="moderate-hint">
+                Separate tags with spaces or commas. Empty removes them all.
+              </p>
+              {tagErrors.length > 0 && (
+                <ul id={`${hint}-tags`} class="moderate-hint" data-tag-errors>
+                  {tagErrors.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              )}
             </>
           )}
           {kind === 'move' && (

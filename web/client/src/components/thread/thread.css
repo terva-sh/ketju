@@ -29,6 +29,10 @@
 .thread-meta {
   margin: 0 0 12px;
 }
+/* The tags under it, as chips (TagChips, threadrow.css). */
+.thread-head .thread-tags {
+  margin: -6px 0 12px;
+}
 .thread-meta .starter {
   color: var(--ink2);
   font-weight: 500;

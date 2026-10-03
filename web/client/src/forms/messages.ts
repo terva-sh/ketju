@@ -23,6 +23,10 @@ const words: Record<string, (f?: FormField) => string> = {
   too_many: () => 'There are more of these than the form allows.',
   unknown_property: () => 'This holds a property no form field has.',
   malformed: () => 'This could not be read.',
+  // A thread's tags. The thread screens name the tag (state/tagErrors.ts),
+  // which is in the reader chunk; these are the words where no tag is named.
+  invalid_tag: () => 'A tag holds only letters, digits and single hyphens between them.',
+  reserved_tag: () => 'This tag is reserved for moderators and agent accounts.',
 };
 
 // knownCodes is exported for the test that holds the table to docs/07.

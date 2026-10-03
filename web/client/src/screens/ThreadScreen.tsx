@@ -6,6 +6,7 @@ import type { CreatedPost, Lens, Pinned, Post as PostDTO, ThreadPage, ThreadView
 import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
+import { TagChips } from '../components/TagChips';
 import { WatchDialog } from '../components/WatchDialog';
 import { Composer } from '../composer/Composer';
 import { ComposerSheet } from '../composer/ComposerSheet';
@@ -318,6 +319,9 @@ export function ThreadScreen() {
             {head.post_count} {head.post_count === 1 ? 'post' : 'posts'}
           </p>
         )}
+        {/* The thread's tags follow the line above, each a link to its
+            forum's list filtered to it (docs/06 "The thread head"). */}
+        {head && <TagChips tags={head.tags} forum={head.forum.slug} />}
         {head?.locked && (
           <p class="locked" data-thread-state="locked">
             This thread is locked.
@@ -346,12 +350,12 @@ export function ThreadScreen() {
             panel.kind === 'rename'
               ? offerRename
               : mayModerate &&
-                (panel.kind === 'move' || panel.kind === 'slow-mode' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
+                (panel.kind === 'move' || panel.kind === 'slow-mode' || panel.kind === 'tags' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
           }
           returnTo={() => title.current}
           onChanged={res.retry}
           onClose={() => setModerating(null)}
-          current={{ title: head.title, forum: head.forum.slug }}
+          current={{ title: head.title, forum: head.forum.slug, tags: head.tags }}
           admin={viewer.value.user?.role === 'admin'}
           onWindowClosed={() => setClosedOn(head.id)}
         />

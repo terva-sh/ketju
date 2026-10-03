@@ -13,9 +13,10 @@ export interface ThreadActionTarget {
 export type ModerateKind = 'lock' | 'unlock' | 'pin' | 'unpin';
 
 // PanelKind is what the panel under the thread head can be open for: the
-// four above, rename and move (docs/07 "Renaming and moving threads"), and
-// slow mode, PUT /api/v1/admin/threads/{id}/slow-mode (TKT-01M3R0PM0K).
-export type PanelKind = ModerateKind | 'rename' | 'move' | 'slow-mode';
+// four above, rename and move (docs/07 "Renaming and moving threads"), slow
+// mode, PUT /api/v1/admin/threads/{id}/slow-mode (TKT-01M3R0PM0K), and the
+// thread's tags, PUT /api/v1/admin/threads/{id}/tags (TKT-01M3YSQPZX).
+export type PanelKind = ModerateKind | 'rename' | 'move' | 'slow-mode' | 'tags';
 
 // ModerateState is what decides which moderation actions a thread offers:
 // its header's lock and pin, and whether the viewer is a moderator or admin
@@ -89,7 +90,9 @@ export interface ThreadActionOptions {
 // Move with them: its route needs moderate in the thread's forum and the
 // destination, and the destination is the server's to judge. Slow mode is
 // offered with them too, whatever the thread's state: its route is on the
-// same gate and decides moderate in the same forum (TKT-01M3RQP0TG).
+// same gate and decides moderate in the same forum (TKT-01M3RQP0TG). So is
+// Edit tags, whose route is a moderator's and never the author's (docs/08
+// "Thread tags", TKT-01M3YSQPZX).
 //
 // Watch is offered when the page hands it over, to a signed-in member (see
 // ThreadScreen). Its label is the thread's effective level, its own and
@@ -110,6 +113,7 @@ export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions =
       ? [
           { id: 'move', label: 'Move…', run: () => m.open('move') },
           { id: 'slow-mode', label: 'Slow mode…', run: () => m.open('slow-mode') },
+          { id: 'tags', label: 'Edit tags…', run: () => m.open('tags') },
         ]
       : []),
     {

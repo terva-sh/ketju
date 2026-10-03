@@ -166,6 +166,61 @@ describe('paging and sort', () => {
   });
 });
 
+// TKT-01M3YSQPZX: a tag chip opens its forum's list filtered to the tag
+// (docs/06 "Filtering by tag").
+describe('filtering by tag', () => {
+  it('links each chip to the list filtered to it', async () => {
+    const root = await listAt('/f/general', memberList, memberMe);
+    const links = [...row(root, '3yymw47g00001').querySelectorAll<HTMLAnchorElement>('.thread-tags a')];
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['meta', '/f/general?tag=meta'],
+      ['tools', '/f/general?tag=tools'],
+    ]);
+    expect(root.querySelector('[data-tagged]')).toBeNull();
+  });
+
+  it('asks for the tag, says what the list is filtered to, and links back', async () => {
+    const root = await listAt('/f/general?tag=meta', memberList, memberMe);
+    expect(asked).toContain('/api/v1/forums/general/threads?tag=meta');
+    const tagged = root.querySelector('[data-tagged]')!;
+    expect(tagged.textContent).toBe('Tagged metaShow all threads');
+    expect(tagged.querySelector('a')!.getAttribute('href')).toBe('/f/general');
+  });
+
+  it('keeps the tag across pages and sorts, and the sort on the way back', async () => {
+    let root = await listAt('/f/general?tag=meta', memberList, memberMe);
+    expect(root.querySelector('[data-older]')!.getAttribute('href')).toBe(`/f/general?tag=meta&cursor=${memberList.next_cursor}`);
+    const sorts = [...root.querySelectorAll<HTMLAnchorElement>('.thread-list-sort a')].map((a) => a.getAttribute('href'));
+    expect(sorts).toEqual(['/f/general?tag=meta', '/f/general?tag=meta&sort=created']);
+
+    root = await listAt('/f/general?tag=meta&sort=created&cursor=abc', { ...memberList, next_cursor: '' }, memberMe);
+    expect(asked).toContain('/api/v1/forums/general/threads?cursor=abc&sort=created&tag=meta');
+    const pages = [...root.querySelectorAll<HTMLAnchorElement>('.thread-list-pages a')];
+    expect(pages.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([['Newest', '/f/general?tag=meta&sort=created']]);
+    expect(root.querySelector('[data-tagged] a')!.getAttribute('href')).toBe('/f/general?sort=created');
+  });
+
+  it('says a tag no thread carries has none', async () => {
+    const root = await listAt('/f/general?tag=nothing', { ...memberList, threads: [], next_cursor: '' }, memberMe);
+    expect(root.querySelector('[data-empty-list]')?.textContent).toBe('No threads tagged nothing.');
+  });
+
+  it('shows the error panel for a tag the server will not read', async () => {
+    viewer.value = structuredClone(memberMe) as Me;
+    vi.stubGlobal('fetch', async (url: string) => {
+      asked.push(String(url));
+      return new Response(JSON.stringify({ type: 'bad-request', title: 't', status: 400 }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/problem+json' },
+      });
+    });
+    const root = await renderAt('/f/general?tag=a_b');
+    expect(screenOf(root)).toBe('thread-list');
+    expect(root.querySelector('.error-panel')).not.toBeNull();
+    expect(root.querySelector('[data-tagged]')!.textContent).toContain('a_b');
+  });
+});
+
 // TKT-01M3V6Y4JP: the forum header's Mark all read, for this forum only
 // (PUT /forums/{slug}/read), offered to a member.
 describe('mark all read', () => {

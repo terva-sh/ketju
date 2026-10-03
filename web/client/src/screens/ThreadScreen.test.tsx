@@ -417,6 +417,7 @@ describe('moderating from the thread screen', () => {
     for (const kind of ['lock', 'unlock', 'pin', 'unpin', 'move'])
       routes[`POST /api/v1/admin/threads/${id}/${kind}`] = (b) => moderate[kind]?.(b) ?? problemAnswer('internal', 500);
     routes[`PUT /api/v1/admin/threads/${id}/slow-mode`] = (b) => moderate['slow-mode']?.(b) ?? problemAnswer('internal', 500);
+    routes[`PUT /api/v1/admin/threads/${id}/tags`] = (b) => moderate.tags?.(b) ?? problemAnswer('internal', 500);
     server = stubServer(routes);
     as('moderator');
   });
@@ -1126,6 +1127,124 @@ describe('moderating from the thread screen', () => {
     await custom('86400');
     await submit();
     expect(puts()).toEqual([{ url: slowUrl, body: { seconds: 86400 } }]);
+  });
+
+  // TKT-01M3YSQPZX: the thread's tags on its head, as links to its forum's
+  // list filtered to each, and a moderator's Edit tags, PUT …/tags.
+  const tagsUrl = `/api/v1/admin/threads/${id}/tags`;
+  const chips = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLAnchorElement>('.thread-head .thread-tags a')].map((a) => [a.textContent, a.getAttribute('href')]);
+  async function typeTags(v: string) {
+    const f = panel()!.querySelector<HTMLInputElement>('input[type=text]')!;
+    f.value = v;
+    await act(async () => void f.dispatchEvent(new Event('input', { bubbles: true })));
+  }
+
+  it('shows the tags on the head as links to the filtered list', async () => {
+    const forum = at().thread.forum.slug;
+    pages = [at({ thread: { tags: ['garden', 'long-read'] } })];
+    let root = await renderAt(`/t/${id}/a`);
+    expect(chips(root)).toEqual([
+      ['garden', `/f/${forum}?tag=garden`],
+      ['long-read', `/f/${forum}?tag=long-read`],
+    ]);
+    // After the started-by line.
+    const meta = root.querySelector('.thread-meta')!;
+    expect(meta.nextElementSibling?.classList.contains('thread-tags')).toBe(true);
+    pages = [at({ thread: { tags: [] } })];
+    root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('.thread-head .thread-tags')).toBeNull();
+  });
+
+  it('a moderator edits the tags and the head shows them', async () => {
+    const forum = at().thread.forum.slug;
+    pages = [at({ thread: { tags: ['garden'] } }), at({ thread: { tags: ['garden', 'water'], log_length: len + 1 } })];
+    moderate.tags = (b) => ({
+      status: 200,
+      body: header({ tags: (b as { tags: string[] }).tags.map((t) => t.toLowerCase()).sort() }),
+      headers: { 'Cache-Control': 'no-store' },
+    });
+    const root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-shell=toolbar] [data-action=tags]')?.textContent).toBe('Edit tags…');
+    await open(root, 'tags');
+    expect(panel()!.querySelector('h2')?.textContent).toBe('Edit tags');
+    const field = panel()!.querySelector<HTMLInputElement>('input[type=text]')!;
+    expect(field.value).toBe('garden');
+    expect(document.activeElement).toBe(field);
+    // The tags the thread has, however typed, would change nothing.
+    expect(sendDisabled()).toBe(true);
+    await typeTags('GARDEN, garden');
+    expect(sendDisabled()).toBe(true);
+    await typeTags('Garden, water');
+    expect(sendDisabled()).toBe(false);
+    await submit();
+    await settle(root);
+    expect(puts()).toEqual([{ url: tagsUrl, body: { tags: ['Garden', 'water'] } }]);
+    expect(panel()).toBeNull();
+    expect(chips(root)).toEqual([
+      ['garden', `/f/${forum}?tag=garden`],
+      ['water', `/f/${forum}?tag=water`],
+    ]);
+    expect(document.activeElement).toBe(root.querySelector('h1'));
+  });
+
+  it('names each refused tag under the field and keeps what was typed', async () => {
+    let answer: Answer = problemAnswer('validation-failed', 422, {
+      errors: [
+        { field: 'tags.1', code: 'invalid_tag' },
+        { field: 'tags.2', code: 'too_long' },
+        { field: 'tags', code: 'too_many' },
+      ],
+    });
+    moderate.tags = () => answer;
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'tags');
+    await typeTags('ok a_b abcdefghijklmnopqrstuvwxyz');
+    await submit();
+    await settle(root);
+    const field = panel()!.querySelector<HTMLInputElement>('input[type=text]')!;
+    expect(field.value).toBe('ok a_b abcdefghijklmnopqrstuvwxyz');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    const errs = panel()!.querySelector('[data-tag-errors]')!;
+    expect(field.getAttribute('aria-describedby')?.split(' ')).toContain(errs.id);
+    expect([...errs.querySelectorAll('li')].map((l) => l.textContent)).toEqual([
+      '“a_b” is not a tag: use letters, digits and single hyphens between them.',
+      '“abcdefghijklmnopqrstuvwxyz” is longer than 24 characters.',
+      'A thread can have at most 8 tags.',
+    ]);
+    expect(panel()!.querySelector('[role=alert]')?.textContent).toBe('A tag was refused. The Tags field says which.');
+
+    // Another moderator set them first: the form stays, to copy from.
+    answer = problemAnswer('conflict', 409);
+    await submit();
+    await settle(root);
+    expect(panel()!.querySelector('[role=alert]')?.textContent).toBe('The thread already has these tags, or it is archived.');
+    expect(panel()!.querySelector('[data-tag-errors]')).toBeNull();
+    expect(panel()!.querySelector<HTMLInputElement>('input[type=text]')!.value).toBe('ok a_b abcdefghijklmnopqrstuvwxyz');
+  });
+
+  it('keeps the tags typed, with Save off, once the page says the viewer no longer moderates', async () => {
+    pages = [at(), at({ viewer: { can_moderate: false } })];
+    moderate.tags = () => problemAnswer('forbidden', 403);
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'tags');
+    await typeTags('garden water');
+    await submit();
+    await settle(root);
+    expect(panel()!.querySelector('[role=alert]')?.textContent).toBe('You can no longer moderate this thread.');
+    expect(panel()!.querySelector<HTMLInputElement>('input[type=text]')!.value).toBe('garden water');
+    expect(sendDisabled()).toBe(true);
+  });
+
+  it('Edit tags is not offered without can_moderate', async () => {
+    for (const role of ['member', 'moderator', 'admin'] as const) {
+      as(role);
+      pages = [at({ viewer: { can_moderate: false }, thread: { tags: ['garden'] } })];
+      const root = await renderAt(`/t/${id}/a`);
+      expect(root.querySelector('[data-action=tags]'), role).toBeNull();
+      // The chips are every reader's.
+      expect(chips(root).length, role).toBe(1);
+    }
   });
 });
 

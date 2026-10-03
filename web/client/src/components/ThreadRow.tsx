@@ -1,5 +1,6 @@
 import type { ThreadRow as Row } from '../api/dto';
 import { Icon } from './Icon';
+import { TagChips } from './TagChips';
 import { PostTime } from './thread/PostTime';
 import './unread.css';
 import './threadrow.css';
@@ -28,7 +29,12 @@ export function unreadHref(t: Pick<Row, 'id' | 'slug' | 'last_read_ordinal'>): s
 // title are separate links to different places. On a cross-forum list the
 // row names its forum first in the meta line, a link to the forum's list
 // (TKT-01M3V6Y4JP); a forum's own list sends forum null and draws none.
-export function ThreadRow({ thread: t, signedIn }: { thread: Row; signedIn: boolean }) {
+//
+// Its tags are links to a forum's list filtered to each (TKT-01M3YSQPZX):
+// the row's own forum on a cross-forum list, and listForum, the list's, on
+// a forum's own, whose rows name no forum.
+export function ThreadRow({ thread: t, signedIn, listForum }: { thread: Row; signedIn: boolean; listForum?: string }) {
+  const forum = t.forum?.slug ?? listForum;
   return (
     <li class={`thread-row${t.pinned ? ' row-pinned' : ''}`} data-thread={t.id}>
       <div class="thread-row-main">
@@ -49,13 +55,7 @@ export function ThreadRow({ thread: t, signedIn }: { thread: Row; signedIn: bool
             <span>{t.title}</span>
           </a>
         </div>
-        {t.tags.length > 0 && (
-          <ul class="thread-tags" aria-label="Tags">
-            {t.tags.map((tag) => (
-              <li key={tag}>{tag}</li>
-            ))}
-          </ul>
-        )}
+        {forum && <TagChips tags={t.tags} forum={forum} />}
         <div class="thread-row-meta">
           {t.forum && (
             <a class="thread-forum hit" href={`/f/${encodeURIComponent(t.forum.slug)}`} data-forum-link={t.forum.slug}>

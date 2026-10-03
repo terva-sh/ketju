@@ -92,6 +92,27 @@
   color: var(--ink2);
 }
 
+/* A list filtered to one tag (TKT-01M3YSQPZX): what it is filtered to,
+   and the way back to the whole list. */
+.thread-list-tagged {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink2);
+}
+.thread-tag-name {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+.thread-list-tagged a {
+  min-height: var(--target);
+  display: inline-flex;
+  align-items: center;
+}
+
 @media (max-width: 719.98px) {
   .thread-list {
     padding: 16px 0 32px;
@@ -100,6 +121,7 @@
   .thread-list-head,
   .thread-list-sort,
   .thread-list-pages,
+  .thread-list-tagged,
   .thread-list-empty {
     padding: 0 16px;
   }

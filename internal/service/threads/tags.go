@@ -11,16 +11,6 @@ import (
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
-// The field codes only a thread's tags answer with (docs/07 `POST
-// /forums/{slug}/threads`). The rest, too_long, too_many and wrong_type,
-// are the form codes. These two stay out of forms.Codes and docs/07's
-// form-codes table, which the client holds its words to, as the handle
-// codes do, until the client's tag ticket (TKT-01M3YSQPZX) gives them words.
-const (
-	CodeInvalidTag  = "invalid_tag"
-	CodeReservedTag = "reserved_tag"
-)
-
 // normalizedTags is a request's tags checked one by one: the set a thread
 // would store, folded, each once and sorted, and beside each request index
 // the code it is refused with, or "" for a tag that passed. tooMany is more
@@ -40,7 +30,7 @@ func normalizeTags(in []string) normalizedTags {
 		case errors.Is(err, domain.ErrTagTooLong):
 			n.codes[i] = forms.CodeTooLong
 		case err != nil:
-			n.codes[i] = CodeInvalidTag
+			n.codes[i] = forms.CodeInvalidTag
 		default:
 			n.norm[i] = t
 			n.tags = append(n.tags, t)
@@ -101,7 +91,7 @@ func (s *Service) checkTags(ctx context.Context, v domain.Viewer, forumID int64,
 		if !mod {
 			for i, t := range n.norm {
 				if n.codes[i] == "" && domain.IsReservedTag(t) {
-					n.codes[i] = CodeReservedTag
+					n.codes[i] = forms.CodeReservedTag
 				}
 			}
 		}

@@ -16,18 +16,21 @@ import { NotFound } from './Placeholder';
 import './threadlist.css';
 
 // threadListUrl is the API address for one page of a forum's threads
-// (docs/07): the cursor and sort are passed through as the address has them.
-export function threadListUrl(forum: string, cursor?: string, sort?: string): string {
+// (docs/07): the cursor, sort and tag are passed through as the address has
+// them, so a filtered list and the whole list are held apart.
+export function threadListUrl(forum: string, cursor?: string, sort?: string, tag?: string): string {
   const q = new URLSearchParams();
   if (cursor) q.set('cursor', cursor);
   if (sort) q.set('sort', sort);
+  if (tag) q.set('tag', tag);
   const s = q.toString();
   return `/api/v1/forums/${encodeURIComponent(forum)}/threads${s ? '?' + s : ''}`;
 }
 
-// pageHref is this screen's own address for a page and sort.
-function pageHref(forum: string, cursor?: string, sort?: string): string {
+// pageHref is this screen's own address for a page, sort and tag.
+function pageHref(forum: string, cursor?: string, sort?: string, tag?: string): string {
   const q = new URLSearchParams();
+  if (tag) q.set('tag', tag);
   if (sort) q.set('sort', sort);
   if (cursor) q.set('cursor', cursor);
   const s = q.toString();
@@ -39,6 +42,12 @@ function pageHref(forum: string, cursor?: string, sort?: string): string {
 // ?sort=created, in the server's order; the client does not re-sort. Paging
 // is the server's cursor, carried in the address, so a page can be linked,
 // reloaded and returned to.
+//
+// ?tag= filters it to the threads carrying one tag, which a tag chip links
+// to (docs/06 "Filtering by tag", TKT-01M3YSQPZX). The header then says
+// "Tagged TAG" with a link back to the whole list, and the sort and the
+// pages keep the tag. A tag that could not be one is the server's
+// bad-request, shown as the list's error.
 //
 // A page's answer is held (useResource's peek), so going back to it renders
 // at once and useScrollMemory can put the reader where they were.
@@ -57,7 +66,8 @@ export function ThreadListScreen() {
   const forum = params.forum;
   const cursor = query.cursor || undefined;
   const sort = query.sort || undefined;
-  const key = threadListUrl(forum, cursor, sort);
+  const tag = query.tag || undefined;
+  const key = threadListUrl(forum, cursor, sort, tag);
   const res = useResource(key, (signal) => apiGet<ThreadList>(key, { signal }), () => peekGet<ThreadList>(key));
   const list = res.data;
   // A mark all read changes the rows' counts (state/lists.ts).
@@ -83,7 +93,7 @@ export function ThreadListScreen() {
   );
   useScrollMemory(key, !!list);
   // A thread marked unread from here comes back to this page (state/lists.ts).
-  useEffect(() => rememberList(forum, pageHref(forum, cursor, sort)), [forum, cursor, sort]);
+  useEffect(() => rememberList(forum, pageHref(forum, cursor, sort, tag)), [forum, cursor, sort, tag]);
 
   if (isProblem(res.error, 'not-found')) return <NotFound />;
 
@@ -117,6 +127,12 @@ export function ThreadListScreen() {
           </div>
         )}
       </header>
+      {tag && (
+        <p class="thread-list-tagged" data-tagged={tag}>
+          Tagged <span class="thread-tag-name">{tag}</span>
+          <a href={pageHref(forum, undefined, sort)}>Show all threads</a>
+        </p>
+      )}
       {watching && offerWatch && (
         <WatchDialog
           target={{ forum, name: list!.forum!.name }}
@@ -133,31 +149,31 @@ export function ThreadListScreen() {
         />
       )}
       <nav class="thread-list-sort" aria-label="Sort threads">
-        <a href={pageHref(forum)} aria-current={!sort ? 'page' : undefined}>
+        <a href={pageHref(forum, undefined, undefined, tag)} aria-current={!sort ? 'page' : undefined}>
           Latest activity
         </a>
-        <a href={pageHref(forum, undefined, 'created')} aria-current={sort === 'created' ? 'page' : undefined}>
+        <a href={pageHref(forum, undefined, 'created', tag)} aria-current={sort === 'created' ? 'page' : undefined}>
           Newest threads
         </a>
       </nav>
       {res.error && !list && <ErrorPanel error={res.error} what="This forum's threads" onRetry={res.retry} />}
       {list && list.threads.length === 0 && (
         <p class="thread-list-empty" data-empty-list>
-          {cursor ? 'No more threads.' : 'No threads here yet.'}
+          {cursor ? 'No more threads.' : tag ? `No threads tagged ${tag}.` : 'No threads here yet.'}
         </p>
       )}
       {list && list.threads.length > 0 && (
         <ul class="thread-rows">
           {list.threads.map((t) => (
-            <ThreadRow key={t.id} thread={t} signedIn={signedIn} />
+            <ThreadRow key={t.id} thread={t} signedIn={signedIn} listForum={forum} />
           ))}
         </ul>
       )}
       {list && (cursor || list.next_cursor) && (
         <nav class="thread-list-pages" aria-label="Pages">
-          {cursor && <a href={pageHref(forum, undefined, sort)}>Newest</a>}
+          {cursor && <a href={pageHref(forum, undefined, sort, tag)}>Newest</a>}
           {list.next_cursor && (
-            <a href={pageHref(forum, list.next_cursor, sort)} rel="next" data-older>
+            <a href={pageHref(forum, list.next_cursor, sort, tag)} rel="next" data-older>
               Older threads
             </a>
           )}

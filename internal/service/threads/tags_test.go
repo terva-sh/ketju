@@ -36,10 +36,10 @@ func TestNormalizeTagsDedupesAndSorts(t *testing.T) {
 		{"eight with repeats among ten", eightRepeated, nine()[:domain.MaxTags], nil},
 		{"nine distinct", nine(), nil, []problem.FieldError{{Field: "tags", Code: forms.CodeTooMany}}},
 		{"a mix", append([]string{"ok", "-bad", "x"}, "Ok", "ünï", "twenty-five-characters-xx", "fine"),
-			nil, []problem.FieldError{{Field: "tags.1", Code: CodeInvalidTag},
-				{Field: "tags.4", Code: CodeInvalidTag}, {Field: "tags.5", Code: forms.CodeTooLong}}},
+			nil, []problem.FieldError{{Field: "tags.1", Code: forms.CodeInvalidTag},
+				{Field: "tags.4", Code: forms.CodeInvalidTag}, {Field: "tags.5", Code: forms.CodeTooLong}}},
 		{"a mix past the count", nine("", "Nope!"), nil, []problem.FieldError{
-			{Field: "tags.9", Code: CodeInvalidTag}, {Field: "tags.10", Code: CodeInvalidTag},
+			{Field: "tags.9", Code: forms.CodeInvalidTag}, {Field: "tags.10", Code: forms.CodeInvalidTag},
 			{Field: "tags", Code: forms.CodeTooMany}}},
 	} {
 		got, err := NormalizeTags(c.in)

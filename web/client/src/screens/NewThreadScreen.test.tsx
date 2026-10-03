@@ -242,6 +242,63 @@ describe('refusals', () => {
     expect(area(root).hasAttribute('aria-invalid')).toBe(false);
   });
 
+  // TKT-01M3YSQPZX: one optional Tags field, sent as the list typed.
+  const tags = (root: HTMLElement) => root.querySelector<HTMLInputElement>('#new-thread-tags')!;
+
+  it('sends the tags typed, split on spaces and commas, and none when empty', async () => {
+    const s = serve('general');
+    let root = await renderAt(general);
+    expect(root.querySelector('label[for=new-thread-tags]')!.textContent).toBe('Tags (optional)');
+    const hint = root.querySelector('#new-thread-tags-hint')!;
+    expect(hint.textContent).toBe('Separate tags with spaces or commas');
+    expect(tags(root).getAttribute('aria-describedby')).toBe('new-thread-tags-hint');
+    await write(root, 'Rain barrels', 'Which one?');
+    await fill(tags(root), ' Garden, long-read  x,,');
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => r.body)).toEqual([
+      { title: 'Rain barrels', source: 'Which one?', tags: ['Garden', 'long-read', 'x'] },
+    ]);
+
+    // The field is cleared with the rest once the thread is created.
+    root = await renderAt(general);
+    expect(tags(root).value).toBe('');
+    await write(root, 'Another', 'text');
+    await fill(tags(root), ' , ');
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads')[1].body).toEqual({ title: 'Another', source: 'text' });
+  });
+
+  it('names each refused tag under the field and marks it invalid', async () => {
+    serve('general', {
+      'POST /api/v1/forums/general/threads': () =>
+        problemAnswer('validation-failed', 422, {
+          errors: [
+            { field: 'tags.0', code: 'reserved_tag' },
+            { field: 'tags.2', code: 'invalid_tag' },
+          ],
+        }),
+    });
+    const root = await renderAt(general);
+    await write(root, 'T', 'body');
+    await fill(tags(root), 'agent garden a--b');
+    await click(post(root));
+    await wait(5);
+    expect(alert(root)).toBe('Your thread was not posted: a tag was refused. The Tags field says which.');
+    const errs = root.querySelector('#new-thread-tags-error')!;
+    expect([...errs.querySelectorAll('li')].map((l) => l.textContent)).toEqual([
+      '“agent” is reserved for moderators and agent accounts.',
+      '“a--b” is not a tag: use letters, digits and single hyphens between them.',
+    ]);
+    expect(tags(root).getAttribute('aria-invalid')).toBe('true');
+    expect(tags(root).getAttribute('aria-describedby')).toBe('new-thread-tags-hint new-thread-tags-error');
+    // What was typed stays, and the title is not blamed.
+    expect(tags(root).value).toBe('agent garden a--b');
+    expect(title(root).hasAttribute('aria-invalid')).toBe(false);
+    expect(post(root).disabled).toBe(false);
+  });
+
   it.each([
     ['forbidden', 403],
     ['conflict', 409],

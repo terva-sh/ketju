@@ -22,6 +22,7 @@ import {
   type NewThread,
 } from '../state/newThread';
 import { useShellContext } from '../state/shell';
+import { hasTagErrors, tagMessages } from '../state/tagErrors';
 import { viewer } from '../state/viewer';
 import { forumsUrl } from './ForumIndex';
 import { NotFound } from './Placeholder';
@@ -43,6 +44,10 @@ const maxTitle = 200;
 // The title and the body are autosaved as the viewer's draft for the forum
 // (state/newThread.ts over state/drafts.ts), loaded when the screen opens,
 // and deleted once the thread is created, which then opens.
+//
+// Tags are one optional field under the title, separated by spaces or
+// commas, and are not autosaved (TKT-01M3YSQPZX). A refused tag is named
+// under the field (state/tagErrors.ts).
 //
 // Attach is offered where the forum tree says the viewer may upload to a new
 // thread there (can_upload), and the files go with the first post
@@ -169,6 +174,7 @@ export function NewThreadScreen() {
               </p>
             )}
             <TitleField n={n} invalid={'title' in fields} />
+            <TagsField n={n} errors={tagMessages(fields, n.tagsSent)} />
           </>
         }
         foot={
@@ -209,6 +215,41 @@ function TitleField({ n, invalid }: { n: NewThread; invalid: boolean }) {
   );
 }
 
+// TagsField is the new thread's tags, one line of text. What the server
+// refused is named under it, and the field is marked invalid until the next
+// attempt.
+function TagsField({ n, errors }: { n: NewThread; errors: string[] }) {
+  return (
+    <div class="new-thread-title new-thread-tags">
+      <label for="new-thread-tags">Tags (optional)</label>
+      <input
+        id="new-thread-tags"
+        type="text"
+        autoComplete="off"
+        autoCapitalize="none"
+        spellcheck={false}
+        value={n.tags.value}
+        readOnly={n.posting.value}
+        aria-invalid={errors.length > 0 || undefined}
+        aria-describedby={errors.length > 0 ? 'new-thread-tags-hint new-thread-tags-error' : 'new-thread-tags-hint'}
+        onInput={(e) => {
+          if (!n.posting.value) n.tags.value = e.currentTarget.value;
+        }}
+      />
+      <p class="field-hint" id="new-thread-tags-hint">
+        Separate tags with spaces or commas
+      </p>
+      {errors.length > 0 && (
+        <ul class="field-errors" id="new-thread-tags-error" data-tag-errors>
+          {errors.map((e) => (
+            <li key={e}>{e}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // findForum is slug's forum in the tree, a root or a child.
 function findForum(forums: Forum[], slug: string): Forum | undefined {
   for (const f of forums) {
@@ -230,9 +271,9 @@ export function createFailure(err: unknown): string {
     case 'conflict':
       return 'This forum is archived, so your thread was not posted.';
     case 'validation-failed':
-      return p.fieldErrors.attachments
-        ? attachRefused
-        : 'The title must be 1 to 200 characters with no control characters, and the post cannot be empty.';
+      if (p.fieldErrors.attachments) return attachRefused;
+      if (hasTagErrors(p.fieldErrors)) return 'Your thread was not posted: a tag was refused. The Tags field says which.';
+      return 'The title must be 1 to 200 characters with no control characters, and the post cannot be empty.';
     case 'payload-too-large':
       return 'The post is longer than the limit allows.';
     case 'rate-limited':
