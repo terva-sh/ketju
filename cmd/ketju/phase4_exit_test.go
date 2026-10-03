@@ -4,11 +4,17 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"mime/multipart"
 	"net"
 	"net/http"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"slices"
@@ -66,6 +72,9 @@ import (
 // bearer credential, which spends no /auth/*.
 
 var p4Kim = seeded{subject: "kim-sub", handle: "kim", role: domain.RoleMember}
+
+// p4Stranger is a subject the provider signs in who has no account.
+const p4Stranger = "stranger-sub"
 
 // p4People is everyone the world seeds.
 var p4People = []seeded{ada, mona, sam, p4Kim, p3Gail, p3Otto, p3Pat}
@@ -178,6 +187,9 @@ func newP4World(t *testing.T, forBackup bool, people ...seeded) *p4World {
 	for _, p := range p4People {
 		w.idp.Users = append(w.idp.Users, p.subject)
 	}
+	// A stranger has an identity at the provider and no account, so signing
+	// in makes them a pre-user (registration is in approval mode).
+	w.idp.Users = append(w.idp.Users, p4Stranger)
 	config := writeConfig
 	if forBackup {
 		config = backupConfig
@@ -1161,6 +1173,132 @@ func TestPhase4ExitTagsFollowTheirRules(t *testing.T) {
 	p4Leaks(t, member, "Vault garden", secret)
 }
 
+// setAvatar sets body as a's avatar through PUT /api/v1/settings/avatar.
+func (a *actor) setAvatar(t *testing.T, name string, body []byte) answer {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	h := textproto.MIMEHeader{}
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename=%q`, name))
+	h.Set("Content-Type", "image/png")
+	part, err := mw.CreatePart(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	part.Write(body)
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPut, "http://"+a.r.addr+"/api/v1/settings/avatar", &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return a.send(t, req)
+}
+
+// facePNG is a 40 by 40 PNG whose colour is tag's: an avatar is
+// re-encoded from its pixels, so two avatars differ only in what they show.
+func facePNG(t *testing.T, tag string) []byte {
+	t.Helper()
+	sum := sha256.Sum256([]byte(tag))
+	img := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for x := range 40 {
+		for y := range 40 {
+			img.Set(x, y, color.RGBA{sum[0], sum[1], uint8(x * 6), 255})
+		}
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// avatarOf sets a PNG of its own as a's avatar and answers its hash.
+func (a *actor) avatarOf(t *testing.T, tag string) string {
+	t.Helper()
+	res := a.setAvatar(t, tag+".png", facePNG(t, tag))
+	var out dto.ProfileSettings
+	if res.status == http.StatusOK {
+		res.decode(t, &out)
+	}
+	if res.status != http.StatusOK || out.Avatar == "" {
+		t.Fatalf("%s: setting an avatar answered %d:\n%s", a.name, res.status, res)
+	}
+	return out.Avatar
+}
+
+// TestPhase4ExitAvatarsAreServedOnlyToMembers: pat sets an avatar through
+// PUT /api/v1/settings/avatar. Signed-in members and an agent by its
+// credential fetch it from /avatars/{hash}; a signed-out request and a
+// pre-user are refused, and /blobs/{hash} never serves it, as docs/05
+// "Display name and bio" records the maintainer's exception (2026-10-02,
+// TKT-01M3YSQ4CR). Once pat replaces it, the old hash is refused to
+// everyone. An attachment in annex is still refused to gail, who cannot
+// read annex, though any member may fetch any avatar.
+func TestPhase4ExitAvatarsAreServedOnlyToMembers(t *testing.T) {
+	w := newP4World(t, false, ada, p3Pat, p3Gail, p4Kim)
+	pat, gail, kim := w.as["pat"], w.as["gail"], w.as["kim"]
+	scribe := w.agent("scribe")
+	anon := newActor(w.r, "anonymous")
+	stranger := w.from("stranger")
+	res := signIn(t, stranger, w.idp, p4Stranger)
+	if res.status != http.StatusSeeOther || res.header.Get("Location") != "/apply" || stranger.session() == "" {
+		t.Fatalf("the stranger's sign-in answered %d to %q", res.status, res.header.Get("Location"))
+	}
+	fetch := func(a *actor, path string) int { return a.do(t, http.MethodGet, path, nil).status }
+
+	first := pat.avatarOf(t, "pat-first")
+	for _, a := range []*actor{pat, gail, kim, scribe} {
+		res := a.do(t, http.MethodGet, "/avatars/"+first, nil)
+		if res.status != http.StatusOK || !strings.HasPrefix(res.header.Get("Content-Type"), "image/") {
+			t.Errorf("%s: pat's avatar answered %d %q, want an image", a.name, res.status, res.header.Get("Content-Type"))
+		}
+	}
+	for _, a := range []*actor{anon, stranger} {
+		if res := a.do(t, http.MethodGet, "/avatars/"+first, nil); res.status == http.StatusOK || strings.HasPrefix(res.header.Get("Content-Type"), "image/") {
+			t.Errorf("%s: pat's avatar answered %d %q", a.name, res.status, res.header.Get("Content-Type"))
+		}
+	}
+	for _, a := range []*actor{pat, gail, anon} {
+		if got := fetch(a, "/blobs/"+first); got != http.StatusNotFound {
+			t.Errorf("%s: /blobs/ answered the avatar with %d, want 404", a.name, got)
+		}
+	}
+
+	// Replaced, the old one is no one's.
+	second := pat.avatarOf(t, "pat-second")
+	if second == first {
+		t.Fatalf("a new image kept the old hash")
+	}
+	for _, a := range []*actor{pat, gail} {
+		if got := fetch(a, "/avatars/"+first); got != http.StatusNotFound {
+			t.Errorf("%s: the replaced avatar answered %d, want 404", a.name, got)
+		}
+		if got := fetch(a, "/avatars/"+second); got != http.StatusOK {
+			t.Errorf("%s: the new avatar answered %d, want 200", a.name, got)
+		}
+	}
+
+	// An attachment keeps the attachment rule: kim's in annex reaches
+	// annex's readers alone, though gail may fetch any avatar.
+	thread := kim.start(t, "annex", "Annex pictures", "A picture follows.")
+	h := kim.attach(t, thread, "annex-pic")
+	kim.post(t, thread, "The picture.", h)
+	if got := fetch(kim, "/blobs/"+h); got != http.StatusOK {
+		t.Errorf("kim: the annex attachment answered %d, want 200", got)
+	}
+	for _, x := range []*actor{gail, anon} {
+		if got := fetch(x, "/blobs/"+h); got != http.StatusNotFound {
+			t.Errorf("%s: the annex attachment answered %d, want 404", x.name, got)
+		}
+		if got := fetch(x, "/avatars/"+h); got != http.StatusNotFound {
+			t.Errorf("%s: the annex attachment as an avatar answered %d, want 404", x.name, got)
+		}
+	}
+}
+
 // TestPhase4ExitMetricsServeOnlyOnTheirOwnListener: after a split, a merge,
 // an archive and a retag, the main listener answers /metrics with 404; the
 // metrics listener serves docs/02's families, answers 404 for anything
@@ -1239,8 +1377,9 @@ func TestPhase4ExitMetricsServeOnlyOnTheirOwnListener(t *testing.T) {
 }
 
 // pages is each viewer's answer for each thread, status and body, by
-// viewer and thread.
-func (w *p4World) pages(viewers []*actor, threads []string) map[string]string {
+// viewer and thread, with each viewer's and an anonymous reader's answer
+// for the avatar face.
+func (w *p4World) pages(viewers []*actor, threads []string, face string) map[string]string {
 	w.t.Helper()
 	out := map[string]string{}
 	for _, a := range viewers {
@@ -1249,18 +1388,24 @@ func (w *p4World) pages(viewers []*actor, threads []string) map[string]string {
 			out[a.name+" "+th] = fmt.Sprintf("%d %s", res.status, res.body)
 		}
 	}
+	for _, a := range append([]*actor{newActor(w.r, "anonymous")}, viewers...) {
+		res := a.do(w.t, http.MethodGet, "/avatars/"+face, nil)
+		sum := sha256.Sum256(res.body)
+		out[a.name+" avatar"] = fmt.Sprintf("%d %x", res.status, sum)
+	}
 	return out
 }
 
 // TestPhase4ExitBackupRestoresAndPassesFsck: the data directory holds every
 // Phase 4 write (a cross-forum split and merge, a reply as a new thread,
-// tags and a retag, an archived thread and a quoting post). While a writer
+// tags and a retag, an archived thread, a quoting post and an avatar). While a writer
 // adds 40 replies to a thread in general, ketju backup writes DEST. DEST,
 // copied into an empty directory with the source's config.toml and
 // secrets/ as the README restores it, passes ketju fsck with exit 0; a
 // serve on the copy gives kim, gail and pat the same pages as the source
 // for every thread but the one being written, whose log is a prefix of the
-// source's; and ketju reindex --projections --search leaves the same pages.
+// source's, and the same answer for pat's avatar, anonymous refused; and
+// ketju reindex --projections --search leaves the same pages.
 func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	w := newP4World(t, true, ada, p4Kim, p3Gail, p3Pat)
 	admin, kim, gail, pat := w.as["ada"], w.as["kim"], w.as["gail"], w.as["pat"]
@@ -1288,6 +1433,7 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	kim.must(t, http.StatusOK, http.MethodPut, "/api/v1/admin/threads/"+tagged+"/tags", map[string]any{"tags": []string{"garden"}})
 	z := admin.start(t, "general", "Backed-up archive", "Closed.")
 	admin.must(t, http.StatusOK, http.MethodPost, "/api/v1/admin/threads/"+z+"/archive", map[string]any{"reason": "History."})
+	face := pat.avatarOf(t, "pat-backup")
 	busy := kim.start(t, "general", "Busy thread", "Replies arrive during the backup.")
 	threads := []string{v, a, s, c, tagged, z}
 	viewers := []*actor{kim, gail, pat}
@@ -1341,7 +1487,10 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	if sum.CaughtUp != 0 || sum.Drift != 0 {
 		t.Errorf("the copy caught up %d thread(s), with drift %d; want the logs copied at the snapshot's lengths", sum.CaughtUp, sum.Drift)
 	}
-	want := w.pages(viewers, threads)
+	want := w.pages(viewers, threads, face)
+	if want["kim avatar"][:3] != "200" || want["anonymous avatar"][:3] == "200" {
+		t.Fatalf("the source answers pat's avatar %q to kim and %q to anonymous", want["kim avatar"], want["anonymous avatar"])
+	}
 	source := w.logOf(busy)
 
 	// Restore as the README says, beside the source's config and secrets.
@@ -1366,7 +1515,7 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	}
 	compare := func(when string) {
 		t.Helper()
-		pages := cw.pages(viewers, threads)
+		pages := cw.pages(viewers, threads, face)
 		for k, page := range want {
 			if pages[k] != page {
 				t.Errorf("%s, %s: the copy serves\n%.800s\nthe source served\n%.800s", when, k, pages[k], page)
