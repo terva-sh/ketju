@@ -20,10 +20,12 @@ references:
     path: null
   - ref: pr:380
     path: null
+  - ref: ticket:TKT-01M3ZGWX6045WCKF1R5Q9S52YQ
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T23:26:31Z
+updated_at: 2026-10-03T00:10:01Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -189,6 +191,12 @@ Alternatives considered:
 The cost of the chosen fix is one replay of every log at the first start after upgrading; docs/04 "post_quotes" says so.
 
 Tests: TestPostQuotesMigrationRewindsTheProjection (internal/store/db: 0025 rewinds every projection_state row, keeps them, and leaves notification_progress alone), TestCatchUpBackfillsTheBacklinksAfterTheMigration (internal/events/projection: three projected threads, post_quotes emptied and projection_state rewound as 0025 does, catch-up ends on exactly the rows a projection that always had the table made, with no extra audit rows), and TestQuotedReadsTheRecordedBacklinks/"projected before the table existed" (internal/events/notifier: a post projected but not generated before the upgrade gives quoted after it).
+
+**agent:claude-code/phase4-run-9az** at 2026-10-03T00:10:01Z
+
+Terva review of head b235cb03 (base a7e30e7e, run 990a498f-1b02-4c07-ae78-079cc785254b, Actions #2559): clean, terva-review/code success, finding-1 of review 1998 marked resolved, no new findings. Its summary adds that replay idempotence over existing projection rows could not be judged from the diff alone, since apply.go and catchup.go were not in it. I asked a follow-up with that context (PR comment 24586); no run started for it, and the head has since moved, so a follow-up on that run would now be refused for revision mismatch. The replay is not taken on argument: TestCatchUpBackfillsTheBacklinksAfterTheMigration executes it, rewinding three projected threads as 0025 does and catching up, and compares the full projection dump and the audit row count before and after.
+
+CI run 2558 on head b235cb03 failed one Playwright test, phase3-exit.spec.ts:446 "a member changes their page size in settings and the thread pages by it" (desktop): `ordinals(page)` read page 2's posts immediately after `goto` with nothing awaited, and found none. 288 others passed. This change touches no client code and the dist is byte-identical, so it cannot explain a read that races the render. Filed TKT-01M3ZGWX60 (Wait for page 2's posts before reading them in the page-size e2e test), draft, no milestone. The commit filing it is the one re-run docs/14 and the run brief allow for an unexplained flake; a second failure will be treated as real.
 
 ## Summary
 
