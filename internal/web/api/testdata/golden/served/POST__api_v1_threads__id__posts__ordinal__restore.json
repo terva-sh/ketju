@@ -1,0 +1,38 @@
+{
+  "request": "POST /api/v1/threads/{thread}/posts/3/restore",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "log_length": 755,
+    "ordinal": 3,
+    "post": {
+      "attachments": [],
+      "author": {
+        "avatar": "",
+        "display_name": "Bob Iyer",
+        "handle": "bob",
+        "kind": "human",
+        "role": "moderator"
+      },
+      "created_at": 1757500400000,
+      "deleted": false,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "html": "<p>the text a moderator still needs to read</p>\n",
+      "machine_authored": false,
+      "moved_to": null,
+      "ordinal": 3,
+      "quoted_by": [],
+      "redacted": false,
+      "removal": null,
+      "reply_count": 0,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "revision": 1
+    },
+    "revision": 1
+  }
+}

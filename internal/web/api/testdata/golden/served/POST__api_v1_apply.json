@@ -1,0 +1,18 @@
+{
+  "request": "POST /api/v1/apply",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "can_apply": false,
+    "can_apply_at": null,
+    "can_withdraw": true,
+    "decided_at": null,
+    "provider": "github",
+    "sign_in": null,
+    "status": "pending",
+    "submitted_at": 1757600000000
+  }
+}

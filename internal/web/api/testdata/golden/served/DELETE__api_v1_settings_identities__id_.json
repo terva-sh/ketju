@@ -1,0 +1,11 @@
+{
+  "request": "DELETE /api/v1/settings/identities/3",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "signed_out": false
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "request": "DELETE /api/v1/settings/sessions/{session}",
+  "status": 204,
+  "headers": {
+    "Cache-Control": "no-store"
+  },
+  "body": null
+}

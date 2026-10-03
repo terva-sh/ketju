@@ -1,0 +1,16 @@
+{
+  "request": "POST /api/v1/blobs?forum=general",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "hash": "fda0c9ff9fab78dd600bd4f32692bae572e00df0e0feaf592eb72f5cb655c714",
+    "height": null,
+    "mime": "text/plain; charset=utf-8",
+    "original_name": "notes.txt",
+    "size": 22,
+    "width": null
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "request": "PUT /api/v1/threads/{thread}/read",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "last_read_ordinal": 4
+  }
+}

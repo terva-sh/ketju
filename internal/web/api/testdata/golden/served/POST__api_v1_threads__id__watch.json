@@ -1,0 +1,12 @@
+{
+  "request": "POST /api/v1/threads/{thread}/watch",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "forum_watch": "watch",
+    "watch": "watch"
+  }
+}

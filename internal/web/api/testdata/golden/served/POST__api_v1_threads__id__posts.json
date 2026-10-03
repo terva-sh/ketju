@@ -1,0 +1,39 @@
+{
+  "request": "POST /api/v1/threads/{thread}/posts",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json",
+    "Location": "/api/v1/threads/0369k573g0001/posts/5"
+  },
+  "body": {
+    "log_length": 785,
+    "ordinal": 5,
+    "post": {
+      "attachments": [],
+      "author": {
+        "avatar": "",
+        "display_name": "Carol Ruiz",
+        "handle": "carol",
+        "kind": "human",
+        "role": "member"
+      },
+      "created_at": 1757501200000,
+      "deleted": false,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "html": "<p>A new reply.</p>\n",
+      "machine_authored": false,
+      "moved_to": null,
+      "ordinal": 5,
+      "quoted_by": [],
+      "redacted": false,
+      "removal": null,
+      "reply_count": 0,
+      "reply_to": 1,
+      "reply_to_suppressed": false,
+      "revision": 1
+    },
+    "revision": 1
+  }
+}

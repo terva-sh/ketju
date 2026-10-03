@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,11 +19,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/auth/agentcred"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/service/applications"
+	"github.com/terva-sh/ketju/internal/service/blobs"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
@@ -62,26 +66,36 @@ type servedWorld struct {
 	// thread is the seeded thread (world.seed), other an unopened second
 	// thread in the same forum.
 	thread, other threadid.ID
+	// names are values a case's path holds that a golden's request line
+	// shows by name instead, because they are random ("{session}").
+	names map[string]string
 }
 
 // newServedWorld builds and seeds a served world. Every case gets its own,
 // so no case sees another's writes.
 func newServedWorld(t *testing.T) *servedWorld {
 	t.Helper()
-	w := &servedWorld{world: newWorld(t), tokens: map[string]string{}}
+	w := &servedWorld{world: newWorld(t), tokens: map[string]string{}, names: map[string]string{}}
 	clock := func() time.Time { return servedNow }
 	pm := w.svc.Perm
+	// A thread created through the API takes its id from the world's
+	// clock, so its golden can pin it.
+	w.svc.IDs = threadid.NewGeneratorAt(func() time.Time { return time.UnixMilli(w.clock) })
+	uploads := &blobs.Service{DB: w.db, Root: t.TempDir(), Perm: pm, Threads: w.svc, Max: uploadCap,
+		Now: func() time.Time { return time.UnixMilli(w.clock) }}
+	w.svc.Attachments = uploads
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	sessions := &session.Store{DB: w.db, Now: clock}
 	deps := Deps{Threads: w.svc,
 		Users: &users.Service{DB: w.db, Perm: pm, Now: clock, QueueCount: w.svc.QueueCount,
 			VisibleNotifications: w.svc.CountVisibleNotifications},
 		Forums: &forums.Service{DB: w.db, Perm: pm}, Forms: &formsvc.Service{DB: w.db},
-		Applications: &applications.Service{DB: w.db, Now: clock}, Perm: pm, Sessions: sessions,
+		Applications: &applications.Service{DB: w.db, Now: clock}, Perm: pm, Sessions: sessions, Blobs: uploads,
 		Providers: []identity.ProviderName{{Key: "github", Name: "GitHub"}, {Key: "club", Name: "The Club"}},
 		Logger:    log, Now: clock}
 	pass := func(h http.Handler) http.Handler { return h }
 	w.h = web.New(web.Groups{API: New(deps)}, web.Options{Logger: log, RateLimit: pass, CSRF: pass,
+		Limits:  web.Limits{Upload: uploadCap},
 		Session: agentcred.Middleware(&agentcred.Store{DB: w.db, Now: clock}, session.Middleware(sessions, log), log)})
 	w.servedSeed()
 	return w
@@ -155,15 +169,25 @@ func (w *servedWorld) thread2() (threadid.ID, int64) {
 }
 
 // serve sends one request as viewer: a handle with a seeded session,
-// "pre-user", or "" for nobody.
+// "pre-user", or "" for nobody. A body is JSON.
 func (w *servedWorld) serve(viewer, method, path, body string) *httptest.ResponseRecorder {
+	w.t.Helper()
+	ctype := ""
+	if body != "" {
+		ctype = "application/json"
+	}
+	return w.send(viewer, method, path, ctype, body)
+}
+
+// send is serve with the body's content type given.
+func (w *servedWorld) send(viewer, method, path, ctype, body string) *httptest.ResponseRecorder {
 	w.t.Helper()
 	var r *http.Request
 	if body == "" {
 		r = httptest.NewRequest(method, path, nil)
 	} else {
 		r = httptest.NewRequest(method, path, strings.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Content-Type", ctype)
 	}
 	r.RemoteAddr = "192.0.2.10:4000"
 	if viewer != "" {
@@ -193,11 +217,26 @@ func (w *servedWorld) mustServe(viewer, method, path, body string) {
 type servedCase struct {
 	viewer string
 	req    func(w *servedWorld) (path, body string)
+	// ctype is the body's content type when it is not JSON.
+	ctype string
 }
 
 // at is a case with a fixed path and no body.
 func at(viewer, path string) servedCase {
 	return servedCase{viewer: viewer, req: func(*servedWorld) (string, string) { return path, "" }}
+}
+
+// sending is a case with a fixed path and a JSON body.
+func sending(viewer, path, body string) servedCase {
+	return servedCase{viewer: viewer, req: func(*servedWorld) (string, string) { return path, body }}
+}
+
+// inThreadSending is a case whose path follows the seeded thread's id, with
+// a JSON body.
+func inThreadSending(viewer, suffix, body string) servedCase {
+	return servedCase{viewer: viewer, req: func(w *servedWorld) (string, string) {
+		return "/api/v1/threads/" + w.thread.String() + suffix, body
+	}}
 }
 
 // inThread is a case whose path follows the seeded thread's id.
@@ -236,6 +275,113 @@ var servedCases = map[string]servedCase{
 	"GET /api/v1/settings/handle":                      at("carol", "/api/v1/settings/handle"),
 	"GET /api/v1/apply/form":                           at("pre-user", "/api/v1/apply/form"),
 	"GET /api/v1/apply/status":                         at("pre-user", "/api/v1/apply/status"),
+
+	// The public writes: each runs in its own fresh world, so the golden is
+	// the answer to this one write.
+	"PUT /api/v1/me/read":        at("carol", "/api/v1/me/read"),
+	"PATCH /api/v1/threads/{id}": inThreadSending("alice", "", `{"title":"Why we left Slack, in short"}`),
+	"POST /api/v1/render": {viewer: "carol", req: func(w *servedWorld) (string, string) {
+		return "/api/v1/render", `{"source":"Agreed with @alice, **twice**.","thread_id":"` + w.thread.String() + `"}`
+	}},
+	"POST /api/v1/threads/{id}/posts":                   inThreadSending("carol", "/posts", `{"source":"A new reply.","reply_to":1}`),
+	"PATCH /api/v1/threads/{id}/posts/{ordinal}":        inThreadSending("carol", "/posts/4", `{"source":"Agreed with @alice on all of it."}`),
+	"DELETE /api/v1/threads/{id}/posts/{ordinal}":       inThread("carol", "/posts/4"),
+	"POST /api/v1/threads/{id}/posts/{ordinal}/restore": inThread("bob", "/posts/3/restore"),
+	"PUT /api/v1/threads/{id}/read":                     inThreadSending("carol", "/read", `{"ordinal":4}`),
+	"DELETE /api/v1/threads/{id}/read":                  inThread("carol", "/read"),
+	"POST /api/v1/threads/{id}/watch":                   inThreadSending("carol", "/watch", `{"level":"watch"}`),
+	"POST /api/v1/threads/{id}/flags":                   inThreadSending("carol", "/flags", `{"ordinal":1,"reason":"spam"}`),
+	"POST /api/v1/blobs":                                {viewer: "carol", req: servedUpload, ctype: "multipart/form-data; boundary=" + servedBoundary},
+	"PUT /api/v1/drafts/{thread_id}": {viewer: "carol", req: func(w *servedWorld) (string, string) {
+		return "/api/v1/drafts/" + w.thread.String(), `{"source":"A whole reply now.","reply_to":1}`
+	}},
+	"DELETE /api/v1/drafts/{thread_id}":       {viewer: "carol", req: func(w *servedWorld) (string, string) { return "/api/v1/drafts/" + w.thread.String(), "" }},
+	"POST /api/v1/forums/{slug}/threads":      sending("carol", "/api/v1/forums/general/threads", `{"title":"A thread from the API","source":"Its first post."}`),
+	"PUT /api/v1/forums/{slug}/draft":         sending("carol", "/api/v1/forums/general/draft", `{"title":"A new thread","source":"A whole start now."}`),
+	"DELETE /api/v1/forums/{slug}/draft":      at("carol", "/api/v1/forums/general/draft"),
+	"POST /api/v1/forums/{slug}/watch":        sending("carol", "/api/v1/forums/general/watch", `{"level":"mute"}`),
+	"PUT /api/v1/forums/{slug}/read":          at("carol", "/api/v1/forums/general/read"),
+	"POST /api/v1/notifications/read":         sending("alice", "/api/v1/notifications/read", `{"ids":[1]}`),
+	"PATCH /api/v1/settings":                  sending("carol", "/api/v1/settings", `{"page_size":40,"theme":"dark"}`),
+	"DELETE /api/v1/settings/sessions":        at("carol", "/api/v1/settings/sessions"),
+	"DELETE /api/v1/settings/sessions/{id}":   {viewer: "carol", req: servedOtherSession},
+	"DELETE /api/v1/settings/identities/{id}": {viewer: "carol", req: servedSecondIdentity},
+	"POST /api/v1/settings/deactivate":        at("carol", "/api/v1/settings/deactivate"),
+	"PUT /api/v1/settings/handle":             sending("carol", "/api/v1/settings/handle", `{"handle":"caroline"}`),
+	"POST /api/v1/apply":                      sending("pre-user", "/api/v1/apply", validAnswers),
+	"POST /api/v1/apply/withdraw":             {viewer: "pre-user", req: servedWithdraw},
+}
+
+// servedBoundary is the upload case's multipart boundary, fixed so its
+// content type is.
+const servedBoundary = "served-golden-boundary"
+
+// servedUpload lets members upload everywhere, as an admin's grid would,
+// and uploads a text file to general.
+func servedUpload(w *servedWorld) (string, string) {
+	members := servedGroup(w, domain.GroupMembers)
+	if err := w.svc.Perm.ApplyGrants(w.t.Context(), audit.By{}, []perm.GrantChange{
+		{GroupID: members, Permission: domain.PermUpload, Grant: true}}); err != nil {
+		w.t.Fatal(err)
+	}
+	var b bytes.Buffer
+	mw := multipart.NewWriter(&b)
+	if err := mw.SetBoundary(servedBoundary); err != nil {
+		w.t.Fatal(err)
+	}
+	fw, err := mw.CreateFormFile("file", "notes.txt")
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	fw.Write([]byte("Notes for the thread.\n"))
+	mw.Close()
+	return "/api/v1/blobs?forum=general", b.String()
+}
+
+// servedGroup is a system group's id.
+func servedGroup(w *servedWorld, slug string) int64 {
+	w.t.Helper()
+	var id int64
+	if err := w.db.Read(w.t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		g, err := q.GetGroupBySlug(w.t.Context(), slug)
+		id = g.ID
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return id
+}
+
+// servedOtherSession signs carol in a second time and ends that session
+// from the first. Its id is random, so the request line names it.
+func servedOtherSession(w *servedWorld) (string, string) {
+	tok := sessiontest.SignIn(w.t, w.db, w.users["carol"], servedNow)
+	s, err := (&session.Store{DB: w.db, Now: func() time.Time { return servedNow }}).Lookup(w.t.Context(), tok)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	w.names[s.ID()] = "{session}"
+	return "/api/v1/settings/sessions/" + s.ID(), ""
+}
+
+// servedSecondIdentity links a second sign-in, on the club provider, to
+// carol and removes it: removing her only one is refused.
+func servedSecondIdentity(w *servedWorld) (string, string) {
+	var id int64
+	w.write(func(q *dbq.Queries) error {
+		var err error
+		id, err = q.CreateIdentity(w.t.Context(), dbq.CreateIdentityParams{
+			UserID: sql.NullInt64{Int64: w.users["carol"], Valid: true}, ProviderKey: "club", Subject: "carol-club",
+			Issuer: "https://club.example", CreatedAt: 1, UpdatedAt: 1})
+		return err
+	})
+	return fmt.Sprintf("/api/v1/settings/identities/%d", id), ""
+}
+
+// servedWithdraw has the applicant apply, then withdraws the application.
+func servedWithdraw(w *servedWorld) (string, string) {
+	w.mustServe("pre-user", http.MethodPost, "/api/v1/apply", validAnswers)
+	return "/api/v1/apply/withdraw", "{}"
 }
 
 // pending is the routes that have no served case yet. It exists only so the
@@ -245,35 +391,6 @@ var servedCases = map[string]servedCase{
 // Do not add to it. A route added to the API adds a servedCases entry
 // instead, and the last PR of TKT-01M3YME9G0 deletes this list.
 var pending = []string{
-	// The public writes (the second PR).
-	"PUT /api/v1/me/read",
-	"PATCH /api/v1/threads/{id}",
-	"POST /api/v1/render",
-	"POST /api/v1/threads/{id}/posts",
-	"PATCH /api/v1/threads/{id}/posts/{ordinal}",
-	"DELETE /api/v1/threads/{id}/posts/{ordinal}",
-	"POST /api/v1/threads/{id}/posts/{ordinal}/restore",
-	"PUT /api/v1/threads/{id}/read",
-	"DELETE /api/v1/threads/{id}/read",
-	"POST /api/v1/threads/{id}/watch",
-	"POST /api/v1/threads/{id}/flags",
-	"POST /api/v1/blobs",
-	"PUT /api/v1/drafts/{thread_id}",
-	"DELETE /api/v1/drafts/{thread_id}",
-	"POST /api/v1/forums/{slug}/threads",
-	"PUT /api/v1/forums/{slug}/draft",
-	"DELETE /api/v1/forums/{slug}/draft",
-	"POST /api/v1/forums/{slug}/watch",
-	"PUT /api/v1/forums/{slug}/read",
-	"POST /api/v1/notifications/read",
-	"PATCH /api/v1/settings",
-	"DELETE /api/v1/settings/sessions",
-	"DELETE /api/v1/settings/sessions/{id}",
-	"DELETE /api/v1/settings/identities/{id}",
-	"POST /api/v1/settings/deactivate",
-	"PUT /api/v1/settings/handle",
-	"POST /api/v1/apply",
-	"POST /api/v1/apply/withdraw",
 	// The admin routes (the third PR).
 	"POST /api/v1/admin/users/{handle}/suspend",
 	"POST /api/v1/admin/users/{handle}/unsuspend",
@@ -379,7 +496,11 @@ func runServed(t *testing.T, pattern string) (servedRecord, any) {
 	method, _, _ := strings.Cut(pattern, " ")
 	w := newServedWorld(t)
 	path, body := c.req(w)
-	rec := w.serve(c.viewer, method, path, body)
+	ctype := c.ctype
+	if ctype == "" && body != "" {
+		ctype = "application/json"
+	}
+	rec := w.send(c.viewer, method, path, ctype, body)
 	out := servedRecord{Request: method + " " + w.stable(path), Status: rec.Code, Headers: map[string]string{}}
 	for _, h := range servedHeaders {
 		if v := rec.Header().Get(h); v != "" {
@@ -400,7 +521,11 @@ func runServed(t *testing.T, pattern string) (servedRecord, any) {
 // stable is path with the seeded thread ids named, so a golden's request
 // line reads the same however the ids are spelled.
 func (w *servedWorld) stable(path string) string {
-	return strings.NewReplacer(w.thread.String(), "{thread}", w.other.String(), "{other}").Replace(path)
+	pairs := []string{w.thread.String(), "{thread}", w.other.String(), "{other}"}
+	for v, name := range w.names {
+		pairs = append(pairs, v, name)
+	}
+	return strings.NewReplacer(pairs...).Replace(path)
 }
 
 // decodeServed is parseServed, failing t on an error.

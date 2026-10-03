@@ -1,0 +1,36 @@
+{
+  "request": "PATCH /api/v1/threads/{thread}",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "author": {
+      "avatar": "",
+      "display_name": "Alice Nakamura",
+      "handle": "alice",
+      "kind": "human",
+      "role": "member"
+    },
+    "created_at": 1757500100000,
+    "forum": {
+      "name": "General",
+      "slug": "general"
+    },
+    "id": "0369k573g0001",
+    "locked": false,
+    "log_length": 823,
+    "pinned": {
+      "scope": "forum",
+      "until": 1760000000000
+    },
+    "post_count": 4,
+    "slug": "why-we-left-slack-in-short",
+    "tags": [
+      "meta",
+      "tools"
+    ],
+    "title": "Why we left Slack, in short"
+  }
+}

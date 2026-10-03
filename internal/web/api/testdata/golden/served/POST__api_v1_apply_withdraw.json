@@ -1,0 +1,18 @@
+{
+  "request": "POST /api/v1/apply/withdraw",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "can_apply": false,
+    "can_apply_at": 1757686400000,
+    "can_withdraw": false,
+    "decided_at": 1757600000000,
+    "provider": "github",
+    "sign_in": null,
+    "status": "withdrawn",
+    "submitted_at": 1757600000000
+  }
+}

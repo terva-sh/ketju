@@ -1,0 +1,38 @@
+{
+  "request": "DELETE /api/v1/threads/{thread}/posts/4",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "log_length": 755,
+    "ordinal": 4,
+    "post": {
+      "attachments": [],
+      "author": {
+        "avatar": "",
+        "display_name": "Carol Ruiz",
+        "handle": "carol",
+        "kind": "human",
+        "role": "member"
+      },
+      "created_at": 1757500700000,
+      "deleted": true,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "html": "",
+      "machine_authored": false,
+      "moved_to": null,
+      "ordinal": 4,
+      "quoted_by": [],
+      "redacted": false,
+      "removal": "author",
+      "reply_count": 0,
+      "reply_to": 1,
+      "reply_to_suppressed": false,
+      "revision": 1
+    },
+    "revision": 1
+  }
+}

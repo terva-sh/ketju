@@ -1,0 +1,16 @@
+{
+  "request": "PUT /api/v1/drafts/{thread}",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "attachments": [],
+    "reply_to": 1,
+    "revision": 2,
+    "source": "A whole reply now.",
+    "thread_id": "0369k573g0001",
+    "updated_at": 1757501200000
+  }
+}

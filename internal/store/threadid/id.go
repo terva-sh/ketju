@@ -64,8 +64,10 @@ type Generator struct {
 // NewGenerator returns a generator reading the system clock.
 func NewGenerator() *Generator { return &Generator{now: time.Now} }
 
-// newGeneratorAt returns a generator reading an injected clock, for tests.
-func newGeneratorAt(now func() time.Time) *Generator { return &Generator{now: now} }
+// NewGeneratorAt returns a generator reading an injected clock, for tests:
+// this package's, and the API's served goldens, which pin the id of a
+// thread created through the API (TKT-01M3YME9G0).
+func NewGeneratorAt(now func() time.Time) *Generator { return &Generator{now: now} }
 
 // New mints the next id.
 //

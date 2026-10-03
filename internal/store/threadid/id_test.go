@@ -31,7 +31,7 @@ func frozen(ms int64) (func() time.Time, func(int64)) {
 // hoping they land in one millisecond tests the scheduler, not the generator.
 func TestIdsInOneMillisecondAreDistinctAndMonotonic(t *testing.T) {
 	now, _ := frozen(1_700_000_000_000)
-	g := newGeneratorAt(now)
+	g := NewGeneratorAt(now)
 
 	const n = 10_000
 	seen := make(map[ID]bool, n)
@@ -112,7 +112,7 @@ func TestConcurrentGenerationIsUniqueAndOrdered(t *testing.T) {
 // move to the next millisecond rather than wrap and repeat itself.
 func TestSequenceExhaustionMovesToTheNextMillisecond(t *testing.T) {
 	now, _ := frozen(1_700_000_000_000)
-	g := newGeneratorAt(now)
+	g := NewGeneratorAt(now)
 
 	var prev ID
 	for i := 0; i <= maxSeq+2; i++ {
@@ -141,7 +141,7 @@ func TestSequenceExhaustionMovesToTheNextMillisecond(t *testing.T) {
 // files on disk are sorted by these ids.
 func TestClockGoingBackwardsStillYieldsIncreasingIds(t *testing.T) {
 	now, set := frozen(1_700_000_000_000)
-	g := newGeneratorAt(now)
+	g := NewGeneratorAt(now)
 
 	before, err := g.New()
 	if err != nil {
@@ -285,7 +285,7 @@ func TestParseHexIsStrictAboutCase(t *testing.T) {
 // assuming.
 func TestEncodedFormSortsInTheSameOrderAsTheId(t *testing.T) {
 	now, set := frozen(1_700_000_000_000)
-	g := newGeneratorAt(now)
+	g := NewGeneratorAt(now)
 
 	var ids []ID
 	var strs []string

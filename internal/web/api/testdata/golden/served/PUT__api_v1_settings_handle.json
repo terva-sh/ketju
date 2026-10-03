@@ -1,0 +1,13 @@
+{
+  "request": "PUT /api/v1/settings/handle",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "handle": "caroline",
+    "next_change_at": 1760192000000,
+    "previous": "carol"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "request": "POST /api/v1/forums/general/threads",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json",
+    "Location": "/api/v1/threads/0369k7gb80000"
+  },
+  "body": {
+    "post": {
+      "log_length": 226,
+      "ordinal": 1,
+      "post": {
+        "attachments": [],
+        "author": {
+          "avatar": "",
+          "display_name": "Carol Ruiz",
+          "handle": "carol",
+          "kind": "human",
+          "role": "member"
+        },
+        "created_at": 1757501200000,
+        "deleted": false,
+        "edited_at": null,
+        "edited_by_moderator": false,
+        "html": "<p>Its first post.</p>\n",
+        "machine_authored": false,
+        "moved_to": null,
+        "ordinal": 1,
+        "quoted_by": [],
+        "redacted": false,
+        "removal": null,
+        "reply_count": 0,
+        "reply_to": null,
+        "reply_to_suppressed": false,
+        "revision": 1
+      },
+      "revision": 1
+    },
+    "thread": {
+      "author": {
+        "avatar": "",
+        "display_name": "Carol Ruiz",
+        "handle": "carol",
+        "kind": "human",
+        "role": "member"
+      },
+      "created_at": 1757501200000,
+      "forum": {
+        "name": "General",
+        "slug": "general"
+      },
+      "id": "0369k7gb80000",
+      "locked": false,
+      "log_length": 226,
+      "pinned": null,
+      "post_count": 1,
+      "slug": "a-thread-from-the-api",
+      "tags": [],
+      "title": "A thread from the API"
+    }
+  }
+}

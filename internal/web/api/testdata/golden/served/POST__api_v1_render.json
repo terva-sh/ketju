@@ -1,0 +1,18 @@
+{
+  "request": "POST /api/v1/render",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "html": "<p>Agreed with <a href=\"/u/alice\" class=\"mention\" rel=\"nofollow\">@alice</a>, <strong>twice</strong>.</p>\n",
+    "mentions": [
+      {
+        "handle": "alice"
+      }
+    ],
+    "quotes": [],
+    "reply_to": null
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "request": "POST /api/v1/threads/{thread}/flags",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "received": true
+  }
+}
