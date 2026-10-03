@@ -197,9 +197,15 @@ export function ThreadScreen() {
   // the thread hides it.
   const [moves, setMoves] = useState<{ thread: string; chunk: MovePostsChunk } | null>(null);
   const selecting = moves && head && moves.thread === head.id && !history && (mayModerate || !shown) ? moves : null;
+  // selectGen counts starts and stops. A start whose chunk arrives after the
+  // selection was stopped, the thread left or the screen gone, is dropped,
+  // so leaving a thread while the chunk loads starts nothing on return.
+  const selectGen = useRef(0);
   const startSelecting = (thread: string) => {
+    const gen = ++selectGen.current;
     void loadMovePosts().then(
       (chunk) => {
+        if (gen !== selectGen.current) return;
         chunk.startSelection(thread);
         setMoves({ thread, chunk });
       },
@@ -207,10 +213,17 @@ export function ThreadScreen() {
     );
   };
   const stopSelecting = () => {
+    selectGen.current++;
     moves?.chunk.endSelection();
     setMoves(null);
   };
-  useEffect(() => () => void movePostsChunk?.then((c) => c.endSelection()), []);
+  useEffect(
+    () => () => {
+      selectGen.current++;
+      void movePostsChunk?.then((c) => c.endSelection());
+    },
+    [],
+  );
   const locked = head?.locked ?? false;
   const pinned = head?.pinned ?? null;
   // Rename is offered to a viewer who moderates the thread's forum, and to

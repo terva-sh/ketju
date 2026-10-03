@@ -197,6 +197,22 @@ describe('the split dialog', () => {
     expect(cachedThread('3yymw47g00099')?.header.title).toBe('Split out');
   });
 
+  // Terva review 2057: a dialog closed while its split was on the way takes
+  // nobody to the new thread, but the caches still learn of the split.
+  it('goes nowhere when closed before the split answers', async () => {
+    let release = () => {};
+    server.routes[url] = () => new Promise<Answer>((r) => (release = () => r({ status: 200, body: moved })));
+    const d = await open();
+    await type(d, 'Split out');
+    await act(async () => d.querySelector<HTMLButtonElement>('.flag-send')!.click());
+    await act(async () => render(null, root));
+    release();
+    await wait();
+    expect(splits()).toHaveLength(1);
+    expect(onSplit).not.toHaveBeenCalled();
+    expect(cachedThread('3yymw47g00099')?.header.title).toBe('Split out');
+  });
+
   it.each([
     ['conflict', 409, 'A post may have been removed or moved'],
     ['forbidden', 403, 'You cannot move posts into that forum.'],

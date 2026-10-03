@@ -152,8 +152,9 @@ export function splitRefusal(err: unknown): string {
 // The answer is both threads' headers, which replace the cached ones
 // (storeThreadHeader), so the source's held pages, whose posts moved, are
 // dropped; the forum index and the lists, whose counts the split changed,
-// are dropped too, and onSplit takes the moderator to the new thread. A
-// refusal is shown in the dialog, which keeps what was typed and chosen.
+// are dropped too, and onSplit takes the moderator to the new thread, but
+// only while the dialog is still open. A refusal is shown in the dialog,
+// which keeps what was typed and chosen.
 export function SplitDialog({
   source,
   ordinals,
@@ -216,7 +217,9 @@ export function SplitDialog({
       storeThreadHeader(r.thread.id, r.thread);
       forgetGets((u) => u.startsWith(forumsUrl));
       forgetLists();
-      onSplit(r.thread);
+      // A dialog closed while the split was on its way, or a page left,
+      // takes nobody anywhere: the caches above still learn of it.
+      if (mounted.current) onSplit(r.thread);
     } catch (err) {
       if (!mounted.current) return;
       setRefused(splitRefusal(err));
