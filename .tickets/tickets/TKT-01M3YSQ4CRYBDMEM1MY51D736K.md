@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-03T04:20:55Z
+updated_at: 2026-10-03T04:24:35Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
@@ -77,7 +77,7 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15. Split
 - **What the screen would be.** An avatar control on `/settings/profile` (TKT-01M3V6XVVG), so this ticket depends on that one.
 - **Why it waits.** docs/07 "Attachments" (maintainer approved) serves `GET /blobs/{hash}` only to a viewer who may read a post naming the hash in its `attachments`. Everyone else gets `not-found`. An avatar is named by no post, so under that rule nobody may fetch one. Uploads need `upload` in a forum, and an avatar has no forum. docs/05, 07 and 08 give no rule for either. Widening who may fetch a blob is the maintainer's call: docs/07 "Attachments" says so in its alternatives, citing docs/14 class 1.
 
-### Open decision
+### The decision, as grooming asked it
 
 **Class 1, security posture beyond the design (docs/14 "The stop rule, changed", docs/15).** What are the rules for an avatar's blob? No default is chosen. The questions, with the options grooming found:
 
@@ -100,21 +100,73 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15. Split
    - A smaller size cap than `limits.attachment_mb`.
 4. **Whether a member's old avatar stays fetchable** after they replace it, until GC removes it, by anyone who saved its hash.
 
+### Decided (maintainer, 2026-10-02; docs/05 "Display name and bio")
+
+- **Who sees it.** Any signed-in member may fetch any member's avatar. Signed-out readers and pre-users see the initials placeholder. This is an exception to docs/07 "Attachments", so it has its own serving route, and a test holds that a signed-out request is refused. Any finding about who can fetch an avatar is treated as security.
+- **What it may be.** PNG or JPEG, at most 1 MB. The server re-encodes it to a 256 px square, which strips its metadata, and serves only the re-encoded image.
+- **Who sets it.** A member sets or clears their own. A moderator may clear one.
+
 ### Approach
 
-To be written once the decision is made. What any answer needs:
-1. A route that sets and clears `avatar_blob`, gated as the decision says, writing in one transaction with the blob's checks.
-2. A serve rule for avatar blobs in `blobs.Service.Authorize`, or a new route, as the decision says. A test holds that a blob named only as an avatar is fetchable by exactly the viewers the decision names, and that the attachment rule is unchanged for everything else.
-3. The upload bound (TKT-01M3V73KM1, Bound how much one member may upload) must not count a blob an `avatar_blob` names.
-4. An avatar control on `/settings/profile`.
+Stacked on TKT-01M3V6XVVG's and TKT-01M3V73KM1's code commits (both unmerged at claim), from origin/main 2f2f914d.
+
+1. **Image** (`internal/store/blob/avatar.go`). `blob.Avatar(f, mime)` reads the header first and checks the same bounds as `Thumbnail` (`MaxSide`, `MaxDecodeBytes`). It takes only `image/png` and `image/jpeg`. It decodes with the same panic-safe `decode`, crops the centred square, and scales it to `AvatarEdge` (256) by the thumbnail's area averaging. The scaler is generalised from `fit` to a source rectangle and a target size; the thumbnail's output is unchanged. A PNG is encoded as a PNG and a JPEG as a JPEG at quality 85. `AvatarMaxBytes = 1 << 20`.
+2. **Storage** (`blobs.Service.SetAvatar`, `ClearAvatar`).
+   - `SetAvatar` reads at most `AvatarMaxBytes`+1 bytes; over that is `payload-too-large`. It sniffs the type: anything but PNG or JPEG is `validation-failed` `{file, type_not_allowed}`. It re-encodes under the thumbnail semaphore, so one decode runs at a time in the process. A header over the bounds is `{file, image_too_large}`.
+   - Then one write does all of this. It creates the blob row for the re-encoded bytes, or finds it; a quarantined one is `{file, blocked}`. It sets `users.avatar_blob`. It refuses `{file, upload_budget}` when the bytes are new and the account's unattached bytes after the change would be over the bound. Last, it moves the file into place, as `Upload` does.
+   - No `blob_uploads` row is written, so an avatar is never attachable as the member's upload.
+   - `ClearAvatar` sets the column to null. Clearing is never refused for the bound.
+   - Both answer `ProfileSettings`, which gains `avatar` (the hash, or empty).
+3. **Routes.**
+   - `PUT /api/v1/settings/avatar` (multipart, one part `file`) and `DELETE /api/v1/settings/avatar`, behind `ownSession`, as the profile routes are. Each is charged to the write limiter. `web.Limits` measures `PUT /settings/avatar` against `AvatarMaxBytes` plus `UploadOverhead`, not the 64 KB body limit.
+   - `DELETE /api/v1/admin/users/{handle}/avatar` answers 204, behind `staffGate`, on `mayActOn`'s authority: a moderator acts on members, and an admin on anyone but themselves. It writes `user.avatar_cleared` (audit, docs/04 table). A member's own set or clear is not audited, as profile edits are not.
+4. **Serving.** `GET /avatars/{hash}` is a new prefix, served by the blobs web group (`internal/web/blobs`), with the attachment's headers: private, no-cache, `Vary: Cookie`, nosniff, sandbox CSP and CORP same-origin. `blobs.Service.AuthorizeAvatar` answers only when both hold:
+   - `v.Member()`;
+   - the hash is the `avatar_blob` of an account that is not anonymized, and the blob's status is `ok`.
+
+   Everyone else gets not-found, in the same bytes as for a hash nothing has. So a replaced avatar stops being served at once, whoever kept its hash. `/blobs/{hash}` is unchanged and never serves an avatar that no post names.
+5. **The bound.** `UnattachedBytes` leaves out a blob that any `users.avatar_blob` names. Migration 0028 adds `users_avatar_blob ON users (avatar_blob) WHERE avatar_blob IS NOT NULL`, so the exclusion and the serving check seek rather than scan.
+6. **Client.**
+   - `Avatar.tsx` draws `/avatars/{hash}` only for a signed-in viewer (`viewer.value.user`), and the initials otherwise. An image that fails to load falls back to the initials.
+   - `/settings/profile` gains an Avatar section: the current avatar, a file chooser (`accept="image/png,image/jpeg"`), and a Remove button when one is set. A file over 1 MB is refused before it is sent. Each refusal code has its own words. After a change it asks `/me` again, so the top bar follows.
+   - `apiUpload` takes a method.
+   - The admin user screen offers "Remove avatar" to staff when the account has one.
+7. **Docs.**
+   - docs/07: the routes, the `/avatars/` serving rule and the codes.
+   - docs/02: the prefix.
+   - docs/04: the audit action and the index.
+   - docs/05: points at the implementation.
+   - docs/03: GC already keeps a blob an `avatar_blob` names.
 
 ### Tests
 
-To be named with the approach. The invariants are fixed already. Uploads are content-addressed, and a blob that is only an attachment is served only to readers of a post that references it (docs/14). This ticket must leave that true for attachments, whatever it decides for avatars.
+- `internal/store/blob`:
+  - a PNG and a JPEG come out 256×256, in their own type, with metadata gone (a JPEG's EXIF/APP1 is not in the output);
+  - a wide image is centre-cropped;
+  - a GIF, a PDF and text are refused;
+  - a header over the bounds is `ErrTooLarge`, with no decode.
+- `internal/service/blobs`:
+  - **TestAvatarServedOnlyToMembers** (security). A blob named only as an avatar is served to an active member, the owner, a moderator and an agent. It is not found for an anonymous viewer, a pre-user, or an inactive (suspended) viewer. A hash that is an attachment only, or a replaced avatar, is not found at `/avatars/`. An avatar is never served by `Authorize` (`/blobs/`) unless a post names it.
+  - Set, replace and clear, with the row and file checks.
+  - The budget: an avatar does not count, a replaced one does, a new avatar over the bound is refused, and a clear is never refused.
+  - `TestUnattachedBytesUsesItsIndex` gains the users index.
+- `internal/web/api`:
+  - `TestAvatarOverHTTP`: the routes, codes, 1 MB body limit, agent and pre-user refusals, and the response headers.
+  - `TestAvatarFetchOverHTTP`: signed out and pre-user get 404, a member gets 200.
+  - The moderator clear: authority, audit row, and a member refused.
+- dto goldens: `profile-settings`.
+- Vitest:
+  - `Avatar.test.tsx`: signed-out draws initials, and a member gets `/avatars/`;
+  - `ProfileSettingsScreen.test.tsx`: set, remove, refusals, and the size check;
+  - the admin user screen's clear.
+- e2e: `e2e/settings.spec.ts` profile: carol sets an avatar, the top bar draws it, a signed-out request is 404, and she removes it. At 390 px and 1440 px, one axe scan per test.
+- The invariant: `TestBlobServedOnlyToReaders` and `TestRevalidationRechecksAccess` stay green.
 
 ### Out of scope
 
 - The display name and the bio, which are TKT-01M3V6XVVG's.
+- Cropping in the browser. The server takes the centred square.
+- Withholding the `avatar` hash from signed-out answers. `member.Author` is built in eight places without a viewer, and the hash grants nothing: `/avatars/` refuses a signed-out reader. The client draws the initials for them.
 
 ## Notes
 
