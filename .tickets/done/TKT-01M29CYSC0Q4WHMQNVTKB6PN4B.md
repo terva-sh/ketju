@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSC0Q4WHMQNVTKB6PN4B
 title: Implement reply as a new thread
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -25,17 +25,10 @@ references:
     path: null
   - ref: pr:371
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-cysc0
-  branch: run/cysc0-reply-as-thread
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
-  commit: 66e3fbbafd39521be7ac8e347c6dbe1e084936d9
-  session: null
-  claimed_at: 2026-10-03T04:15:17Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T04:48:23Z
+updated_at: 2026-10-03T09:51:37Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -57,7 +50,7 @@ This is how drift gets handled before a moderator has to. Someone who notices th
 - [x] The action is available to members, not only moderators
 - [x] The continued-in note and the new thread's reference to its source name the other thread only to viewers who may read it (TestContinuedNoteRevealsOnlyToReaders)
 - [x] The flow passes e2e/reply-as-new-thread.spec.ts at 390 and 1440 px with one axe scan per test
-- [ ] The committed dist is regenerated and the reader stays within the 120000 B gzip budget
+- [x] The committed dist is regenerated and the reader stays within the 120000 B gzip budget
 - [x] The new thread opens with the source post pre-filled as an ordinary editable blockquote, which is the member's own text and survives a later removal of the source (TestPrefilledQuoteIsMemberText)
 - [x] The link is the continues key on the new thread's ThreadCreated, so ketju reindex rebuilds the note from the new thread's log (TestContinuedNoteSurvivesReindex), and the source log is untouched
 
@@ -176,3 +169,24 @@ Phase A is done on run/cysc0-reply-as-thread. The branch is stacked on run/cysba
 - **e2e:** reply-as-new-thread.spec.ts, on carol's session at 390 and 1440 px, with one axe scan per test.
 
 The thread-view bundle was measured with go generate and not committed: 85230 B gzip of 120000, against 84344 B on the merge branch.
+
+## Summary
+
+Landed in one PR on main, after the split (#397) and the merge (#398).
+
+- **Record.** `ThreadCreated` gains an optional `continues {thread_id, ordinal}`.
+  - It is checked before it is written: thread 0, ordinal 0 and the thread itself are malformed.
+  - Title redaction keeps it.
+- **Projection.** Migration 0027 projects it into `thread_continuations`, which ketju reindex clears and rebuilds.
+- **Route.** `POST /forums/{slug}/threads` takes `from {thread, ordinal}`.
+  - A source the member cannot read, or a post not shown as itself, is not-found, and nothing is written.
+  - A locked or archived source is accepted, by the run decision. Only the new thread's log is written.
+  - The action is a member's: anyone with create_thread in the forum may use it.
+- **Drawing.** `continued_in` on the source post and `continued_from` on the new thread's header are drawn per viewer at draw time.
+  - Each names the other thread only to its readers, and the cached posts never hold them.
+  - One header statement, ThreadLinksOf, says whether anything is continued, so a thread nobody continued runs no extra statement.
+- **Client.**
+  - "Reply as new thread" sits in the post footer, and under More on a phone.
+  - The new thread screen pre-fills "@handle wrote:" and a plain blockquote of the post. It is the member's own, editable text.
+  - The source post shows "Continued in" and the new thread shows "Continued from".
+- **Bundle.** The thread view is 90045 B gzip against the 120000 B budget.
