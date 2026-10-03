@@ -566,12 +566,13 @@ func TestPhase4ExitMovedPostsFollowTheTargetForum(t *testing.T) {
 
 	mention := "mention " + v + "#2"
 	eventually(t, "gail's mention", func() bool { return slices.Contains(noteKeys(t, gail), mention) })
-	before := w.mustView(kim, v)
-	for o, want := range map[int][]int{1: {2}, 3: {4}} {
-		if got := postAt(t, before, o).QuotedBy; !slices.Equal(got, want) {
-			t.Fatalf("before the move, #%d is quoted by %v, want %v", o, got, want)
-		}
-	}
+	// quoted_by is the projection's, which follows the event bus, and #4
+	// was written after the post that mentions gail.
+	var before dto.ThreadPage
+	eventually(t, "before the move, #1 quoted by #2 and #3 by #4", func() bool {
+		before = w.mustView(kim, v)
+		return slices.Equal(postAt(t, before, 1).QuotedBy, []int{2}) && slices.Equal(postAt(t, before, 3).QuotedBy, []int{4})
+	})
 	if p := postAt(t, w.mustView(gail, v), 4); !strings.Contains(p.HTML, "movedbeta") {
 		t.Fatalf("before the move, #4's quote does not show #3's text to gail: %s", p.HTML)
 	}
@@ -630,11 +631,12 @@ func TestPhase4ExitMovedPostsFollowTheTargetForum(t *testing.T) {
 	if p := postAt(t, page, 4); strings.Contains(p.HTML, "movedbeta") || p.HTML == "" {
 		t.Errorf("gail reads #4's quote of the moved #3 as %s; want a tombstone", p.HTML)
 	}
-	if got := postAt(t, page, 1).QuotedBy; len(got) != 0 {
-		t.Errorf("gail reads #1 as quoted by %v; a moved quoting post fills none", got)
-	}
-	if got := postAt(t, w.mustView(kim, v), 1).QuotedBy; len(got) != 0 {
-		t.Errorf("kim reads #1 as quoted by %v; a moved quoting post fills none", got)
+	// #1's quoted_by follows the event bus too: it empties, for gail and
+	// for kim, because a moved quoting post fills none.
+	for _, a := range []*actor{gail, kim} {
+		eventually(t, a.name+" reading #1 as quoted by nothing", func() bool {
+			return len(postAt(t, w.mustView(a, v), 1).QuotedBy) == 0
+		})
 	}
 	for _, path := range []string{"/posts/2", "/posts/3", "/posts/2/replies", "/posts/3/replies",
 		"/posts/2/history", "/posts/3/history", "?page=1&lens=mod", "?page=1&lens=mentions"} {

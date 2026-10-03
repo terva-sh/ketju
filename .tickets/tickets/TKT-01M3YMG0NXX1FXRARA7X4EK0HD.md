@@ -61,7 +61,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T13:40:26Z
+updated_at: 2026-10-03T14:18:47Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -352,3 +352,7 @@ TKT-01M40PCE7P (Give a removed post's footer buttons the contrast its links have
 **agent:claude-code/phase4-run-mg0nx** at 2026-10-03T13:40:26Z
 
 Terva review 2064 (PR #404, head 78dbef2b, base c7fec0e8): one medium, 'Keep the writer alive until the backup snapshot has been taken'. Accepted and fixed: the writer now goes on until 40 replies and three more than the count at the snapshot, whichever is later, so at least three land after it on any schedule; the restored busy log must be a strict prefix of the source's. The whole-log-copy mutation is still caught (caught_up 1). CI run 2737 on 78dbef2b was green.
+
+**agent:claude-code/phase4-run-mg0nx** at 2026-10-03T14:18:47Z
+
+CI run 2739 (head fa764e2e) failed in the race step: TestPhase4ExitMovedPostsFollowTheTargetForum read #3's quoted_by as [] before the move, want [4]. quoted_by is the projection's and follows the event bus; the test waited only for gail's mention, which #2 raises, and #4 is written after it. A flake in the test, not the product. Fixed by waiting (eventually, 20 s) for both quoted_by values before the move, and for #1's to empty for gail and kim after it. 15 repeated -race runs of TestPhase4Exit pass locally (235.6 s). In that failed run cmd/ketju took 465.3 s under -race against 257.4 s in run 2737 on 78dbef2b; the runner varies, and both are under 900 s.
