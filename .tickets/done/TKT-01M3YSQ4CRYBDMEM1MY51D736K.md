@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQ4CRYBDMEM1MY51D736K
 title: Let a member set an avatar
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-ysq4cr
-  branch: run/ysq4cr-avatar
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
-  commit: ac8e3bf9270c8398536257b3791c2f216191f97c
-  session: null
-  claimed_at: 2026-10-03T04:20:55Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-03T04:51:34Z
+updated_at: 2026-10-03T11:58:18Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
@@ -60,7 +53,7 @@ A rule for avatars, which docs/05, 07 and 08 do not give. That is docs/14 stop c
 - [x] A member sets and clears an avatar on /settings/profile under that rule
 - [x] A blob an avatar_blob names does not count against limits.unattached_upload_mb
 - [x] An e2e test covers it at 390 px and 1440 px, with one axe scan per test
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
 
@@ -238,3 +231,24 @@ This ticket alone adds 744 B. The whole stack adds 1823 B over main. The budget 
 **agent:claude-code/phase4-run-ysq4cr** at 2026-10-03T04:51:34Z
 
 Phase B to-do: main gained TestEveryRouteHasAServedGolden in #390 (f5696cd5). After rebasing, add a servedCases entry in internal/web/api/served_test.go for each of PUT /api/v1/settings/avatar, DELETE /api/v1/settings/avatar and DELETE /api/v1/admin/users/{handle}/avatar. Run go test ./internal/web/api -run TestServedGoldens -update and commit the new files under testdata/golden/served/. Never add a route to pending. TKT-01M3V6XVVG's GET and PATCH /settings/profile need the same in its own Phase B. TKT-01M3V73KM1 adds no route.
+
+**agent:claude-code/phase4-run-ysq4cr** at 2026-10-03T11:58:18Z
+
+Phase B on run/ysq4cr-avatar, rebased onto main after TKT-01M3V73KM1 (Bound how much one member may upload) merged. The two cherry-picks are gone; the ProfileSettingsScreen fix from review 2062 is kept.
+
+- Migration renumbered to 0029_users_avatar_blob. 0027 went to thread_continuations (#397), so V73KM1's index became 0028 and this ticket's became 0029. docs/04 and docs/07 name 0028 and 0029. The plan's "Migration 0028" above, and the note naming 0027 and 0028, record what was true at Phase A.
+- docs/07's Attachments paragraph conflicted with V73KM1's renumber and was resolved by hand: the avatar sentences were kept, with the new numbers.
+- Served goldens (#390) for PUT and DELETE /api/v1/settings/avatar, as carol, and for DELETE /api/v1/admin/users/{handle}/avatar, as bob on carol's. The two clearing cases set carol's avatar through the real PUT first. The PUT body is a 4 px PNG built in the test, so the golden pins the hash Go's PNG encoder gives the re-encoded 256 px square. CI's golang:1.27 image matches local Go 1.27.1. If a Go release ever changes PNG output, that golden is the one to rewrite with -update. The profile goldens gain avatar, and the audit golden's action list gains user.avatar_cleared.
+- A gap found while writing the PR body: AvatarForServing refuses an anonymized account's hash, but no test held it. TestAvatarServedOnlyToMembers now anonymizes carol while her avatar_blob still names the hash, and wants not-found. Dropping `u.anonymized = 0` from the generated query fails it; the query was then restored.
+- Dist regenerated and committed. npm run budget: reader 91501 B before (main with V73KM1), 92274 B after (+773 B gzip), within 120000 B.
+- Tests: go vet; go test -race -p 4 ./internal/... ./tools/... and ./cmd/ketju green; tsc; vitest 100 files, 2823 tests; e2e settings, attachments, profile, admin-suspension, admin-rename and admin-agents specs at 390 px and 1440 px, all green.
+
+## Summary
+
+A member sets or clears their own avatar on /settings/profile, with PUT and DELETE /api/v1/settings/avatar. The server accepts a PNG or JPEG of up to 1 MB and re-encodes it to a 256 px square in the same format. Decoding goes through the thumbnail path's bounds and semaphore. Staff clear an avatar with DELETE /api/v1/admin/users/{handle}/avatar. That uses mayActOn, the suspension authority, and writes user.avatar_cleared.
+
+Avatars are served at /avatars/{hash}, to signed-in members only (AuthorizeAvatar). Only a current avatar_blob of an account that is not anonymized is served. Signed-out readers and pre-users see initials, and the client draws an avatar only for a signed-in viewer. Attachment serving is unchanged.
+
+A blob an avatar names does not count against limits.unattached_upload_mb. The partial index users_avatar_blob (migration 0029) keeps that check and the serving check at a seek. A new avatar whose replacement pushes the account over the bound is refused with upload_budget.
+
+docs/02, 04, 05 and 07 record the rule as an exception to docs/07 Attachments, with the alternatives that lost. The three routes have served goldens. Reader +773 B gzip (92274 B).
