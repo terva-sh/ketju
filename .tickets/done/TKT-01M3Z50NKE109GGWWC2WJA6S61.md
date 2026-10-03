@@ -15,11 +15,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:388
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T20:31:13Z
-updated_at: 2026-10-03T02:24:22Z
+updated_at: 2026-10-03T02:24:40Z
 created_by:
   id: agent:claude-code/phase4-groom-moving-posts
   name: ""
