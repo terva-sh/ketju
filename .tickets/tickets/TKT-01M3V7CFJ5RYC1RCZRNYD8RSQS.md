@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:55:39Z
-updated_at: 2026-10-02T23:47:19Z
+updated_at: 2026-10-03T00:13:30Z
 created_by:
   id: agent:claude-code/phase3-groom-polish
   name: ""
@@ -121,3 +121,51 @@ Each case mounts the component through the press that opens it, outside `act`, t
 
 - The reader bundle's menus and popovers, done in TKT-01M3TV4HBF.
 - `useOwn`'s refocus effect, which TKT-01M3TV4HBF settled is safe.
+
+## Notes
+
+**agent:claude-code/phase4-run-7CFJ5** at 2026-10-03T00:13:30Z
+
+Each component was checked with a Vitest case written first and run against main's code, before its change. The cases use pressRaw (testing.tsx): a keydown dispatched outside act on whatever has focus, with the browser's default action emulated. Enter clicks a focused button or submits a focused field's form, and a character is typed into a focused text field. The key goes one microtask after the press, render or answer that moves focus.
+
+What "failed on main" means here: at that moment focus was not where the component moves it. The key then either landed on nothing (lost) or acted on another control. Where the result was the wrong control, that is named below.
+
+### Changed to useLayoutEffect (the case failed on main)
+
+1. `ConfirmButton` (`common.test.tsx`).
+   - "Enter one microtask after asking does not confirm, and lands on Cancel": on main focus was on the body, so the key was lost.
+   - "after Cancel, a key one microtask later lands on the action": on main the key landed on the body and was lost.
+2. `SuspensionPanel` (`SuspensionControls.test.tsx`).
+   - "a character typed one microtask after opening reaches the reason": on main the character was lost.
+   - "a key one microtask after Cancel lands on Suspend again": on main the key landed on the body.
+3. `NewAgentForm` (`AgentControls.test.tsx`), "a character typed one microtask after opening reaches the handle": on main the character was lost.
+4. `UsersScreen`: all three focus effects.
+   - "a key one microtask after closing a detail lands on its row" (`UsersScreen.test.tsx`): on main the key landed on the body.
+   - "after a rename, a key one microtask after the new detail loads lands on its title" (`AdminUserRename.test.tsx`): on main the key landed on the body.
+   - "a key one microtask after creating a tokenless agent lands on its title" (`AgentControls.test.tsx`): on main the key landed on the body.
+5. `ApplicationDetail` (`Decision.test.tsx`), "Enter one microtask after approving sends no second decision, and lands on the notice": on main the key landed on the body. No second decision could be sent, because the controls go with the decision.
+6. `FormEditor`: the focusNext/focusLead effect, the notice, the conflict, and the version viewer's heading (`FormEditor.test.tsx`, "a key pressed before the next frame"). Each landed on a wrong control on main:
+   - Enter on Add field added a second field.
+   - The notice and the conflict: the key landed on Save as version.
+   - The version heading: Enter on View version 1 asked for the version again.
+7. `FormView` (`FormView.test.tsx`), "Enter one microtask after a refused submit does not submit again, and focus is on the first refused field": on main Enter landed on Submit and submitted again. FormView is in the apply chunk, which the budget counts.
+
+### Left on useEffect, and why each is safe
+
+- `AgentPanel`'s `TokenPanel` `[token]` effect. The case "Enter one microtask after a token is issued does not issue another" passes on main. The issue's answer sets the token, clears `pending` in `finally`, and applies the credential, all in the same task. The re-render that follows runs TokenPanel's pending effect before rendering it, which is Preact's rule for a component re-rendered with an effect still pending. So the token input has focus before a key can arrive.
+- `FormEditor`'s Move up path shares the converted focusNext effect. Its own case ("one microtask after Move up lands on the moved field's Move up, which moved it once") passes on main in happy-dom, which keeps focus on a moved node. It stays as a guard.
+- Effects that move no focus were left alone, as grooming settled:
+  - `AgentPanel`'s mount handover and field sync;
+  - `UsersScreen`'s live-flag cleanup and prefix sync;
+  - `FormEditor`'s preview timer and abort cleanups;
+  - `ApplicationDetail`'s abort cleanup.
+
+### Mutation check
+
+Reverting `FormEditor`'s version-heading effect alone to useEffect fails its case.
+
+### e2e and bundle
+
+The admin-agents, admin-suspension, admin-applications, admin-forms, admin-rename and apply specs pass at 390 and 1440 px (62 tests). Five serial tests in admin-agents and admin-forms had no axe scan of their own and now scan their state.
+
+Reader bundle 79983 B to 79979 B gzip (−4 B; ApplyRoot −11 B).
