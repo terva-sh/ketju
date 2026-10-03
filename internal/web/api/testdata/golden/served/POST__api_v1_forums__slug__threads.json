@@ -25,6 +25,7 @@
         "edited_by_moderator": false,
         "html": "<p>Its first post.</p>\n",
         "machine_authored": false,
+        "merge_notice": null,
         "move_notice": null,
         "moved": false,
         "moved_to": null,

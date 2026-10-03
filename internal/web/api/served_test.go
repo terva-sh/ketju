@@ -377,6 +377,7 @@ var servedCases = map[string]servedCase{
 	"PUT /api/v1/admin/threads/{id}/tags":               servedModerate("bob", "tags", `{"tags":["meta","help"]}`),
 	"POST /api/v1/admin/threads/{id}/archive":           servedModerate("dana", "archive", `{"reason":"Settled."}`),
 	"POST /api/v1/admin/threads/{id}/split":             servedModerate("bob", "split", `{"ordinals":[2],"title":"The agent's aside","forum":"general"}`),
+	"POST /api/v1/admin/threads/{id}/merge":             {viewer: "bob", req: servedMerge},
 }
 
 // then is a case path and body with setup run in the case's world first.
@@ -442,6 +443,11 @@ func servedLock(w *servedWorld) {
 func servedMove(w *servedWorld) (string, string) {
 	w.forumAt("lounge", domain.VisibilityPublic, false)
 	return servedModPath(w, "move"), `{"forum":"lounge"}`
+}
+
+// servedMerge moves post 2 of the seeded thread into the second thread.
+func servedMerge(w *servedWorld) (string, string) {
+	return servedModPath(w, "merge"), `{"ordinals":[2],"into":"` + w.other.String() + `"}`
 }
 
 // servedPinOther pins the second thread: the seeded one is pinned already.
