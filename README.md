@@ -20,6 +20,96 @@ directory refuses to start. There is no horizontal scaling and none is
 planned; put a reverse proxy in front for TLS. The reasoning is in
 [docs/02-architecture.md](docs/02-architecture.md).
 
+## Installing a release
+
+Each release is a static binary for `linux/amd64` and `linux/arm64`, with a
+`SHA256SUMS` file beside them. It is published on this forge's release page
+for the tag, and on the GitHub mirror's
+(`github.com/terva-sh/ketju/releases`). Download the binary for your machine
+and the sums, check them, and install:
+
+```sh
+VERSION=v1.0
+ARCH=amd64   # or arm64
+BASE="https://github.com/terva-sh/ketju/releases/download/$VERSION"
+curl -fsSLO "$BASE/ketju_${VERSION}_linux_${ARCH}"
+curl -fsSLO "$BASE/SHA256SUMS"
+sha256sum -c --ignore-missing SHA256SUMS
+install -m 0755 "ketju_${VERSION}_linux_${ARCH}" /usr/local/bin/ketju
+ketju version
+```
+
+`sha256sum -c` must print `OK` for the file you downloaded; a release is not
+signed. `ketju version` names the version and the commit it was built from.
+The release notes for each version are in [docs/releases/](docs/releases/).
+Then write `config.toml` as "First run" says.
+
+### The container image
+
+The same binaries are published as an image on this forge's registry,
+`container.local.sothr.com/terva-sh/ketju`, tagged with the version and, for
+a release that is not a pre-release, `latest`. The image holds the binary, CA
+certificates and nothing else. It runs `ketju serve` as uid 65532, reads
+`/data/config.toml`, and keeps its data in the `/data` volume, so
+`config.toml` sets `data_dir = "/data"` and a `listen` address such as
+`":8080"`:
+
+```sh
+mkdir data
+cp config.toml data/
+sudo chown -R 65532:65532 data
+podman run -d --name ketju -p 8080:8080 -v "$PWD/data:/data" \
+  container.local.sothr.com/terva-sh/ketju:v1.0
+```
+
+The other commands run the same way, with the command after the image name:
+`podman run --rm container.local.sothr.com/terva-sh/ketju:v1.0 version`.
+
+### Publishing a release
+
+This is the maintainer's: pushing a tag publishes, and an agent never does it
+(docs/15, stop class 3). Pushing a `v*` tag, such as `v1.0` or the
+pre-release `v0.99.0-rc1`, runs `.forgejo/workflows/release.yml`. It:
+
+1. refuses a tag that is not on `main`, or not `vMAJOR.MINOR[.PATCH][-PRE]`;
+2. builds and checks the binaries with `go run ./tools/release`, as CI's dry
+   run does, and writes `SHA256SUMS`;
+3. publishes them as a release on this forge, then downloads them anonymously
+   and checks them with `sha256sum -c`;
+4. publishes the same files as a release on the GitHub mirror, once the tag
+   is there and names the same commit, and checks those downloads too;
+5. builds the image for both platforms from the published binaries, starts
+   it once, and pushes it.
+
+A tag with a hyphen is published as a pre-release, and its image does not
+move `latest`. Rerunning the workflow is safe: what is already published is
+kept if its bytes match, and the run fails if they do not.
+
+Before the first tag, create these, as secrets of `terva-sh/ketju` or of the
+`terva-sh` organization. The workflow reads each by name and fails, naming
+it, when one is missing:
+
+| Name | What it is |
+|------|------------|
+| `RELEASE_FORGEJO_TOKEN` | A token on this forge that can create releases on `terva-sh/ketju` (repository: read and write) |
+| `RELEASE_GITHUB_TOKEN` | A GitHub fine-grained token for `terva-sh/ketju` with contents: read and write |
+| `CONTAINER_PUSH_REPO_USER` | The registry account on `container.local.sothr.com`; a secret, or an Actions variable of the same name |
+| `CONTAINER_PUSH_REPO_PASSWORD` | Its password, with push access to the `terva-sh` project |
+
+The last two are the names every repository on this forge uses for the
+registry, so the organization may hold them already.
+
+To release:
+
+1. Work through the release checklist for the version, such as
+   `docs/releases/v1.0-checklist.md`, and finish its release notes.
+2. Push `main` and the tag to the GitHub mirror. The GitHub job waits up to
+   30 minutes for the tag there, and refuses it if it names another commit.
+3. Push the tag here: `git push origin v1.0`.
+
+Try it first with a pre-release tag, and check its downloads on a clean
+machine with the commands at the top of this section.
+
 ## First run
 
 A fresh install admits nobody. Registration defaults to `approval`, and this

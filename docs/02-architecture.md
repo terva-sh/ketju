@@ -101,6 +101,14 @@ and a 64-bit home server such as a Raspberry Pi 4 or 5. Alternatives:
 - 32-bit ARM lost for v1.0. No runner tests a 32-bit build, and
   TKT-01M3VVZE4G is fixing ordinal bounds on 32-bit builds now.
 
+**Decided by the maintainer (2026-10-02)** (TKT-01M3YSVEDJ, docs/15): a
+pushed `v*` tag publishes the release through `.forgejo/workflows/release.yml`,
+to a release on this forge and one on the GitHub mirror, and as a `scratch`
+image on `container.local.sothr.com`. Nothing is signed. As built, the image
+is made from the published binaries rather than a rebuild, and carries the CA
+certificates OIDC discovery needs, uid 65532 and a `/data` volume; the
+README's "Publishing a release" names the four secrets it reads.
+
 ## Go module layout
 
 ```

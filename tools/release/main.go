@@ -1,6 +1,7 @@
 // Command release builds ketju's release artifacts and checks them, and
-// publishes nothing (TKT-01M29CXK3S). Publishing from a tag is
-// TKT-01M3YSVEDJ's, and stays with the maintainer (docs/15, stop class 3).
+// publishes nothing (TKT-01M29CXK3S). Publishing is
+// .forgejo/workflows/release.yml's, which runs this tool when the maintainer
+// pushes a v* tag (TKT-01M3YSVEDJ; docs/15, stop class 3).
 //
 //	go run ./tools/release --version v1.0.0 --out DIR [--allow-dirty]
 //
