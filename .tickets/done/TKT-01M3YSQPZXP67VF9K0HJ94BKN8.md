@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQPZXP67VF9K0HJ94BKN8
 title: Show, filter and set thread tags in the client
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: pr:361
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-SQPZX
-  branch: run/sqpzx-thread-tags
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
-  commit: 4936e55c66801fc088f48541ade58c3bc89c871a
-  session: null
-  claimed_at: 2026-10-03T00:17:45Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T00:52:53Z
+updated_at: 2026-10-03T04:41:08Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -55,12 +48,12 @@ What it covers:
 
 ## Acceptance criteria
 
-- [ ] Tags render as chips in every thread list and on the thread head, each a link to its forum list filtered to the tag, and the filtered list shows "Tagged TAG", a way back, and keeps the tag across pages (TagChips.test.tsx, ThreadListScreen.test.tsx, thread-list.spec.ts)
-- [ ] The new thread screen sends tags from one optional field and names each refused tag under it with aria-invalid; a moderator can Edit tags from the moderation menu and the head updates (NewThreadScreen.test.tsx, new-thread.spec.ts, thread-moderation.spec.ts)
+- [x] Tags render as chips in every thread list and on the thread head, each a link to its forum list filtered to the tag, and the filtered list shows "Tagged TAG", a way back, and keeps the tag across pages (TagChips.test.tsx, ThreadListScreen.test.tsx, thread-list.spec.ts)
+- [x] The new thread screen sends tags from one optional field and names each refused tag under it with aria-invalid; a moderator can Edit tags from the moderation menu and the head updates (NewThreadScreen.test.tsx, new-thread.spec.ts, thread-moderation.spec.ts)
 - [ ] Edit tags is offered only with viewer.can_moderate and never on an archived thread (threadActions.test.ts)
-- [ ] Tag chips have a hit area at least 44 px tall at 390 px without growing visually (thread-list.spec.ts, by targets.spec.ts method)
-- [ ] The thread list, thread page and new thread screen pass axe at 390 and 1440 px with tags shown, one scan per test
-- [ ] The committed dist is regenerated with go generate ./internal/web/spa and the reader is within the 120000 B gzip budget (npm run budget), its growth stated in the PR
+- [x] Tag chips have a hit area at least 44 px tall at 390 px without growing visually (thread-list.spec.ts, by targets.spec.ts method)
+- [x] The thread list, thread page and new thread screen pass axe at 390 and 1440 px with tags shown, one scan per test
+- [x] The committed dist is regenerated with go generate ./internal/web/spa and the reader is within the 120000 B gzip budget (npm run budget), its growth stated in the PR
 
 ## Implementation plan
 
@@ -186,3 +179,23 @@ Edit tags is offered only with `can_moderate` (`threadActions.test.ts`). The cri
 - Mutation checks: each of the main source changes was reverted alone, and every one failed a test.
 - e2e: the whole suite passes at 390 and 1440 px, 297 tests, with the new ones in thread-list, new-thread and thread-moderation. Each runs one axe scan.
 - `go test -race -p 4 ./...` passes.
+
+## Summary
+
+Built on run/sqpzx-thread-tags, rebased onto main at 5bb0d3b4.
+
+What it does:
+- Tags show as chips in every thread list and on the thread head (`components/TagChips.tsx`). Each chip links to its forum's list filtered to the tag. On a cross-forum list that is the row's own forum.
+- `/f/{slug}?tag=TAG` shows "Tagged TAG" with a "Show all threads" link. The tag stays across sorts and pages, and an empty result says "No threads tagged TAG.".
+- The new thread screen has an optional Tags field. It is split on spaces and commas and is not autosaved.
+- A moderator gets "Edit tags…", which sends `PUT /admin/threads/{id}/tags` and updates the head from the answer.
+- Both name each refused tag under the field, with `aria-invalid` (`state/tagErrors.ts`).
+- On a phone, each line of chips is one 44 px target tall, while each chip keeps its drawn size.
+- `invalid_tag` and `reserved_tag` are now in `forms.Codes` and docs/07's form-codes table, with words in `messages.ts`.
+
+Criterion 3: the archived half is left for TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client), which adds `archived` to the header and withholds Edit tags there. That ticket's PR ticks it.
+
+Results:
+- The reader bundle goes from 81483 B to 82839 B, +1356 B. index.js grows 63707 B → 64885 B, index.css 11048 B → 11169 B, and ApplyRoot.js 5197 B → 5254 B.
+- Vitest passes (2665 tests), and so does `go test -race -p 4 ./...`.
+- The thread-list, new-thread, thread-moderation and targets e2e specs pass at 390 and 1440 px.
