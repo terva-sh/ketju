@@ -5,15 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/auth/agentcred"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
+	"github.com/terva-sh/ketju/internal/forms"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/identity"
@@ -78,15 +76,14 @@ func (s *Service) CreateAgent(ctx context.Context, v domain.Viewer, ip string, i
 	if err != nil {
 		return out, problem.Coded(problem.CodeValidationFailed, err)
 	}
-	display := strings.TrimSpace(in.DisplayName)
-	switch n := utf8.RuneCountInString(display); {
-	case !utf8.ValidString(display):
-		return out, invalid("the display name is not valid UTF-8")
-	case n > DisplayNameMaxLen:
-		return out, invalid("the display name is %d characters, over %d", n, DisplayNameMaxLen)
-	case strings.IndexFunc(display, unicode.IsControl) >= 0:
-		return out, invalid("the display name has a control character")
-	case n == 0:
+	// The rule a member's own display name follows too (CheckDisplayName).
+	display, code := CheckDisplayName(in.DisplayName)
+	switch {
+	case code == forms.CodeTooLong:
+		return out, invalid("the display name is over %d characters", DisplayNameMaxLen)
+	case code != "":
+		return out, invalid("the display name is not valid UTF-8 or has a control character")
+	case display == "":
 		display = h
 	}
 	now := s.now()

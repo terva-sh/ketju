@@ -65,6 +65,20 @@
 .settings-field input[type='number'] {
   width: 7em;
 }
+/* The bio (TKT-01M3V6XVVG): the column's width, in the post body's face. */
+.settings-field textarea.settings-bio {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 8em;
+  padding: 8px 10px;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  resize: vertical;
+}
 .settings-choices {
   display: flex;
   flex-wrap: wrap;

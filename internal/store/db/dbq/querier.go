@@ -889,6 +889,10 @@ type Querier interface {
 	// description are not.
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (int64, error)
 	UpdateSearchDoc(ctx context.Context, arg UpdateSearchDocParams) error
+	// UpdateUserProfile writes a member's own display name and bio in one
+	// statement (TKT-01M3V6XVVG). Each is kept when null. An anonymized row is
+	// refused by users_anonymized_is_final.
+	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error)
 	// UpdateUserSettings writes a member's own settings in one statement
 	// (TKT-01M29CCC0X). timezone is kept when null. prefs is a JSON object of
 	// only the keys the request named, merged into prefs_json, so a key the

@@ -13,5 +13,6 @@ export { AccountScreen } from './AccountScreen';
 export { IdentitiesScreen } from './IdentitiesScreen';
 export { ProfileScreen } from './ProfileScreen';
 export { ProfilePostsScreen } from './ProfilePostsScreen';
+export { ProfileSettingsScreen } from './ProfileSettingsScreen';
 export { SessionsScreen } from './SessionsScreen';
 export { SettingsScreen } from './SettingsScreen';

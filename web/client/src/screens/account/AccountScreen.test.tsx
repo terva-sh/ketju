@@ -250,7 +250,7 @@ describe('the settings links', () => {
     serve();
     const root = await renderAt('/settings/account');
     const links = [...root.querySelectorAll<HTMLAnchorElement>('.settings-nav a')];
-    expect(links.map((a) => a.textContent)).toEqual(['Preferences', 'Sessions', 'Sign-in identities', 'Account']);
+    expect(links.map((a) => a.textContent)).toEqual(['Profile', 'Preferences', 'Sessions', 'Sign-in identities', 'Account']);
     expect(links.at(-1)?.getAttribute('aria-current')).toBe('page');
   });
 });

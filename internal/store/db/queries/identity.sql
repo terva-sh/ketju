@@ -247,6 +247,17 @@ SET timezone = COALESCE(sqlc.narg(timezone), timezone),
 WHERE id = sqlc.arg(id)
 RETURNING timezone, locale, prefs_json;
 
+-- UpdateUserProfile writes a member's own display name and bio in one
+-- statement (TKT-01M3V6XVVG). Each is kept when null. An anonymized row is
+-- refused by users_anonymized_is_final.
+-- name: UpdateUserProfile :one
+UPDATE users
+SET display_name = COALESCE(sqlc.narg(display_name), display_name),
+    bio_source = COALESCE(sqlc.narg(bio_source), bio_source),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+RETURNING display_name, bio_source;
+
 -- The authors on one page of a thread, in one query rather than one per post.
 -- name: UsersByIDs :many
 SELECT * FROM users WHERE id IN (sqlc.slice('ids')) ORDER BY id;

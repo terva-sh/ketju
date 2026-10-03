@@ -135,15 +135,16 @@ describe('a renamed handle', () => {
 });
 
 describe('the Account block', () => {
-  it("own profile's Account block links to Settings and keeps Link a sign-in and Sign out", async () => {
+  it("own profile's Account block links to Edit profile and Settings and keeps Link a sign-in and Sign out", async () => {
     serve('alice', as('alice'));
     const root = await renderAt('/u/alice');
     expect(root.querySelector('[data-post-count]')).not.toBeNull();
     const block = root.querySelector('[data-account]')!;
     expect(block.querySelector('h2')?.textContent).toBe('Account');
     const links = [...block.querySelectorAll('a')];
-    expect(links.map((a) => a.textContent)).toEqual(['Settings', 'Link a sign-in']);
-    expect(links[0].getAttribute('href')).toBe('/settings');
+    expect(links.map((a) => a.textContent)).toEqual(['Edit profile', 'Settings', 'Link a sign-in']);
+    expect(links[0].getAttribute('href')).toBe('/settings/profile');
+    expect(links[1].getAttribute('href')).toBe('/settings');
     expect(block.querySelector('[data-nav=link-sign-in]')?.textContent).toBe('Link a sign-in');
     expect(block.querySelector('form[action="/auth/logout"] button')?.textContent).toBe('Sign out');
   });

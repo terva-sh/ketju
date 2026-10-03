@@ -54,8 +54,20 @@ func (s *Service) Profile(ctx context.Context, v domain.Viewer, handle string) (
 		// A bio is not in a thread, so a quote in one has no post to point
 		// at: every quoted post is reported missing, and the renderer draws
 		// the quote as a plain blockquote rather than a link to an ordinal
-		// on whatever page the reader is on.
-		r, err := render.RenderWith(u.BioSource, render.Context{Posts: noPosts})
+		// on whatever page the reader is on. A mention links to the member
+		// it names, by the rule a post's mentions follow now (docs/05
+		// "Display name and bio", TKT-01M3V6XVVG), and notifies nobody:
+		// only a post's create path notifies.
+		handles := s.handleMemo(ctx)
+		now := s.now().UnixMilli()
+		r, err := render.RenderWith(u.BioSource, render.Context{Posts: noPosts,
+			Handles: render.HandleFunc(func(h string) (int64, string, bool) {
+				l := handles.resolveNow(h, now)
+				return l.ID, l.Canonical, l.Found
+			})})
+		if err == nil {
+			err = handles.err
+		}
 		if err != nil {
 			return dto.Profile{}, err
 		}

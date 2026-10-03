@@ -29,6 +29,7 @@ const urls: [string, string][] = [
   ['/u/alice', 'profile'],
   ['/u/alice/posts', 'profile-posts'],
   ['/settings', 'settings'],
+  ['/settings/profile', 'settings-profile'],
   ['/settings/sessions', 'settings-sessions'],
   ['/settings/identities', 'settings-identities'],
   ['/settings/account', 'settings-account'],

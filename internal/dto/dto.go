@@ -873,6 +873,15 @@ type HandleChange struct {
 	NextChangeAt *Millis `json:"next_change_at"`
 }
 
+// ProfileSettings is GET and PATCH /settings/profile (TKT-01M3V6XVVG,
+// docs/05 "Display name and bio"): the viewer's display name, empty when
+// author blocks show their handle, and their bio as its Markdown source.
+// GET /users/{handle} serves the bio rendered, as Profile.bio_html.
+type ProfileSettings struct {
+	DisplayName string `json:"display_name"`
+	Bio         string `json:"bio"`
+}
+
 // HandleState is GET /settings/handle (TKT-01M3V6XTYG): the viewer's handle
 // and when they may next change it themselves, so the settings screen shows
 // the cooldown before they type. NextChangeAt is null when they may now,

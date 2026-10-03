@@ -868,6 +868,42 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int
 	return result.RowsAffected()
 }
 
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users
+SET display_name = COALESCE(?1, display_name),
+    bio_source = COALESCE(?2, bio_source),
+    updated_at = ?3
+WHERE id = ?4
+RETURNING display_name, bio_source
+`
+
+type UpdateUserProfileParams struct {
+	DisplayName sql.NullString
+	BioSource   sql.NullString
+	UpdatedAt   int64
+	ID          int64
+}
+
+type UpdateUserProfileRow struct {
+	DisplayName string
+	BioSource   string
+}
+
+// UpdateUserProfile writes a member's own display name and bio in one
+// statement (TKT-01M3V6XVVG). Each is kept when null. An anonymized row is
+// refused by users_anonymized_is_final.
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserProfile,
+		arg.DisplayName,
+		arg.BioSource,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i UpdateUserProfileRow
+	err := row.Scan(&i.DisplayName, &i.BioSource)
+	return i, err
+}
+
 const updateUserSettings = `-- name: UpdateUserSettings :one
 UPDATE users
 SET timezone = COALESCE(?1, timezone),

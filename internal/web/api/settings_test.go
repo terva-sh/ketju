@@ -321,6 +321,9 @@ func TestSettingsRoutesRefuseAgentsAndAnonymous(t *testing.T) {
 		{http.MethodDelete, "/api/v1/settings/sessions/" + w.idOf(alice)},
 		{http.MethodGet, "/api/v1/settings/identities"},
 		{http.MethodDelete, "/api/v1/settings/identities/" + strconv.FormatInt(w.ident["alice/club"], 10)},
+		// TKT-01M3V6XVVG: an agent's name is the admin's to give.
+		{http.MethodGet, "/api/v1/settings/profile"},
+		{http.MethodPatch, "/api/v1/settings/profile"},
 	}
 	settings := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/settings", ""},
@@ -648,5 +651,61 @@ func TestPageSizeIsInTheCacheKey(t *testing.T) {
 				t.Errorf("round %d, %s: hit %v (stats %+v then %+v)", round, c.who, hit, before, after)
 			}
 		}
+	}
+}
+
+// TestProfileSettingsThroughTheAPI (TKT-01M3V6XVVG): a PATCH answers the
+// profile as stored, GET /settings/profile reads it back, and the profile
+// route then serves the new display name and the bio rendered, a link and a
+// mention in it. The mention notifies nobody. A key the body may not name
+// is bad-request, and a refused value is validation-failed with its field.
+func TestProfileSettingsThroughTheAPI(t *testing.T) {
+	w := newSettingsWorld(t)
+	alice := w.signIn("alice", "github", firefox)
+	bob := w.signIn("bob", "github", firefox)
+	notes := func() int {
+		t.Helper()
+		var n int
+		if err := w.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			return tx.QueryRowContext(t.Context(), `SELECT count(*) FROM notifications`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := notes()
+
+	const bio = "Ask @carol about the [book list](https://example.org/books)."
+	got := decodeAs[dto.ProfileSettings](t, w.do(alice, http.MethodPatch, "/api/v1/settings/profile",
+		`{"display_name": "  Alice Liddell ", "bio": "`+bio+`"}`))
+	if got.DisplayName != "Alice Liddell" || got.Bio != bio {
+		t.Fatalf("the PATCH answered %+v", got)
+	}
+	got = decodeAs[dto.ProfileSettings](t, w.do(alice, http.MethodGet, "/api/v1/settings/profile", ""))
+	if got.DisplayName != "Alice Liddell" || got.Bio != bio {
+		t.Errorf("GET /settings/profile: %+v", got)
+	}
+
+	p := decodeAs[dto.Profile](t, w.do(bob, http.MethodGet, "/api/v1/users/alice", ""))
+	if p.User.DisplayName != "Alice Liddell" {
+		t.Errorf("the profile's user: %+v", p.User)
+	}
+	if !strings.Contains(p.BioHTML, `href="https://example.org/books"`) || !strings.Contains(p.BioHTML, `/u/carol`) {
+		t.Errorf("the profile's bio_html: %s", p.BioHTML)
+	}
+	if n := notes(); n != before {
+		t.Errorf("%d notifications, were %d: a mention in a bio notified", n, before)
+	}
+
+	if rec := w.do(alice, http.MethodPatch, "/api/v1/settings/profile", `{"avatar": "x"}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("an unknown key: %d %s", rec.Code, rec.Body)
+	}
+	rec := w.do(alice, http.MethodPatch, "/api/v1/settings/profile", `{"display_name": 3}`)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"field":"display_name","code":"wrong_type"`) {
+		t.Errorf("a number for a name: %d %s", rec.Code, rec.Body)
+	}
+	got = decodeAs[dto.ProfileSettings](t, w.do(alice, http.MethodGet, "/api/v1/settings/profile", ""))
+	if got.DisplayName != "Alice Liddell" {
+		t.Errorf("a refusal wrote: %+v", got)
 	}
 }

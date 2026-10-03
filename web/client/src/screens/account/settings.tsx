@@ -10,9 +10,11 @@ import { viewer } from '../../state/viewer';
 
 // What the settings screens share (TKT-01M29CXK4E): their heading and the
 // links between them, the confirmation dialog, and the full load of / that
-// follows signing this browser out. Account (TKT-01M3V6XTYG) is last.
+// follows signing this browser out. Profile (TKT-01M3V6XVVG) is first, and
+// Account (TKT-01M3V6XTYG) last.
 
 const pages = [
+  ['/settings/profile', 'Profile'],
   ['/settings', 'Preferences'],
   ['/settings/sessions', 'Sessions'],
   ['/settings/identities', 'Sign-in identities'],

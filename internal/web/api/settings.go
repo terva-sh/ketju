@@ -51,8 +51,41 @@ func (h *handlers) patchSettings(w http.ResponseWriter, r *http.Request) {
 	answer(h, w, r, res, err)
 }
 
-// ownSession is the request's member session, for the session and identity
-// routes: a member signed in with a cookie, and nobody else. An agent by its
+// profileSettings is GET /api/v1/settings/profile: the viewer's display
+// name and bio source (TKT-01M3V6XVVG). A member session's only, as the
+// session and identity routes are: an agent's name is the admin's to give
+// (docs/05 "Display name and bio").
+func (h *handlers) profileSettings(w http.ResponseWriter, r *http.Request) {
+	v, _, err := ownSession(r, "read a profile's settings")
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.users.Profile(r.Context(), v)
+	answer(h, w, r, res, err)
+}
+
+// patchProfile is PATCH /api/v1/settings/profile with either or both of
+// {display_name, bio}. The viewer is checked before the body is read. A key
+// it does not name is bad-request; a value it refuses is validation-failed
+// with a field error for each.
+func (h *handlers) patchProfile(w http.ResponseWriter, r *http.Request) {
+	v, _, err := ownSession(r, "change a profile")
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in users.ProfilePatch
+	if err := decodeStrict(r.Body, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.users.UpdateProfile(r.Context(), v, in)
+	answer(h, w, r, res, err)
+}
+
+// ownSession is the request's member session, for the session, identity
+// and profile routes: a member signed in with a cookie, and nobody else. An agent by its
 // credential is forbidden.
 func ownSession(r *http.Request, what string) (domain.Viewer, session.Session, error) {
 	v := domain.ViewerFrom(r.Context())

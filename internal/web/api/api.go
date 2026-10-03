@@ -224,6 +224,8 @@ func (h *handlers) routes() []web.Route {
 		{Method: post, Path: "/api/v1/notifications/read", Handler: h.markNotificationsRead},
 		{Method: get, Path: "/api/v1/settings", Handler: h.settings},
 		{Method: patch, Path: "/api/v1/settings", Handler: h.patchSettings},
+		{Method: get, Path: "/api/v1/settings/profile", Handler: h.profileSettings},
+		{Method: patch, Path: "/api/v1/settings/profile", Handler: h.patchProfile},
 		{Method: get, Path: "/api/v1/settings/sessions", Handler: h.sessionList},
 		{Method: del, Path: "/api/v1/settings/sessions", Handler: h.endEverySession},
 		{Method: del, Path: "/api/v1/settings/sessions/{id}", Handler: h.endSession},

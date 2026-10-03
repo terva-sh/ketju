@@ -91,6 +91,55 @@ test.describe('preferences', () => {
   });
 });
 
+// The profile settings (TKT-01M3V6XVVG): carol sets a display name and a
+// bio with a link and a mention, through her stored session. Other specs
+// read her as "Carol Ruiz" with no bio, so both are put back after.
+test.describe('profile', () => {
+  test.use({ storageState: stateFile('carol') });
+
+  test.afterEach(async ({ page }) => {
+    const r = await page.request.patch('/api/v1/settings/profile', { data: { display_name: 'Carol Ruiz', bio: '' } });
+    expect(r.status(), await r.text()).toBe(200);
+  });
+
+  test('a member edits their display name and bio, and the profile and thread page show them', async ({ page }) => {
+    const name = 'Carol R. the Reader';
+    await test.step('Edit profile leads to the form', async () => {
+      await page.goto('/u/carol');
+      await page.locator('[data-account]').getByRole('link', { name: 'Edit profile' }).click();
+      await page.waitForURL((u) => u.pathname === '/settings/profile');
+      await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
+      await expect(page.getByLabel('Display name')).toHaveValue('Carol Ruiz');
+    });
+
+    await test.step('Save sends the name and the bio', async () => {
+      await page.getByLabel('Display name').fill(name);
+      await page.getByLabel('Bio').fill('Reading with @alice. See the [book list](https://example.org/books).');
+      const answer = page.waitForResponse(
+        (r) => new URL(r.url()).pathname === '/api/v1/settings/profile' && r.request().method() === 'PATCH',
+      );
+      await page.getByRole('button', { name: 'Save' }).click();
+      expect((await answer).status()).toBe(200);
+      await expect(page.getByRole('status')).toContainText('Saved.');
+      await scan(page);
+    });
+
+    await test.step('the profile shows both', async () => {
+      await page.getByRole('link', { name: 'View your profile' }).click();
+      await page.waitForURL((u) => u.pathname === '/u/carol');
+      await expect(page.locator('main[data-screen=profile] h1')).toHaveText(name);
+      const bio = page.locator('.profile-bio');
+      await expect(bio.getByRole('link', { name: 'book list' })).toHaveAttribute('href', 'https://example.org/books');
+      await expect(bio.getByRole('link', { name: '@alice' })).toHaveAttribute('href', '/u/alice');
+    });
+
+    await test.step('a thread page she posted in carries the new name', async () => {
+      await page.goto(`${seed.thread}?page=1`);
+      await expect(page.locator('#post-1 .post-header a.author')).toHaveText(name);
+    });
+  });
+});
+
 test.describe('a member of their own', () => {
   // A context with no stored session: these sign in afresh.
   test.use({ storageState: { cookies: [], origins: [] } });

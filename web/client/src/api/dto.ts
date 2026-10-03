@@ -414,6 +414,14 @@ export interface HandleChange {
   next_change_at: Millis | null;
 }
 
+// ProfileSettings is GET and PATCH /settings/profile (internal/dto
+// ProfileSettings, TKT-01M3V6XVVG): the viewer's display name, empty when
+// author blocks show their handle, and their bio as its Markdown source.
+export interface ProfileSettings {
+  display_name: string;
+  bio: string;
+}
+
 // HandleState is GET /settings/handle (internal/dto HandleState,
 // TKT-01M3V6XTYG): the viewer's handle, and when they may next change it
 // themselves, null when they may now. It is the available_at a PUT inside

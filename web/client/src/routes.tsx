@@ -20,6 +20,7 @@ import {
   IdentitiesScreen,
   ProfilePostsScreen,
   ProfileScreen,
+  ProfileSettingsScreen,
   SessionsScreen,
   SettingsScreen,
 } from './screens/account/AccountRoot';
@@ -133,6 +134,7 @@ export const routes: RouteEntry[] = [
   { path: '/u/:handle', screen: 'profile', component: ProfileScreen },
   { path: '/u/:handle/posts', screen: 'profile-posts', component: ProfilePostsScreen },
   { path: '/settings', screen: 'settings', component: SettingsScreen },
+  { path: '/settings/profile', screen: 'settings-profile', component: ProfileSettingsScreen },
   { path: '/settings/sessions', screen: 'settings-sessions', component: SessionsScreen },
   { path: '/settings/identities', screen: 'settings-identities', component: IdentitiesScreen },
   { path: '/settings/account', screen: 'settings-account', component: AccountScreen },

@@ -32,4 +32,9 @@ func init() {
 	}}
 
 	corpus["identity-removed."+tMember] = IdentityRemoved{SignedOut: true}
+
+	// GET and PATCH /settings/profile (TKT-01M3V6XVVG): the bio as its
+	// Markdown source, a link and a mention in it.
+	corpus["profile-settings."+tMember] = ProfileSettings{DisplayName: "Alice Liddell",
+		Bio: "Reading group regular. Ask @carol about the [book list](https://example.org/books)."}
 }

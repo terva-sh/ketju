@@ -52,6 +52,7 @@ import type {
   PostReplies,
   PostSource,
   Profile,
+  ProfileSettings,
   Queue,
   QueueResolution,
   ReadPosition,
@@ -127,6 +128,7 @@ import postMember from '../../../../internal/dto/testdata/golden/post.member.jso
 import postModerator from '../../../../internal/dto/testdata/golden/post.moderator.json';
 import postSourceMember from '../../../../internal/dto/testdata/golden/post-source.member.json';
 import profileMember from '../../../../internal/dto/testdata/golden/profile.member.json';
+import profileSettingsMember from '../../../../internal/dto/testdata/golden/profile-settings.member.json';
 import profileModerator from '../../../../internal/dto/testdata/golden/profile.moderator.json';
 import profileAnonymizedMember from '../../../../internal/dto/testdata/golden/profile-anonymized.member.json';
 import queueModerator from '../../../../internal/dto/testdata/golden/queue.moderator.json';
@@ -256,6 +258,7 @@ export const contract = [
   matches<Profile>()(profileMember),
   matches<Profile>()(profileModerator),
   matches<Profile>()(profileAnonymizedMember),
+  matches<ProfileSettings>()(profileSettingsMember),
   matches<Queue>()(queueModerator),
   matches<QueueResolution>()(queueResolutionModerator),
   matches<ReadPosition>()(readMember),

@@ -291,6 +291,48 @@ func TestResponseCacheSeesARegisteredHandle(t *testing.T) {
 	}
 }
 
+// TestDisplayNameChangeMissesTheResponseCache is TKT-01M3V6XVVG criterion
+// 4, the response-cache key invariant: the key holds a digest of the page's
+// authors (threads.authorsDigest), so once an author changes their display
+// name through PATCH /settings/profile's service, the next request for a
+// page cached before it misses, and carries the new name, with no
+// invalidation call.
+func TestDisplayNameChangeMissesTheResponseCache(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	path := "/api/v1/threads/" + id.String()
+	name := func(v domain.Viewer) string {
+		t.Helper()
+		for _, p := range page(t, w.get(v, path)).Posts {
+			if p.Author.Handle == "alice" {
+				return p.Author.DisplayName
+			}
+		}
+		t.Fatal("alice has no post on the page")
+		return ""
+	}
+	carol := w.session("carol")
+	w.same(carol, path)
+	w.same(carol, path)
+	before := w.svc.Responses.Stats()
+	if before.Hits == 0 {
+		t.Fatalf("stats %+v: the second request was not served from the cache", before)
+	}
+
+	u := &users.Service{DB: w.db, Perm: perm.New(w.db)}
+	if _, err := u.UpdateProfile(t.Context(), w.session("alice"),
+		users.ProfilePatch{DisplayName: []byte(`"Alice the Renamed"`)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := name(carol); got != "Alice the Renamed" {
+		t.Errorf("after the change the page names alice %q", got)
+	}
+	if s := w.svc.Responses.Stats(); s.Hits != before.Hits || s.Inserts != before.Inserts+1 {
+		t.Errorf("the page after the change was not a fresh draw: %+v then %+v", before, s)
+	}
+	w.same(carol, path)
+}
+
 // TestResponseCacheLeavesTheViewerOut is AC4 through the API: two members
 // with different read positions and watch levels share one cached entry,
 // and each gets their own viewer block.
