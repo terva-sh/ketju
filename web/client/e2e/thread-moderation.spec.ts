@@ -271,9 +271,13 @@ test.describe('archiving', () => {
       await expect(carol.locator('#post-1')).toBeVisible();
       await expect(carol.locator('[data-composer]')).toHaveCount(0);
       await expect(carol.locator('.replybar-open')).toHaveCount(0);
+      // Reply as new thread stays: it writes only the new thread's log, so
+      // the archived thread stays read-only (docs/06 "Moderator flow for
+      // drift", the run decision on TKT-01M29CYSC0).
       if (!isMobile) {
-        await expect(carol.locator('#post-1 [data-post-action]')).toHaveCount(1);
+        await expect(carol.locator('#post-1 [data-post-action]')).toHaveCount(2);
         await expect(carol.locator('#post-1 [data-post-action=unread]')).toBeVisible();
+        await expect(carol.locator('#post-1 [data-post-action=continue]')).toBeVisible();
       }
       expect(await axeFound(carol)).toEqual([]);
     } finally {
