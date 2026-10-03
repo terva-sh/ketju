@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-03T01:45:57Z
+updated_at: 2026-10-03T02:20:57Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -185,6 +185,16 @@ Reader bundle after the fix: 81457 B gzip (+1474 B over main's 79983 B).
 
 CI run 2571 failed phase3-exit.spec.ts:186 at 390 px (a watched alert landed on /1, not /2, after goBack). It is outside this change, and I used the one allowed re-run: run 2579 on c1a051c passed.
 
+**agent:claude-code/phase4-run-6xtyg** at 2026-10-03T02:20:57Z
+
+Terva review 2023 (run d977f846, head 57d9fdb, base bfa50b8) marked both findings of review 2009 resolved and raised one more, fixed in 75e8acd:
+
+- medium, "Preserve in-flight posting results across an own-account rename". `postReply` and `createThread` captured the owner's handle when they sent and compared it with the owner when the answer came, so a rename in between took the answer for another viewer's. Each composer module (`state/composer.ts`, `state/newThread.ts`) now counts its owners in an `era`. A change of viewer moves the era on, and a rename (`renameComposerOwner`, `renameNewThreadOwner`) keeps it. An answer counts as the poster's while the era is the one it was sent in and the viewer still matches the owner, so the protection against a real change of viewer stays. Tested by drafts.test.ts "a post answered after a rename of the viewer's own account clears the draft as usual" and newThread.test.ts "a create answered after a rename of the viewer's own account clears the draft as usual". The existing viewer-change tests still pass.
+
+CI run 2607 on 57d9fdb failed flag.spec.ts at 1440 px: the seeded thread page stayed on "Loading…" past the 5 s wait. This PR does not touch that page. The new head gets a fresh run.
+
+Reader bundle: 81492 B gzip (+1509 B over main's 79983 B).
+
 ## Summary
 
 A member can now change their handle and deactivate their account from `/settings/account` ("Account"), last in the settings links.
@@ -192,4 +202,4 @@ A member can now change their handle and deactivate their account from `/setting
 - Server: `GET /api/v1/settings/handle` answers `dto.HandleState {handle, next_change_at}`, no-store, behind the PUT's gates, through `identity.Service.HandleState`. It uses `nextChange`, the rule the PUT refuses by. It has goldens `handle-state.member` and `handle-state.moderator`, and a docs/07 row. `/settings/account` is in docs/07's URL scheme.
 - Client: `screens/account/AccountScreen.tsx`. Both actions are confirmed first. A change renames the viewer in place through `state/rename.ts` `renameViewer`, which keeps the member's drafts and composers, and then asks /me again. A deactivation loads / in full. The field opens by itself when the cooldown ends. The refused-handle words moved to `src/handles.ts`, `ProblemError` reads `available_at`, and `Confirm` takes an optional `explain`.
 - Tests: TestHandleStateRoute, vitest (AccountScreen, problem, viewerGuard, drafts across a rename, routes, settings links), and `e2e/account.spec.ts` with seed members `acct-phone` and `acct-desktop`.
-- Reader bundle: 81457 B gzip, 1474 B more than main's 79983 B.
+- Reader bundle: 81492 B gzip, 1509 B more than main's 79983 B.
