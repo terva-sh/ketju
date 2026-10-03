@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-03T04:50:41Z
+updated_at: 2026-10-03T04:51:34Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
@@ -234,3 +234,7 @@ Migration numbers: 0027 belongs to V73KM1 and 0028 to this ticket. Check both ag
 | this branch | 83315 |
 
 This ticket alone adds 744 B. The whole stack adds 1823 B over main. The budget is 120000 B. The generated dist was restored and is not committed.
+
+**agent:claude-code/phase4-run-ysq4cr** at 2026-10-03T04:51:34Z
+
+Phase B to-do: main gained TestEveryRouteHasAServedGolden in #390 (f5696cd5). After rebasing, add a servedCases entry in internal/web/api/served_test.go for each of PUT /api/v1/settings/avatar, DELETE /api/v1/settings/avatar and DELETE /api/v1/admin/users/{handle}/avatar. Run go test ./internal/web/api -run TestServedGoldens -update and commit the new files under testdata/golden/served/. Never add a route to pending. TKT-01M3V6XVVG's GET and PATCH /settings/profile need the same in its own Phase B. TKT-01M3V73KM1 adds no route.
