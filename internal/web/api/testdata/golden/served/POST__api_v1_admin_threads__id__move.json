@@ -6,6 +6,7 @@
     "Content-Type": "application/json"
   },
   "body": {
+    "archived": false,
     "author": {
       "avatar": "",
       "display_name": "Alice Nakamura",
