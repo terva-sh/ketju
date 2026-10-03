@@ -3,6 +3,7 @@ import { resetApiCache } from '../api/client';
 import type { Me } from '../api/dto';
 import { draftDelay } from './drafts';
 import { canDiscard, createThread, discardNewThread, loadNewThreadDraft, newThreadFor, newThreadNote, refusedHere, resetNewThreads } from './newThread';
+import { renameViewer } from './rename';
 import { viewer } from './viewer';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 
@@ -319,6 +320,31 @@ describe('creating the thread', () => {
     await tick();
     expect(writes()).toEqual([]);
     expect(server.live).toEqual({ title: 'Bob’s', source: 'draft' });
+  });
+
+  // Terva review 2023: a rename of the viewer's own account while the create
+  // is out is the same person, whose composer and draft the answer clears.
+  it('a create answered after a rename of the viewer’s own account clears the draft as usual', async () => {
+    let answer!: (r: Response) => void;
+    await loadNewThreadDraft(F);
+    const n = newThreadFor(F);
+    n.title.value = 'T';
+    n.source.value = 'alice’s';
+    await wait(draftDelay);
+    expect(server.live).toEqual({ title: 'T', source: 'alice’s' });
+    const base = fakeFetch;
+    vi.stubGlobal('fetch', (u: string, init: RequestInit = {}) =>
+      u === create ? (calls.push({ method: 'POST', url: u, body: undefined }), new Promise<Response>((r) => (answer = r))) : base(u, init),
+    );
+    const creating = createThread(F);
+    await tick();
+    renameViewer('alicia');
+    expect(newThreadFor(F)).toBe(n);
+    answer(apply({ method: 'POST', url: create, body: { title: 'T', source: 'alice’s' } }));
+    expect(await creating).not.toBeNull();
+    await tick();
+    expect(n.title.value).toBe('');
+    expect(server.live).toBeNull();
   });
 
   it('discard deletes the draft and forgets a refusal', async () => {

@@ -691,6 +691,29 @@ describe('posting and discarding', () => {
     expect(server.live).toBeNull();
   });
 
+  // Terva review 2023: a rename of the viewer's own account while a post is
+  // out is the same person, so the answer clears the composer and its draft
+  // as for any post, and is not taken for another viewer's.
+  it('a post answered after a rename of the viewer’s own account clears the draft as usual', async () => {
+    const stop = startDrafts();
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'the reply';
+    await wait(draftDelay);
+    expect(server.live).toEqual({ source: 'the reply', reply_to: null });
+    const post = hold('POST');
+    const posting = postReply(T);
+    renameViewer('alicia');
+    expect(composerFor(T)).toBe(c);
+    await created(post);
+    expect(await posting).not.toBeNull();
+    await wait(draftDelay * 2);
+    expect(c.source.value).toBe('');
+    expect(writes()).toEqual(['PUT the reply', 'DELETE']);
+    expect(server.live).toBeNull();
+    stop();
+  });
+
   it('a post answered after the viewer changed, before any composer was asked for, answers null', async () => {
     // startDrafts is what drops alice's pending saves on the change in the
     // app ('a viewer change drops pending saves before any composer is asked

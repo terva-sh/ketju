@@ -68,6 +68,11 @@ function forget() {
 // person's session. Signing in and out load a page today, which empties this
 // anyway; this holds without relying on that.
 let owner: string | null = null;
+// era counts the owners the composers have had. A change of viewer moves it
+// on. A rename of the viewer's own account keeps it (renameComposerOwner),
+// so a post in flight across the rename is still the poster's when it is
+// answered (Terva review 2023).
+let era = 0;
 
 const draftKey = (thread: string): DraftKey => ({ kind: 'reply', thread });
 
@@ -80,6 +85,7 @@ export function checkOwner() {
   if (who !== owner) {
     forget();
     owner = who;
+    era++;
   }
 }
 
@@ -232,7 +238,7 @@ export function replyToThread(thread: string) {
 // nowhere (TKT-01M3SAKPK9, as createThread does after Terva review 1591).
 export async function postReply(thread: string, slow?: Slow): Promise<CreatedPost | null> {
   const c = composerFor(thread);
-  const who = owner;
+  const at = era;
   const source = c.source.value;
   if (c.posting.value || !source.trim() || uploading(c)) return null;
   const replyTo = c.replyTo.value;
@@ -244,7 +250,7 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
       ...(replyTo === null ? {} : { reply_to: replyTo }),
       ...hashes(c.attachments.value),
     });
-    if (!current(thread, c, who)) return null;
+    if (!current(thread, c, at)) return null;
     // The draft goes before the fields are cleared, so clearing them is not
     // a change to save (state/drafts.ts).
     drop(draftKey(thread));
@@ -256,7 +262,7 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
     if (slow && slow.seconds > 0 && !slow.exempt) extend(c, Math.min(res.post.created_at, Date.now()) + slow.seconds * 1000);
     return res;
   } catch (err) {
-    if (!current(thread, c, who)) return null;
+    if (!current(thread, c, at)) return null;
     const p = asProblem(err);
     if (p.type === 'rate-limited' && p.retryAfter) {
       extend(c, Date.now() + p.retryAfter * 1000);
@@ -269,14 +275,16 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
   }
 }
 
-// current is whether c is still thread's composer for the viewer who was
-// who, read without starting a new one. The viewer check catches a change no
-// lookup has followed yet, the owner check one that a lookup has, and the
+// current is whether c is still thread's composer for the owner of era at,
+// read without starting a new one. The viewer check catches a change no
+// lookup has followed yet, the era check one that a lookup has, and the
 // identity check a change and back with a lookup while the other viewer was
 // current. A change and back with no lookup between leaves the composer, its
 // draft and the post all the one viewer's, and is not guarded (review 1609).
-function current(thread: string, c: Composer, who: string | null): boolean {
-  return (viewer.peek().user?.handle ?? '') === who && owner === who && composers.get(thread) === c;
+// A rename of the viewer's own account moves owner with the viewer and keeps
+// the era, so it passes (Terva review 2023).
+function current(thread: string, c: Composer, at: number): boolean {
+  return (viewer.peek().user?.handle ?? '') === owner && era === at && composers.get(thread) === c;
 }
 
 // discardReply empties thread's composer: the text, the chip, the files and

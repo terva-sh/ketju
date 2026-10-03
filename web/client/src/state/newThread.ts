@@ -37,6 +37,9 @@ export interface NewThread extends Files {
 
 const states = new Map<string, NewThread>();
 let owner: string | null = null;
+// era counts the owners, as composer.ts's does: a change of viewer moves it
+// on, and a rename of the viewer's own account keeps it (Terva review 2023).
+let era = 0;
 
 const draftKey = (forum: string): DraftKey => ({ kind: 'new', forum });
 
@@ -48,6 +51,7 @@ export function newThreadFor(forum: string): NewThread {
   if (who !== owner) {
     states.clear();
     owner = who;
+    era++;
   }
   let n = states.get(forum);
   if (!n) {
@@ -121,7 +125,7 @@ export async function loadNewThreadDraft(forum: string): Promise<void> {
 // and answers null, so the screen goes nowhere (Terva review 1591).
 export async function createThread(forum: string): Promise<CreatedThread | null> {
   const n = newThreadFor(forum);
-  const who = owner;
+  const at = era;
   const title = n.title.value;
   const source = n.source.value;
   if (n.posting.value || !title.trim() || !source.trim() || uploading(n)) return null;
@@ -133,7 +137,7 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
       source,
       ...hashes(n.attachments.value),
     });
-    if (!current(forum, n, who)) return null;
+    if (!current(forum, n, at)) return null;
     drop(draftKey(forum));
     batch(() => {
       n.title.value = '';
@@ -150,10 +154,11 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
   }
 }
 
-// current is whether n is still forum's composer for the viewer who was
-// who, read without starting a new one.
-function current(forum: string, n: NewThread, who: string | null): boolean {
-  return (viewer.peek().user?.handle ?? '') === who && owner === who && states.get(forum) === n;
+// current is whether n is still forum's composer for the owner of era at,
+// read without starting a new one. A rename of the viewer's own account
+// moves owner with the viewer and keeps the era, so it passes.
+function current(forum: string, n: NewThread, at: number): boolean {
+  return (viewer.peek().user?.handle ?? '') === owner && era === at && states.get(forum) === n;
 }
 
 // canDiscard is whether Discard may act: the draft has loaded, nothing is
