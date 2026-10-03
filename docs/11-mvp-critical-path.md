@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-291 tickets: 12 epics and 279 children. Every ticket derived from the design
+301 tickets: 12 epics and 289 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
@@ -45,7 +45,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 46 in
-Phase 3, 25 in Phase 4, 1 in Phase 5, 2 filed as later, and 23 carrying no
+Phase 3, 33 in Phase 4, 1 in Phase 5, 2 filed as later, and 25 carrying no
 milestone. Phase 3 grew from 21 on 2026-10-01, when its run (docs/14) pulled
 the settings pair forward from Phase 4, filed the profile screen, the exit
 check and its tracking ticket, and placed ten unplaced drafts. Its grooming
@@ -64,7 +64,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-247 done, 4 ready, 3 blocked, 32 draft, 5 archived (counted 2026-10-02 with
+272 done, 4 ready, 2 blocked, 17 draft, 6 archived (counted 2026-10-03 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -286,6 +286,18 @@ checked three Phase 1 epics against the code and closed them:
 The Phase 1 tracking ticket stays open until the last three Phase 1 epics
 close: the database epic waits on the ncruces report, the client epic on
 the real-device check and the / shortcut, and operations on Phase 4.
+
+By 2026-10-03 Phase 4 carries 33 tickets, 25 of them done. Its lanes filed
+six: the tags, archive and avatar client tickets, the publishing ticket, the
+unarchive spike and the backlinks client ticket.
+The run placed two CI flakes in it (`TKT-01M3ZE2211`, `TKT-01M3Z50NKE`)
+because the exit check needs reliable green CI. Every server ticket has
+merged. The eight open are split, merge and reply as a new thread, profile
+editing, the upload bound and avatars, which wait their turn on the committed
+client, then the exit check and the tracking ticket. The quote-backlinks and
+served-goldens tickets met the render and API epics' unticked criteria, which
+the run ticked after close; the API epic keeps only form posts unticked, for
+Phase 5.
 
 ## The critical path
 

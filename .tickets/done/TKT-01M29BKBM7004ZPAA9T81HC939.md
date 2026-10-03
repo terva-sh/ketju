@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:07:17Z
-updated_at: 2026-10-02T15:41:59Z
+updated_at: 2026-10-03T07:38:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,7 +48,7 @@ Attachments stay out of the log entirely. Files land in `blobs/sha256/xx/<hash>`
 
 - [x] Sanitized output is identical between the composer preview endpoint and the stored-post read path for the same source
 - [x] Bumping the renderer version invalidates every cached rendered post without touching a log file
-- [ ] Mentions, quotes, and reply_to extracted at render time match what the projection writer records
+- [x] Mentions, quotes, and reply_to extracted at render time match what the projection writer records
 - [x] An attachment uploaded twice by different users is stored once and reference-counted twice
 - [x] Uploads outside the MIME allowlist are refused, and the allowlist is checked by sniffing rather than by the declared type
 
@@ -62,6 +62,10 @@ Verification on 2026-10-02, against origin/main at adeba570, done the same way a
 3. **Mentions, quotes and reply_to match the projection: partly. Left unticked.** Mentions and reply_to are recorded (`create.go:355-363`, `projection/apply.go:95,112`). Quotes are not recorded anywhere, although docs/06 says the server records them as backlinks. Filed as TKT-01M3YME9AZ (Record quotes as backlinks, as docs/06 promises), Phase 4.
 4. **Stored once, counted twice: holds under the decided model.** docs/03 (TKT-01M29CXK0) counts a reference when a post attaches the blob, not when it is uploaded. Tests: `TestUploadDedupOneFileOneRow`, `TestTwoPostsTwoRefs`.
 5. **MIME allowlist by sniffing: holds.** `sniff` (`blobs.go:372`); the handler never reads the declared type. Tests: `TestUploadSniffsNotClaims`, `TestUploadRefusesOutsideAllowlist`, `TestUploadImageMustDecodeConfig`.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T07:38:34Z
+
+Criterion 3 met after close, 2026-10-03: TKT-01M3YME9AZ (Record quotes as backlinks) merged via PR #380 (bb6faf74). render.QuotedOrdinals is the one extraction point, the projection writer records quotes in post_quotes (migration 0025), and the notifier reads that table instead of re-rendering.
 
 ## Summary
 

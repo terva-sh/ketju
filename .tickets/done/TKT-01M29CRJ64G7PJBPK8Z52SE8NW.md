@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T22:46:34Z
+updated_at: 2026-10-03T07:38:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-run-crj64
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -46,13 +46,13 @@ Archiving is stronger than locking. A locked thread is a moderation state a mode
 
 ## Acceptance criteria
 
-- [ ] POST /admin/threads/{id}/archive, admin only with a row in adminRouteGates, appends one ThreadArchived with its reason, writes thread.archived (in audit.Actions and docs/04), and the header and list rows say archived (TestArchiveThread, TestArchiveRefusals)
+- [x] POST /admin/threads/{id}/archive, admin only with a row in adminRouteGates, appends one ThreadArchived with its reason, writes thread.archived (in audit.Actions and docs/04), and the header and list rows say archived (TestArchiveThread, TestArchiveRefusals)
 - [x] An archived thread refuses every write from everyone, the author, members, moderators by role and by group, admins and agents, and its log does not grow (TestArchivedThreadIsReadOnlyToEveryone)
 - [x] The actor refuses any append after ThreadArchived, so a reply racing an archive never lands after it, and a reopened archived thread is sealed (TestArchiveRacingReplyNeverLandsAfter, TestActorRefusesAfterThreadArchived, TestArchivedThreadSealedOnReopen)
 - [x] Archived threads are evicted from the open-thread cache ahead of live ones once archived through the service (TestArchiveDropsThreadFromCacheFirst)
 - [x] The archived state comes from the log and survives a projection rebuild and a restart (TestArchivedStateSurvivesReindex)
 - [x] Reading, watching and the read position are unchanged, the viewer block offers no reply or upload, the response cache key moves, and ketju redact still reaches the thread (TestArchivedThreadStaysReadable, TestArchivedViewerBlockOffersNothing, TestArchiveMovesTheResponseCacheKey, TestRedactReachesAnArchivedThread)
-- [ ] docs/07 documents the archive route, its refusals and the archived field
+- [x] docs/07 documents the archive route, its refusals and the archived field
 
 ## Implementation plan
 
@@ -237,6 +237,10 @@ Terva review 1992 (run f0981e67, Actions #2534, head 71332e2) marked the 1989 fi
 Failing the open was the alternative the review offered. It lost because it would make a damaged thread unreadable too, while the invariant at stake only concerns writes.
 
 The new test is `TestUnreadableLogIsSealedOnOpen`. It corrupts the first frame's length under a trusted index. An append is then `ErrArchived` and the log does not grow. A mutant that returns "live" on a failed walk fails the test.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T07:38:33Z
+
+Criteria 1 and 7 met after close, 2026-10-03: TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client) merged via PR #395 (ead49125). ThreadHeader and ThreadRow carry archived, read through views.rowColumns (TestArchiveThread, TestArchivedThreadStaysReadable), and docs/07 Archiving threads names the field.
 
 ## Summary
 
