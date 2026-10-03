@@ -101,10 +101,6 @@ func (s *Service) SetAvatar(ctx context.Context, v domain.Viewer, r io.Reader) (
 	owner := sql.NullInt64{Int64: v.UserID, Valid: true}
 	var placed bool
 	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		before, err := q.UnattachedBytes(ctx, owner)
-		if err != nil {
-			return err
-		}
 		b, err := q.GetBlob(ctx, hash)
 		fresh := errors.Is(err, sql.ErrNoRows)
 		switch {
@@ -125,17 +121,21 @@ func (s *Service) SetAvatar(ctx context.Context, v domain.Viewer, r io.Reader) (
 		}); err != nil {
 			return err
 		}
-		// The new avatar is named, so it does not count; what the change
-		// adds is the avatar it replaced, if that was v's and nothing else
-		// names it. New bytes are refused when that takes v over the
-		// bound, so replacing an avatar again and again is bounded as
-		// uploading is. Stored bytes are never refused, as for an upload.
+		// The new avatar is named, so it does not count; the avatar it
+		// replaced does, if that was v's and nothing else names it, and so
+		// does every avatar v cleared earlier. New bytes are refused
+		// whenever v's unattached total is then over the bound, whether
+		// this change raised it or v was over already (Terva review 2063:
+		// clearing before each upload kept the total level, and a check on
+		// the rise alone let that repeat without end). So replacing or
+		// clearing and setting again and again is bounded as uploading is.
+		// Stored bytes are never refused, as for an upload.
 		if fresh {
 			after, err := q.UnattachedBytes(ctx, owner)
 			if err != nil {
 				return err
 			}
-			if after > before && after > s.budget() {
+			if after > s.budget() {
 				return invalid("file", CodeUploadBudget)
 			}
 		}

@@ -256,6 +256,22 @@ func TestAvatarAndTheUploadBound(t *testing.T) {
 		t.Fatalf("setting stored bytes again over the bound: %q %v", got, err)
 	}
 
+	// Clearing before a new avatar does not get round the bound (Terva
+	// review 2063). The cleared one counts, and new bytes are refused while
+	// the total is over, though setting them would not raise it.
+	if err := s.svc.ClearAvatar(t.Context(), s.viewer("alice")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.setAvatar("alice", blobstest.PNG(30, 30, 14)); fieldCode(err) != "file upload_budget" {
+		t.Fatalf("a new avatar after a clear, over the bound: %v", err)
+	}
+	if got := s.avatarOf("alice"); got != "" || len(s.staged()) != 0 {
+		t.Fatalf("the refusal set the avatar to %q or left %v staged", got, s.staged())
+	}
+	if got, err := s.setAvatar("alice", first); err != nil || got != h {
+		t.Fatalf("setting stored bytes again after a clear: %q %v", got, err)
+	}
+
 	// Under a bound with room, replacing passes and the old one counts.
 	s.svc.Budget = 1 << 20
 	if _, err := s.setAvatar("alice", blobstest.PNG(30, 30, 13)); err != nil {
@@ -269,6 +285,26 @@ func TestAvatarAndTheUploadBound(t *testing.T) {
 	})
 	if n := s.unattached("alice"); n != size {
 		t.Fatalf("unattached = %d, want the replaced avatar's %d", n, size)
+	}
+
+	// Clearing and setting a new avatar again and again stops at the bound:
+	// each cleared one counts, so the total climbs to it.
+	s.svc.Budget = 3 * size
+	tries := 0
+	for ; tries < 20; tries++ {
+		if err := s.svc.ClearAvatar(t.Context(), s.viewer("alice")); err != nil {
+			t.Fatal(err)
+		}
+		_, err := s.setAvatar("alice", blobstest.PNG(30, 30, byte(20+tries)))
+		if fieldCode(err) == "file upload_budget" {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if tries == 20 {
+		t.Fatalf("20 rounds of clear and set were never refused; unattached = %d", s.unattached("alice"))
 	}
 }
 
