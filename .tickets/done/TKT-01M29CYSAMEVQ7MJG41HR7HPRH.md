@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T08:00:42Z
+updated_at: 2026-10-03T08:07:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -216,6 +216,19 @@ The TestMovedPost* tests now exist:
 - The reader bundle, MovePosts included, goes from 79983 to 83279 B gzip. The MovePosts chunk is 2183 B of JS and 509 B of CSS.
 - `e2e/posts-split.spec.ts` passes at 390 and 1440 px.
 - So do `thread-moderation`, `thread-rename-move`, `thread`, `targets` and `a11y`.
+
+**agent:claude-code/phase4-run-cysam** at 2026-10-03T08:07:20Z
+
+Terva review 2057 covered head 5ef7f036, base ead49125, run e6bd4c8a, Actions #2685. It raised two medium findings, and both are fixed in 3898be56 (dist regenerated in 18c2fd58).
+
+1. **A split dialog closed before its answer still navigated.**
+   - Fix: once the split answers, the dialog stores both headers and drops the lists, but it calls `onSplit` only while it is still mounted. A dialog that was cancelled or escaped, or a page that was left, takes nobody to the new thread, and a newer selection is not ended.
+   - Test: MovePosts.test, "goes nowhere when closed before the split answers".
+2. **A selection started while the MovePosts chunk loads survived leaving the thread.**
+   - Fix: ThreadScreen counts selection starts and stops in `selectGen`. A chunk that arrives after a stop, a change of thread or an unmount starts nothing.
+   - Test: ThreadScreen.selectLoad.test, which holds the chunk back with a `vi.mock` gate until the thread is left. The existing select tests preload the chunk, so they cannot reach this case.
+
+Reverting either fix fails its test. The reader bundle is now 88120 B gzip.
 
 ## Summary
 
