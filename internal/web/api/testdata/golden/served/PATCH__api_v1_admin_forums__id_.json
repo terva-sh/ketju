@@ -1,0 +1,36 @@
+{
+  "request": "PATCH /api/v1/admin/forums/1",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "forums": [
+      {
+        "archived": false,
+        "description": "Anything.",
+        "id": 1,
+        "name": "General talk",
+        "parent_id": null,
+        "position": 0,
+        "posts": 4,
+        "slug": "general",
+        "threads": 2,
+        "visibility": "public"
+      },
+      {
+        "archived": false,
+        "description": "",
+        "id": 2,
+        "name": "staff",
+        "parent_id": null,
+        "position": 0,
+        "posts": 1,
+        "slug": "staff",
+        "threads": 1,
+        "visibility": "restricted"
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "request": "POST /api/v1/admin/forms/registration/preview",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "fields": [
+      {
+        "from_claim": "",
+        "html": "",
+        "key": "who",
+        "label": "Who?",
+        "locked": false,
+        "max": 500,
+        "multiple": false,
+        "options": [],
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "from_claim": "",
+        "html": "",
+        "key": "likes",
+        "label": "Likes",
+        "locked": false,
+        "max": 0,
+        "multiple": true,
+        "options": [
+          "Games",
+          "Books"
+        ],
+        "required": false,
+        "type": "select"
+      }
+    ],
+    "intro_html": "<p><em>Hello</em></p>\n",
+    "key": "registration",
+    "title": "Apply",
+    "version": 0
+  }
+}

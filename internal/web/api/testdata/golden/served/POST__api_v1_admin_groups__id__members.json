@@ -1,0 +1,45 @@
+{
+  "request": "POST /api/v1/admin/groups/5/members",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "group": {
+      "description": "They edit.",
+      "grants": 0,
+      "id": 5,
+      "members": 1,
+      "name": "Editors",
+      "slug": "editors",
+      "system": false
+    },
+    "members": [
+      {
+        "added_at": 1757600000000,
+        "added_by": {
+          "avatar": "",
+          "display_name": "Dana Admin",
+          "handle": "dana",
+          "kind": "human",
+          "role": "admin"
+        },
+        "source": "admin",
+        "user": {
+          "created_at": 1,
+          "id": 4,
+          "last_seen_at": null,
+          "status": "active",
+          "user": {
+            "avatar": "",
+            "display_name": "Carol Ruiz",
+            "handle": "carol",
+            "kind": "human",
+            "role": "member"
+          }
+        }
+      }
+    ]
+  }
+}

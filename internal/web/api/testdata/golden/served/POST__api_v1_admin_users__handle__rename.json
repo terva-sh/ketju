@@ -1,0 +1,13 @@
+{
+  "request": "POST /api/v1/admin/users/carol/rename",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "handle": "carolyn",
+    "next_change_at": null,
+    "previous": "carol"
+  }
+}

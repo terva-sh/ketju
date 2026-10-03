@@ -1,0 +1,21 @@
+{
+  "request": "GET /api/v1/admin/applications",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "applications": [
+      {
+        "created_at": 1757600000000,
+        "email": null,
+        "email_verified": false,
+        "id": 1,
+        "provider": "github",
+        "status": "pending"
+      }
+    ],
+    "next_cursor": ""
+  }
+}

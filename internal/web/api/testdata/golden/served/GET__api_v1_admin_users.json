@@ -1,0 +1,26 @@
+{
+  "request": "GET /api/v1/admin/users?prefix=c",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "next_cursor": "",
+    "users": [
+      {
+        "created_at": 1,
+        "id": 4,
+        "last_seen_at": null,
+        "status": "active",
+        "user": {
+          "avatar": "",
+          "display_name": "Carol Ruiz",
+          "handle": "carol",
+          "kind": "human",
+          "role": "member"
+        }
+      }
+    ]
+  }
+}

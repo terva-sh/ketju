@@ -1,0 +1,33 @@
+{
+  "request": "POST /api/v1/admin/threads/{other}/pin",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "author": {
+      "avatar": "",
+      "display_name": "Alice Nakamura",
+      "handle": "alice",
+      "kind": "human",
+      "role": "member"
+    },
+    "created_at": 1757500900000,
+    "forum": {
+      "name": "General",
+      "slug": "general"
+    },
+    "id": "0369k573g0002",
+    "locked": false,
+    "log_length": 283,
+    "pinned": {
+      "scope": "forum",
+      "until": null
+    },
+    "post_count": 1,
+    "slug": "why-we-left-slack",
+    "tags": [],
+    "title": "A thread nobody opened"
+  }
+}

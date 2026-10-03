@@ -1,0 +1,20 @@
+{
+  "request": "GET /api/v1/admin/groups/5",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "group": {
+      "description": "They edit.",
+      "grants": 0,
+      "id": 5,
+      "members": 0,
+      "name": "Editors",
+      "slug": "editors",
+      "system": false
+    },
+    "members": []
+  }
+}

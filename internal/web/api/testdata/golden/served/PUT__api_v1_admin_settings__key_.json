@@ -1,0 +1,29 @@
+{
+  "request": "PUT /api/v1/admin/settings/registration.mode",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "allowed": "one of \"open\", \"approval\"",
+    "choices": [
+      "open",
+      "approval"
+    ],
+    "default": "approval",
+    "doc": "How a new visitor becomes a member: \"open\" or \"approval\".",
+    "is_default": false,
+    "key": "registration.mode",
+    "kind": "text",
+    "updated_at": 1757600000000,
+    "updated_by": {
+      "avatar": "",
+      "display_name": "Dana Admin",
+      "handle": "dana",
+      "kind": "human",
+      "role": "admin"
+    },
+    "value": "open"
+  }
+}

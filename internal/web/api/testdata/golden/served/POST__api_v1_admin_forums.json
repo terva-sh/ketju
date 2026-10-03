@@ -1,0 +1,48 @@
+{
+  "request": "POST /api/v1/admin/forums",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "forums": [
+      {
+        "archived": false,
+        "description": "",
+        "id": 1,
+        "name": "General",
+        "parent_id": null,
+        "position": 0,
+        "posts": 4,
+        "slug": "general",
+        "threads": 2,
+        "visibility": "public"
+      },
+      {
+        "archived": false,
+        "description": "",
+        "id": 2,
+        "name": "staff",
+        "parent_id": null,
+        "position": 0,
+        "posts": 1,
+        "slug": "staff",
+        "threads": 1,
+        "visibility": "restricted"
+      },
+      {
+        "archived": false,
+        "description": "Off topic.",
+        "id": 3,
+        "name": "Lounge",
+        "parent_id": null,
+        "position": 1024,
+        "posts": 0,
+        "slug": "lounge",
+        "threads": 0,
+        "visibility": "members"
+      }
+    ]
+  }
+}

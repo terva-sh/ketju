@@ -1,0 +1,34 @@
+{
+  "request": "PUT /api/v1/admin/users/helper/agent-limits",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "agent": {
+      "burst": 5,
+      "credential": null,
+      "default_burst": 20,
+      "default_refill_seconds": 30,
+      "refill_seconds": 60
+    },
+    "groups": [],
+    "identities": [],
+    "sessions": 0,
+    "suspension": null,
+    "user": {
+      "created_at": 1757600000000,
+      "id": 6,
+      "last_seen_at": null,
+      "status": "active",
+      "user": {
+        "avatar": "",
+        "display_name": "Helper",
+        "handle": "helper",
+        "kind": "agent",
+        "role": "member"
+      }
+    }
+  }
+}

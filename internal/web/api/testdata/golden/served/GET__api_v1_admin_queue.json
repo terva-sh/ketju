@@ -1,0 +1,66 @@
+{
+  "request": "GET /api/v1/admin/queue",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "items": [
+      {
+        "application": null,
+        "created_at": 1757501200000,
+        "flag": {
+          "flags": [
+            {
+              "created_at": 1757501200000,
+              "id": 1,
+              "note": "",
+              "reason": "spam",
+              "reporter": {
+                "avatar": "",
+                "display_name": "Carol Ruiz",
+                "handle": "carol",
+                "kind": "human",
+                "role": "member"
+              }
+            }
+          ],
+          "ordinal": 1,
+          "post": {
+            "attachments": [],
+            "author": {
+              "avatar": "",
+              "display_name": "Alice Nakamura",
+              "handle": "alice",
+              "kind": "human",
+              "role": "member"
+            },
+            "created_at": 1757500200000,
+            "deleted": false,
+            "edited_at": 1757500500000,
+            "edited_by_moderator": false,
+            "html": "<p>The bill was the <strong>smaller</strong> half of it.</p>\n",
+            "machine_authored": false,
+            "moved_to": null,
+            "ordinal": 1,
+            "quoted_by": [],
+            "redacted": false,
+            "removal": null,
+            "reply_count": 2,
+            "reply_to": null,
+            "reply_to_suppressed": false,
+            "revision": 2
+          },
+          "thread": {
+            "id": "0369k573g0001",
+            "slug": "why-we-left-slack",
+            "title": "Why we left Slack"
+          }
+        },
+        "kind": "flag"
+      }
+    ],
+    "next_cursor": ""
+  }
+}

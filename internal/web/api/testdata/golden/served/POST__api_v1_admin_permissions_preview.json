@@ -1,0 +1,69 @@
+{
+  "request": "POST /api/v1/admin/permissions/preview",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "forums": [
+      {
+        "after": {
+          "create_thread": "deny",
+          "moderate": "deny",
+          "read": "allow",
+          "reply": "deny",
+          "upload": "allow"
+        },
+        "before": {
+          "create_thread": "allow",
+          "moderate": "deny",
+          "read": "allow",
+          "reply": "allow",
+          "upload": "deny"
+        },
+        "forum": {
+          "id": 1,
+          "name": "General",
+          "slug": "general",
+          "visibility": "public"
+        }
+      },
+      {
+        "after": {
+          "create_thread": "hidden",
+          "moderate": "hidden",
+          "read": "hidden",
+          "reply": "hidden",
+          "upload": "hidden"
+        },
+        "before": {
+          "create_thread": "hidden",
+          "moderate": "hidden",
+          "read": "hidden",
+          "reply": "hidden",
+          "upload": "hidden"
+        },
+        "forum": {
+          "id": 2,
+          "name": "staff",
+          "slug": "staff",
+          "visibility": "restricted"
+        }
+      }
+    ],
+    "user": {
+      "created_at": 1,
+      "id": 4,
+      "last_seen_at": null,
+      "status": "active",
+      "user": {
+        "avatar": "",
+        "display_name": "Carol Ruiz",
+        "handle": "carol",
+        "kind": "human",
+        "role": "member"
+      }
+    }
+  }
+}

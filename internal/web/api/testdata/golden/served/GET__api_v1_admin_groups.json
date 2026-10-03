@@ -1,0 +1,48 @@
+{
+  "request": "GET /api/v1/admin/groups",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "groups": [
+      {
+        "description": "Every viewer, signed in or not. Implicit.",
+        "grants": 1,
+        "id": 1,
+        "members": 0,
+        "name": "Everyone",
+        "slug": "everyone",
+        "system": true
+      },
+      {
+        "description": "Every active user. Implicit.",
+        "grants": 3,
+        "id": 2,
+        "members": 0,
+        "name": "Members",
+        "slug": "members",
+        "system": true
+      },
+      {
+        "description": "Moderate the forums they are granted.",
+        "grants": 0,
+        "id": 3,
+        "members": 0,
+        "name": "Moderators",
+        "slug": "moderators",
+        "system": true
+      },
+      {
+        "description": "Administer the forum.",
+        "grants": 0,
+        "id": 4,
+        "members": 0,
+        "name": "Admins",
+        "slug": "admins",
+        "system": true
+      }
+    ]
+  }
+}

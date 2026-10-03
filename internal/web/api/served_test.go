@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -77,7 +78,10 @@ func newServedWorld(t *testing.T) *servedWorld {
 	t.Helper()
 	w := &servedWorld{world: newWorld(t), tokens: map[string]string{}, names: map[string]string{}}
 	clock := func() time.Time { return servedNow }
-	pm := w.svc.Perm
+	// One evaluator on the fixed clock, so what perm stamps (a suspension,
+	// an audit row, a group member) has a time a golden can pin.
+	pm := perm.NewAt(w.db, clock)
+	w.svc.Perm = pm
 	// A thread created through the API takes its id from the world's
 	// clock, so its golden can pin it.
 	w.svc.IDs = threadid.NewGeneratorAt(func() time.Time { return time.UnixMilli(w.clock) })
@@ -89,7 +93,7 @@ func newServedWorld(t *testing.T) *servedWorld {
 	deps := Deps{Threads: w.svc,
 		Users: &users.Service{DB: w.db, Perm: pm, Now: clock, QueueCount: w.svc.QueueCount,
 			VisibleNotifications: w.svc.CountVisibleNotifications},
-		Forums: &forums.Service{DB: w.db, Perm: pm}, Forms: &formsvc.Service{DB: w.db},
+		Forums: &forums.Service{DB: w.db, Perm: pm}, Forms: &formsvc.Service{DB: w.db, Now: clock},
 		Applications: &applications.Service{DB: w.db, Now: clock}, Perm: pm, Sessions: sessions, Blobs: uploads,
 		Providers: []identity.ProviderName{{Key: "github", Name: "GitHub"}, {Key: "club", Name: "The Club"}},
 		Logger:    log, Now: clock}
@@ -112,8 +116,9 @@ func newServedWorld(t *testing.T) *servedWorld {
 //   - carol's reply draft and forum draft;
 //   - alice's two notifications, of scribe's reply and carol's mention;
 //   - a GitHub identity for carol, and an applicant's identity;
-//   - a session each for alice, bob and carol, and a pre-user session for
-//     the applicant;
+//   - dana, an admin;
+//   - a session each for alice, bob (a moderator), carol and dana, and a
+//     pre-user session for the applicant;
 //   - the search index, caught up.
 func (w *servedWorld) servedSeed() {
 	t := w.t
@@ -150,7 +155,13 @@ func (w *servedWorld) servedSeed() {
 		t.Fatal(err)
 	}
 
-	for _, h := range []string{"alice", "bob", "carol"} {
+	w.write(func(q *dbq.Queries) error {
+		id, err := q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "dana", DisplayName: "Dana Admin",
+			Status: "active", Role: domain.RoleAdmin, Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+		w.users["dana"] = id
+		return err
+	})
+	for _, h := range []string{"alice", "bob", "carol", "dana"} {
 		w.tokens[h] = sessiontest.SignIn(t, w.db, w.users[h], servedNow)
 	}
 	w.tokens["pre-user"] = sessiontest.PreUser(t, w.db, applicant, servedNow)
@@ -310,6 +321,184 @@ var servedCases = map[string]servedCase{
 	"PUT /api/v1/settings/handle":             sending("carol", "/api/v1/settings/handle", `{"handle":"caroline"}`),
 	"POST /api/v1/apply":                      sending("pre-user", "/api/v1/apply", validAnswers),
 	"POST /api/v1/apply/withdraw":             {viewer: "pre-user", req: servedWithdraw},
+	// The admin routes, each as the least viewer its gate admits: dana for
+	// the admin gate, and bob, a moderator by role, for the staff and
+	// moderates gates.
+	"POST /api/v1/admin/users/{handle}/suspend":         sending("bob", "/api/v1/admin/users/carol/suspend", `{"reason":"Cooling off.","until":1757700000000}`),
+	"POST /api/v1/admin/users/{handle}/unsuspend":       {viewer: "bob", req: then(servedSuspend, "/api/v1/admin/users/carol/unsuspend", `{"restore_posts":true}`)},
+	"POST /api/v1/admin/users/{handle}/posts/hide":      {viewer: "bob", req: then(servedSuspend, "/api/v1/admin/users/carol/posts/hide", "")},
+	"POST /api/v1/admin/users/{handle}/posts/restore":   {viewer: "bob", req: then(servedSuspend, "/api/v1/admin/users/carol/posts/restore", "")},
+	"POST /api/v1/admin/users/{handle}/anonymize":       at("dana", "/api/v1/admin/users/carol/anonymize"),
+	"POST /api/v1/admin/users/{handle}/rename":          sending("dana", "/api/v1/admin/users/carol/rename", `{"handle":"carolyn"}`),
+	"GET /api/v1/admin/audit":                           {viewer: "dana", req: then(servedSuspend, "/api/v1/admin/audit", "")},
+	"GET /api/v1/admin/forums":                          at("dana", "/api/v1/admin/forums"),
+	"POST /api/v1/admin/forums":                         sending("dana", "/api/v1/admin/forums", `{"slug":"lounge","name":"Lounge","description":"Off topic.","parent_id":null,"visibility":"members"}`),
+	"PATCH /api/v1/admin/forums/{id}":                   {viewer: "dana", req: inForum("general", "", `{"name":"General talk","description":"Anything."}`)},
+	"POST /api/v1/admin/forums/{id}/move":               {viewer: "dana", req: inForum("staff", "/move", `{"parent_id":null,"before":0,"after":0}`)},
+	"PUT /api/v1/admin/forums/{id}/visibility":          {viewer: "dana", req: inForum("general", "/visibility", `{"visibility":"members"}`)},
+	"PUT /api/v1/admin/forums/{id}/archived":            {viewer: "dana", req: inForum("staff", "/archived", `{"archived":true}`)},
+	"GET /api/v1/admin/queue":                           {viewer: "bob", req: then(servedFlag, "/api/v1/admin/queue", "")},
+	"POST /api/v1/admin/queue/posts/{id}/{ordinal}":     {viewer: "bob", req: servedResolveFlag},
+	"GET /api/v1/admin/users":                           at("bob", "/api/v1/admin/users?prefix=c"),
+	"GET /api/v1/admin/users/{handle}":                  at("bob", "/api/v1/admin/users/carol"),
+	"PUT /api/v1/admin/users/{handle}/role":             sending("dana", "/api/v1/admin/users/carol/role", `{"role":"moderator"}`),
+	"GET /api/v1/admin/groups":                          at("dana", "/api/v1/admin/groups"),
+	"POST /api/v1/admin/groups":                         sending("dana", "/api/v1/admin/groups", servedGroupBody),
+	"GET /api/v1/admin/groups/{id}":                     {viewer: "dana", req: inGroup("", "")},
+	"PATCH /api/v1/admin/groups/{id}":                   {viewer: "dana", req: inGroup("", `{"name":"Copy editors","description":"They fix typos."}`)},
+	"DELETE /api/v1/admin/groups/{id}":                  {viewer: "dana", req: inGroup("", "")},
+	"POST /api/v1/admin/groups/{id}/members":            {viewer: "dana", req: inGroup("/members", `{"handle":"carol"}`)},
+	"DELETE /api/v1/admin/groups/{id}/members/{handle}": {viewer: "dana", req: servedRemoveMember},
+	"GET /api/v1/admin/permissions":                     at("dana", "/api/v1/admin/permissions"),
+	"POST /api/v1/admin/permissions":                    {viewer: "dana", req: servedGrant("/api/v1/admin/permissions", "")},
+	"POST /api/v1/admin/permissions/preview":            {viewer: "dana", req: servedGrant("/api/v1/admin/permissions/preview", `"handle":"carol",`)},
+	"POST /api/v1/admin/users":                          sending("dana", "/api/v1/admin/users", servedAgentBody),
+	"POST /api/v1/admin/users/{handle}/credential":      {viewer: "dana", req: then(servedAgent, "/api/v1/admin/users/helper/credential", "")},
+	"DELETE /api/v1/admin/users/{handle}/credential":    {viewer: "dana", req: then(servedCredential, "/api/v1/admin/users/helper/credential", "")},
+	"PUT /api/v1/admin/users/{handle}/agent-limits":     {viewer: "dana", req: then(servedAgent, "/api/v1/admin/users/helper/agent-limits", `{"burst":5,"refill_seconds":60}`)},
+	"GET /api/v1/admin/applications":                    {viewer: "bob", req: then(servedApplication, "/api/v1/admin/applications", "")},
+	"GET /api/v1/admin/applications/{id}":               {viewer: "bob", req: then(servedApplication, "/api/v1/admin/applications/1", "")},
+	"POST /api/v1/admin/applications/{id}/approve":      {viewer: "bob", req: then(servedApplication, "/api/v1/admin/applications/1/approve", `{"handle":"newcomer","note":"Welcome."}`)},
+	"POST /api/v1/admin/applications/{id}/deny":         {viewer: "bob", req: then(servedApplication, "/api/v1/admin/applications/1/deny", `{"note":"Not this time.","block":false}`)},
+	"POST /api/v1/admin/applications/{id}/notes":        {viewer: "bob", req: then(servedApplication, "/api/v1/admin/applications/1/notes", `{"body":"Knows alice."}`)},
+	"POST /api/v1/admin/applications/{id}/unblock":      {viewer: "bob", req: then(servedBlocked, "/api/v1/admin/applications/1/unblock", "")},
+	"GET /api/v1/admin/forms/{key}":                     at("dana", "/api/v1/admin/forms/registration"),
+	"GET /api/v1/admin/forms/{key}/versions/{version}":  at("dana", "/api/v1/admin/forms/registration/versions/1"),
+	"POST /api/v1/admin/forms/{key}/versions":           sending("dana", "/api/v1/admin/forms/registration/versions", saveBody(1, draftSchema)),
+	"POST /api/v1/admin/forms/{key}/preview":            sending("dana", "/api/v1/admin/forms/registration/preview", previewBody(draftSchema)),
+	"GET /api/v1/admin/settings":                        at("dana", "/api/v1/admin/settings"),
+	"PUT /api/v1/admin/settings/{key}":                  sending("dana", "/api/v1/admin/settings/registration.mode", `{"value":"open"}`),
+	"PUT /api/v1/admin/threads/{id}/slow-mode":          servedModerate("bob", "slow-mode", `{"seconds":30}`),
+	"POST /api/v1/admin/threads/{id}/lock":              servedModerate("bob", "lock", `{"reason":"Cooling off."}`),
+	"POST /api/v1/admin/threads/{id}/unlock":            {viewer: "bob", req: then(servedLock, "", "")},
+	"POST /api/v1/admin/threads/{id}/pin":               {viewer: "bob", req: servedPinOther},
+	"POST /api/v1/admin/threads/{id}/unpin":             servedModerate("bob", "unpin", `{"scope":"forum"}`),
+	"POST /api/v1/admin/threads/{id}/move":              {viewer: "bob", req: servedMove},
+	"PUT /api/v1/admin/threads/{id}/tags":               servedModerate("bob", "tags", `{"tags":["meta","help"]}`),
+	"POST /api/v1/admin/threads/{id}/archive":           servedModerate("dana", "archive", `{"reason":"Settled."}`),
+}
+
+// then is a case path and body with setup run in the case's world first.
+// A path of "" is the seeded thread's unlock route.
+func then(setup func(w *servedWorld), path, body string) func(w *servedWorld) (string, string) {
+	return func(w *servedWorld) (string, string) {
+		setup(w)
+		if path == "" {
+			path = servedModPath(w, "unlock")
+		}
+		return path, body
+	}
+}
+
+// servedSuspend has bob suspend carol, hiding her posts.
+func servedSuspend(w *servedWorld) {
+	w.mustServe("bob", http.MethodPost, "/api/v1/admin/users/carol/suspend", `{"reason":"Cooling off.","hide_posts":true}`)
+}
+
+// servedFlag has carol flag the seeded thread's first post.
+func servedFlag(w *servedWorld) {
+	w.mustServe("carol", http.MethodPost, "/api/v1/threads/"+w.thread.String()+"/flags", `{"ordinal":1,"reason":"spam"}`)
+}
+
+// servedResolveFlag dismisses carol's flag from the queue.
+func servedResolveFlag(w *servedWorld) (string, string) {
+	servedFlag(w)
+	return "/api/v1/admin/queue/posts/" + w.thread.String() + "/1", `{"action":"dismiss","note":"Not spam."}`
+}
+
+// servedAgentBody creates the agent helper, with no credential.
+const servedAgentBody = `{"kind":"agent","handle":"helper","display_name":"Helper","issue_credential":false}`
+
+// servedAgent has dana create the agent helper.
+func servedAgent(w *servedWorld) {
+	w.mustServe("dana", http.MethodPost, "/api/v1/admin/users", servedAgentBody)
+}
+
+// servedCredential creates helper and issues its credential.
+func servedCredential(w *servedWorld) {
+	servedAgent(w)
+	w.mustServe("dana", http.MethodPost, "/api/v1/admin/users/helper/credential", "")
+}
+
+// servedApplication has the applicant apply: application 1.
+func servedApplication(w *servedWorld) {
+	w.mustServe("pre-user", http.MethodPost, "/api/v1/apply", validAnswers)
+}
+
+// servedBlocked is servedApplication, denied with a block.
+func servedBlocked(w *servedWorld) {
+	servedApplication(w)
+	w.mustServe("bob", http.MethodPost, "/api/v1/admin/applications/1/deny", `{"note":"Spam.","block":true}`)
+}
+
+// servedLock has bob lock the seeded thread.
+func servedLock(w *servedWorld) {
+	w.mustServe("bob", http.MethodPost, servedModPath(w, "lock"), "")
+}
+
+// servedMove makes a public forum, lounge, and moves the seeded thread
+// there: bob moderates both by his role.
+func servedMove(w *servedWorld) (string, string) {
+	w.forumAt("lounge", domain.VisibilityPublic, false)
+	return servedModPath(w, "move"), `{"forum":"lounge"}`
+}
+
+// servedPinOther pins the second thread: the seeded one is pinned already.
+func servedPinOther(w *servedWorld) (string, string) {
+	return "/api/v1/admin/threads/" + w.other.String() + "/pin", `{"scope":"forum","until":null}`
+}
+
+// servedGroupBody creates the group the group cases work on.
+const servedGroupBody = `{"slug":"editors","name":"Editors","description":"They edit."}`
+
+// inGroup is a case on the group editors, which it has dana create first.
+// The id is a counter after the system groups'.
+func inGroup(suffix, body string) func(w *servedWorld) (string, string) {
+	return func(w *servedWorld) (string, string) {
+		w.mustServe("dana", http.MethodPost, "/api/v1/admin/groups", servedGroupBody)
+		return fmt.Sprintf("/api/v1/admin/groups/%d%s", servedGroup(w, "editors"), suffix), body
+	}
+}
+
+// servedRemoveMember adds carol to editors, then removes her.
+func servedRemoveMember(w *servedWorld) (string, string) {
+	path, _ := inGroup("/members", "")(w)
+	w.mustServe("dana", http.MethodPost, path, `{"handle":"carol"}`)
+	return path + "/carol", ""
+}
+
+// inForum is a case on the forum slug, by its id.
+func inForum(slug, suffix, body string) func(w *servedWorld) (string, string) {
+	return func(w *servedWorld) (string, string) {
+		var id int64
+		if err := w.db.Read(w.t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+			f, err := q.GetForumBySlug(w.t.Context(), slug)
+			id = f.ID
+			return err
+		}); err != nil {
+			w.t.Fatal(err)
+		}
+		return fmt.Sprintf("/api/v1/admin/forums/%d%s", id, suffix), body
+	}
+}
+
+// servedGrant is a grid change giving the members group upload in general,
+// as the body of path, with extra keys before changes.
+func servedGrant(path, extra string) func(w *servedWorld) (string, string) {
+	return func(w *servedWorld) (string, string) {
+		return path, fmt.Sprintf(`{%s"changes":[{"forum_id":%d,"group_id":%d,"permission":"upload","grant":true}]}`,
+			extra, w.forum, servedGroup(w, domain.GroupMembers))
+	}
+}
+
+// servedModPath is the seeded thread's moderation route for action.
+func servedModPath(w *servedWorld, action string) string {
+	return "/api/v1/admin/threads/" + w.thread.String() + "/" + action
+}
+
+// servedModerate is a moderation case on the seeded thread.
+func servedModerate(viewer, action, body string) servedCase {
+	return servedCase{viewer: viewer, req: func(w *servedWorld) (string, string) { return servedModPath(w, action), body }}
 }
 
 // servedBoundary is the upload case's multipart boundary, fixed so its
@@ -384,68 +573,6 @@ func servedWithdraw(w *servedWorld) (string, string) {
 	return "/api/v1/apply/withdraw", "{}"
 }
 
-// pending is the routes that have no served case yet. It exists only so the
-// work could merge in three PRs that each fit a review (docs/12 "The merge
-// gate"), and it was frozen in the first of them: it only ever shrinks.
-//
-// Do not add to it. A route added to the API adds a servedCases entry
-// instead, and the last PR of TKT-01M3YME9G0 deletes this list.
-var pending = []string{
-	// The admin routes (the third PR).
-	"POST /api/v1/admin/users/{handle}/suspend",
-	"POST /api/v1/admin/users/{handle}/unsuspend",
-	"POST /api/v1/admin/users/{handle}/posts/hide",
-	"POST /api/v1/admin/users/{handle}/posts/restore",
-	"POST /api/v1/admin/users/{handle}/anonymize",
-	"POST /api/v1/admin/users/{handle}/rename",
-	"GET /api/v1/admin/audit",
-	"GET /api/v1/admin/forums",
-	"POST /api/v1/admin/forums",
-	"PATCH /api/v1/admin/forums/{id}",
-	"POST /api/v1/admin/forums/{id}/move",
-	"PUT /api/v1/admin/forums/{id}/visibility",
-	"PUT /api/v1/admin/forums/{id}/archived",
-	"GET /api/v1/admin/queue",
-	"POST /api/v1/admin/queue/posts/{id}/{ordinal}",
-	"GET /api/v1/admin/users",
-	"GET /api/v1/admin/users/{handle}",
-	"PUT /api/v1/admin/users/{handle}/role",
-	"GET /api/v1/admin/groups",
-	"POST /api/v1/admin/groups",
-	"GET /api/v1/admin/groups/{id}",
-	"PATCH /api/v1/admin/groups/{id}",
-	"DELETE /api/v1/admin/groups/{id}",
-	"POST /api/v1/admin/groups/{id}/members",
-	"DELETE /api/v1/admin/groups/{id}/members/{handle}",
-	"GET /api/v1/admin/permissions",
-	"POST /api/v1/admin/permissions",
-	"POST /api/v1/admin/permissions/preview",
-	"POST /api/v1/admin/users",
-	"POST /api/v1/admin/users/{handle}/credential",
-	"DELETE /api/v1/admin/users/{handle}/credential",
-	"PUT /api/v1/admin/users/{handle}/agent-limits",
-	"GET /api/v1/admin/applications",
-	"GET /api/v1/admin/applications/{id}",
-	"POST /api/v1/admin/applications/{id}/approve",
-	"POST /api/v1/admin/applications/{id}/deny",
-	"POST /api/v1/admin/applications/{id}/notes",
-	"POST /api/v1/admin/applications/{id}/unblock",
-	"GET /api/v1/admin/forms/{key}",
-	"GET /api/v1/admin/forms/{key}/versions/{version}",
-	"POST /api/v1/admin/forms/{key}/versions",
-	"POST /api/v1/admin/forms/{key}/preview",
-	"GET /api/v1/admin/settings",
-	"PUT /api/v1/admin/settings/{key}",
-	"PUT /api/v1/admin/threads/{id}/slow-mode",
-	"POST /api/v1/admin/threads/{id}/lock",
-	"POST /api/v1/admin/threads/{id}/unlock",
-	"POST /api/v1/admin/threads/{id}/pin",
-	"POST /api/v1/admin/threads/{id}/unpin",
-	"POST /api/v1/admin/threads/{id}/move",
-	"PUT /api/v1/admin/threads/{id}/tags",
-	"POST /api/v1/admin/threads/{id}/archive",
-}
-
 // volatileMask is one value a golden cannot pin because it is random by
 // design: route is a servedCases key, path a JSON path in its body
 // ("sessions[].id": the id of every element of sessions).
@@ -463,6 +590,8 @@ type volatileMask struct {
 var volatile = []volatileMask{
 	{"GET /api/v1/settings/sessions", "sessions[].id",
 		"derived from the session's random token (session.Session.ID)"},
+	{"POST /api/v1/admin/users/{handle}/credential", "token",
+		"the agent's credential, a secret from crypto/rand (agentcred.Issue)"},
 }
 
 // servedGoldenDir holds one golden per route.
@@ -678,34 +807,23 @@ func TestServedGoldens(t *testing.T) {
 }
 
 // servedCoverage is what TestEveryRouteHasAServedGolden finds wrong with
-// routes (as "METHOD /path" patterns) against cases and pending.
-func servedCoverage(routes []string, cases map[string]servedCase, pending []string) []string {
+// routes (as "METHOD /path" patterns) against cases.
+func servedCoverage(routes []string, cases map[string]servedCase) []string {
 	var out []string
 	served := map[string]bool{}
 	for _, r := range routes {
 		served[r] = true
-		_, hasCase := cases[r]
-		isPending := slices.Contains(pending, r)
-		switch {
-		case !hasCase && !isPending:
+		if _, ok := cases[r]; !ok {
 			out = append(out, fmt.Sprintf("route %q has no served golden: add a servedCases entry for %q in "+
 				"internal/web/api/served_test.go (who sends it, and its path and body; seed what it needs in req or "+
-				"servedSeed), then run "+
-				"go test ./internal/web/api -run TestServedGoldens -update and commit the golden it writes "+
-				"under testdata/golden/served. Do not add it to pending, which only shrinks.", r, r))
-		case hasCase && isPending:
-			out = append(out, fmt.Sprintf("route %q has a served case and is in pending: delete it from pending", r))
+				"servedSeed), then run go test ./internal/web/api -run TestServedGoldens -update and commit the "+
+				"golden it writes under testdata/golden/served.", r, r))
 		}
 	}
 	for k := range cases {
 		if !served[k] {
 			out = append(out, fmt.Sprintf("servedCases names %q, which api.Routes does not serve: delete the case "+
 				"and its golden", k))
-		}
-	}
-	for _, p := range pending {
-		if !served[p] {
-			out = append(out, fmt.Sprintf("pending names %q, which api.Routes does not serve: delete it from pending", p))
 		}
 	}
 	sort.Strings(out)
@@ -721,9 +839,8 @@ func patterns(routes []web.Route) []string {
 	return out
 }
 
-// TestEveryRouteHasAServedGolden walks api.Routes: every route has a case
-// or, until the last PR of TKT-01M3YME9G0, a pending entry, and nothing
-// names a route that is gone.
+// TestEveryRouteHasAServedGolden walks api.Routes: every route has a case,
+// and no case names a route that is gone.
 func TestEveryRouteHasAServedGolden(t *testing.T) {
 	w := newServedWorld(t)
 	d := Deps{Threads: w.svc, Users: &users.Service{DB: w.db, Perm: w.svc.Perm}, Forums: &forums.Service{DB: w.db, Perm: w.svc.Perm},
@@ -732,21 +849,13 @@ func TestEveryRouteHasAServedGolden(t *testing.T) {
 	if len(routes) < 100 {
 		t.Fatalf("api.Routes returned %d routes; the walk is not seeing the API", len(routes))
 	}
-	for _, p := range servedCoverage(routes, servedCases, pending) {
+	for _, p := range servedCoverage(routes, servedCases) {
 		t.Error(p)
-	}
-	seen := map[string]bool{}
-	for _, p := range pending {
-		if seen[p] {
-			t.Errorf("pending names %q twice", p)
-		}
-		seen[p] = true
 	}
 
 	// The walk can fail. A route registered through adminRoute in a test
 	// world, as a later PR's route would be, with no case: named, with the
-	// instruction. A case and a pending entry for routes that are gone:
-	// named as stale. A route in both: named.
+	// instruction. A case for a route that is gone: named as stale.
 	aw := newAdminWorld(t)
 	aw.fixtureRoutes()
 	extra := []string{}
@@ -754,15 +863,18 @@ func TestEveryRouteHasAServedGolden(t *testing.T) {
 		extra = append(extra, a.pattern)
 	}
 	all := append(patterns(aw.h.routes()), extra...)
-	cases := map[string]servedCase{"GET /api/v1/gone": at("", "/api/v1/gone"), "GET /api/v1/me": at("", "/api/v1/me")}
-	got := servedCoverage(all, cases, append(slices.Clone(pending), "GET /api/v1/vanished", "GET /api/v1/me"))
+	cases := maps.Clone(servedCases)
+	cases["GET /api/v1/gone"] = at("", "/api/v1/gone")
+	got := servedCoverage(all, cases)
+	if len(got) != 4 {
+		t.Errorf("the walk over a test world with three fixture routes and a stale case found %d problems, want 4:\n%s",
+			len(got), strings.Join(got, "\n"))
+	}
 	for _, want := range []*regexp.Regexp{
 		regexp.MustCompile(`^route "POST /api/v1/admin/_test/admin/\{id\}" has no served golden: add a servedCases entry`),
 		regexp.MustCompile(`^route "POST /api/v1/admin/_test/moderates/\{id\}" has no served golden`),
 		regexp.MustCompile(`^route "POST /api/v1/admin/_test/staff/\{id\}" has no served golden`),
 		regexp.MustCompile(`^servedCases names "GET /api/v1/gone"`),
-		regexp.MustCompile(`^pending names "GET /api/v1/vanished"`),
-		regexp.MustCompile(`^route "GET /api/v1/me" has a served case and is in pending`),
 	} {
 		if !slices.ContainsFunc(got, want.MatchString) {
 			t.Errorf("the walk over a test world with fixture routes found no %s; it found:\n%s", want,

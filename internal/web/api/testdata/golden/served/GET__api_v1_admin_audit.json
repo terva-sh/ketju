@@ -1,0 +1,171 @@
+{
+  "request": "GET /api/v1/admin/audit",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "actions": [
+      "agent.credential_issued",
+      "agent.credential_revoked",
+      "agent.limits_changed",
+      "application.approved",
+      "application.denied",
+      "blob.deleted",
+      "flag.dismissed",
+      "flag.resolved",
+      "form.version_created",
+      "forum.archived",
+      "forum.created",
+      "forum.moved",
+      "forum.unarchived",
+      "forum.updated",
+      "forum.visibility_changed",
+      "group.created",
+      "group.deleted",
+      "group.member_added",
+      "group.member_removed",
+      "group.updated",
+      "identity.linked",
+      "identity.unblocked",
+      "identity.unlinked",
+      "permission.granted",
+      "permission.revoked",
+      "post.auto_hidden",
+      "post.deleted",
+      "post.edited",
+      "post.hidden",
+      "post.redacted",
+      "post.restored",
+      "posts.moved",
+      "setting.changed",
+      "thread.archived",
+      "thread.locked",
+      "thread.moved",
+      "thread.pinned",
+      "thread.renamed",
+      "thread.retagged",
+      "thread.slow_mode",
+      "thread.title_redacted",
+      "thread.unlocked",
+      "thread.unpinned",
+      "user.anonymized",
+      "user.created",
+      "user.deactivated",
+      "user.demoted",
+      "user.posts_hidden",
+      "user.posts_restored",
+      "user.promoted",
+      "user.reactivated",
+      "user.renamed",
+      "user.role_changed",
+      "user.suspended",
+      "user.unsuspended"
+    ],
+    "entries": [
+      {
+        "action": "user.posts_hidden",
+        "actor": {
+          "avatar": "",
+          "display_name": "Bob Iyer",
+          "handle": "bob",
+          "kind": "human",
+          "role": "moderator"
+        },
+        "at": 1757600000000,
+        "details": {
+          "posts": 1,
+          "suspension": 2
+        },
+        "id": 4,
+        "ip": "192.0.2.10",
+        "related": [],
+        "target": {
+          "href": "/u/carol",
+          "id": "4",
+          "label": "carol",
+          "type": "user"
+        }
+      },
+      {
+        "action": "post.hidden",
+        "actor": {
+          "avatar": "",
+          "display_name": "Bob Iyer",
+          "handle": "bob",
+          "kind": "human",
+          "role": "moderator"
+        },
+        "at": 1757501200000,
+        "details": {
+          "log_offset": 718,
+          "reason": "suspension",
+          "suspension": 2,
+          "thread": "0369k573g0001"
+        },
+        "id": 3,
+        "ip": "",
+        "related": [],
+        "target": {
+          "href": "/t/0369k573g0001/why-we-left-slack/4",
+          "id": "0369k573g0001/4",
+          "label": "Why we left Slack #4",
+          "type": "post"
+        }
+      },
+      {
+        "action": "user.suspended",
+        "actor": {
+          "avatar": "",
+          "display_name": "Bob Iyer",
+          "handle": "bob",
+          "kind": "human",
+          "role": "moderator"
+        },
+        "at": 1757600000000,
+        "details": {
+          "from": "active",
+          "reason": "Cooling off.",
+          "until": null
+        },
+        "id": 2,
+        "ip": "192.0.2.10",
+        "related": [],
+        "target": {
+          "href": "/u/carol",
+          "id": "4",
+          "label": "carol",
+          "type": "user"
+        }
+      },
+      {
+        "action": "thread.pinned",
+        "actor": {
+          "avatar": "",
+          "display_name": "Bob Iyer",
+          "handle": "bob",
+          "kind": "human",
+          "role": "moderator"
+        },
+        "at": 1757500800000,
+        "details": {
+          "log_offset": 654,
+          "scope": "forum",
+          "thread": "0369k573g0001",
+          "until": 1760000000000
+        },
+        "id": 1,
+        "ip": "",
+        "related": [],
+        "target": {
+          "href": "/t/0369k573g0001/why-we-left-slack",
+          "id": "0369k573g0001",
+          "label": "Why we left Slack",
+          "type": "thread"
+        }
+      }
+    ],
+    "next_cursor": ""
+  }
+}

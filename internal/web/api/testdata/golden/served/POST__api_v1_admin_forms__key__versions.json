@@ -1,0 +1,89 @@
+{
+  "request": "POST /api/v1/admin/forms/registration/versions",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "active_version": 2,
+    "form": {
+      "fields": [
+        {
+          "from_claim": "",
+          "html": "",
+          "key": "who",
+          "label": "Who?",
+          "locked": false,
+          "max": 500,
+          "multiple": false,
+          "options": [],
+          "required": true,
+          "type": "textarea"
+        },
+        {
+          "from_claim": "",
+          "html": "",
+          "key": "likes",
+          "label": "Likes",
+          "locked": false,
+          "max": 0,
+          "multiple": true,
+          "options": [
+            "Games",
+            "Books"
+          ],
+          "required": false,
+          "type": "select"
+        }
+      ],
+      "intro_html": "<p><em>Hello</em></p>\n",
+      "key": "registration",
+      "title": "Apply",
+      "version": 2
+    },
+    "key": "registration",
+    "schema": {
+      "fields": [
+        {
+          "key": "who",
+          "label": "Who?",
+          "max": 500,
+          "required": true,
+          "type": "textarea"
+        },
+        {
+          "key": "likes",
+          "label": "Likes",
+          "multiple": true,
+          "options": [
+            "Games",
+            "Books"
+          ],
+          "type": "select"
+        }
+      ],
+      "intro_markdown": "*Hello*",
+      "title": "Apply"
+    },
+    "title": "Registration",
+    "versions": [
+      {
+        "created_at": 1757600000000,
+        "created_by": {
+          "avatar": "",
+          "display_name": "Dana Admin",
+          "handle": "dana",
+          "kind": "human",
+          "role": "admin"
+        },
+        "version": 2
+      },
+      {
+        "created_at": 0,
+        "created_by": null,
+        "version": 1
+      }
+    ]
+  }
+}

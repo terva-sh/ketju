@@ -1,0 +1,35 @@
+{
+  "request": "PUT /api/v1/admin/users/carol/role",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "agent": null,
+    "groups": [],
+    "identities": [
+      {
+        "email": "carol@github.example",
+        "email_verified": false,
+        "last_login_at": null,
+        "provider": "github"
+      }
+    ],
+    "sessions": 1,
+    "suspension": null,
+    "user": {
+      "created_at": 1,
+      "id": 4,
+      "last_seen_at": null,
+      "status": "active",
+      "user": {
+        "avatar": "",
+        "display_name": "Carol Ruiz",
+        "handle": "carol",
+        "kind": "human",
+        "role": "moderator"
+      }
+    }
+  }
+}

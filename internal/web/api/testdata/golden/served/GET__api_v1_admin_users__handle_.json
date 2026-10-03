@@ -1,0 +1,28 @@
+{
+  "request": "GET /api/v1/admin/users/carol",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "agent": null,
+    "groups": [],
+    "identities": null,
+    "sessions": null,
+    "suspension": null,
+    "user": {
+      "created_at": 1,
+      "id": 4,
+      "last_seen_at": null,
+      "status": "active",
+      "user": {
+        "avatar": "",
+        "display_name": "Carol Ruiz",
+        "handle": "carol",
+        "kind": "human",
+        "role": "member"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "request": "POST /api/v1/admin/users",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json",
+    "Location": "/api/v1/admin/users/helper"
+  },
+  "body": {
+    "credential": null,
+    "user": {
+      "agent": {
+        "burst": null,
+        "credential": null,
+        "default_burst": 20,
+        "default_refill_seconds": 30,
+        "refill_seconds": null
+      },
+      "groups": [],
+      "identities": [],
+      "sessions": 0,
+      "suspension": null,
+      "user": {
+        "created_at": 1757600000000,
+        "id": 6,
+        "last_seen_at": null,
+        "status": "active",
+        "user": {
+          "avatar": "",
+          "display_name": "Helper",
+          "handle": "helper",
+          "kind": "agent",
+          "role": "member"
+        }
+      }
+    }
+  }
+}

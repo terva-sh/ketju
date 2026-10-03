@@ -1,0 +1,96 @@
+{
+  "request": "POST /api/v1/admin/applications/1/unblock",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "answers": {
+      "email": "",
+      "name": "Carol",
+      "rules": true,
+      "who": "A friend"
+    },
+    "created_at": 1757600000000,
+    "decision": {
+      "at": 1757600000000,
+      "by": {
+        "avatar": "",
+        "display_name": "Bob Iyer",
+        "handle": "bob",
+        "kind": "human",
+        "role": "moderator"
+      },
+      "note": "Spam.",
+      "user": null
+    },
+    "form": {
+      "fields": [
+        {
+          "from_claim": "name",
+          "html": "",
+          "key": "name",
+          "label": "Name",
+          "locked": false,
+          "max": 200,
+          "multiple": false,
+          "options": [],
+          "required": true,
+          "type": "text"
+        },
+        {
+          "from_claim": "email",
+          "html": "",
+          "key": "email",
+          "label": "Email",
+          "locked": true,
+          "max": 254,
+          "multiple": false,
+          "options": [],
+          "required": false,
+          "type": "email"
+        },
+        {
+          "from_claim": "",
+          "html": "",
+          "key": "who",
+          "label": "Who invited you or how did you find us?",
+          "locked": false,
+          "max": 1000,
+          "multiple": false,
+          "options": [],
+          "required": true,
+          "type": "textarea"
+        },
+        {
+          "from_claim": "",
+          "html": "",
+          "key": "rules",
+          "label": "I have read the guidelines",
+          "locked": false,
+          "max": 0,
+          "multiple": false,
+          "options": [],
+          "required": true,
+          "type": "checkbox"
+        }
+      ],
+      "intro_html": "<p>Tell us a bit about yourself…</p>\n",
+      "key": "registration",
+      "title": "Apply to join",
+      "version": 1
+    },
+    "id": 1,
+    "identity": {
+      "blocked": false,
+      "email": null,
+      "email_verified": false,
+      "provider": "github"
+    },
+    "notes": [],
+    "prior": [],
+    "status": "denied",
+    "suggested_handle": ""
+  }
+}

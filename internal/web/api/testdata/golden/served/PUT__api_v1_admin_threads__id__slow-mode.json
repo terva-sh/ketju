@@ -1,0 +1,11 @@
+{
+  "request": "PUT /api/v1/admin/threads/{thread}/slow-mode",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "seconds": 30
+  }
+}

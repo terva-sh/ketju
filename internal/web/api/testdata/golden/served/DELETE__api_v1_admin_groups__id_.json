@@ -1,0 +1,8 @@
+{
+  "request": "DELETE /api/v1/admin/groups/5",
+  "status": 204,
+  "headers": {
+    "Cache-Control": "no-store"
+  },
+  "body": null
+}

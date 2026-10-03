@@ -1,0 +1,8 @@
+{
+  "request": "POST /api/v1/admin/users/carol/unsuspend",
+  "status": 204,
+  "headers": {
+    "Cache-Control": "no-store"
+  },
+  "body": null
+}

@@ -1,0 +1,17 @@
+{
+  "request": "PATCH /api/v1/admin/groups/5",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "description": "They fix typos.",
+    "grants": 0,
+    "id": 5,
+    "members": 0,
+    "name": "Copy editors",
+    "slug": "editors",
+    "system": false
+  }
+}

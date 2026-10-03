@@ -1,0 +1,250 @@
+{
+  "request": "GET /api/v1/admin/settings",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "config": [
+      {
+        "keys": [
+          "listen"
+        ],
+        "name": "listen",
+        "reason": "Read before the database opens, so it cannot be kept in the database. The server binds it at startup."
+      },
+      {
+        "keys": [
+          "metrics_listen"
+        ],
+        "name": "metrics_listen",
+        "reason": "Read before the database opens, so it cannot be kept in the database. The metrics listener binds it at startup, and where it can be reached from is the only guard on the metrics."
+      },
+      {
+        "keys": [
+          "data_dir"
+        ],
+        "name": "data_dir",
+        "reason": "Read before the database opens, so it cannot be kept in the database. It says where the database is."
+      },
+      {
+        "keys": [
+          "site_url"
+        ],
+        "name": "site_url",
+        "reason": "Read before the database opens, so it cannot be kept in the database. Sign-in redirects are built from it."
+      },
+      {
+        "keys": [
+          "cookie_key_file"
+        ],
+        "name": "cookie_key_file",
+        "reason": "Read before the database opens, so it cannot be kept in the database. It seals sign-ins in progress, and holds a secret."
+      },
+      {
+        "keys": [
+          "storage.fsync",
+          "storage.open_threads",
+          "storage.rendered_cache_mb",
+          "storage.response_cache_mb"
+        ],
+        "name": "storage",
+        "reason": "Read before the database opens, so it cannot be kept in the database. The thread logs and caches are opened with it."
+      },
+      {
+        "keys": [
+          "log.level",
+          "log.format"
+        ],
+        "name": "log",
+        "reason": "Read before the database opens, so it cannot be kept in the database. The logger is set up before anything else runs."
+      },
+      {
+        "keys": [
+          "bootstrap.admin_emails",
+          "bootstrap.admin_subjects"
+        ],
+        "name": "bootstrap",
+        "reason": "It decides who is admin before any admin exists, so no admin can be asked."
+      },
+      {
+        "keys": [
+          "oidc.providers[].key",
+          "oidc.providers[].name",
+          "oidc.providers[].issuer",
+          "oidc.providers[].client_id",
+          "oidc.providers[].client_secret",
+          "oidc.providers[].client_secret_file",
+          "oidc.providers[].scopes",
+          "oidc.providers[].allowed_email_domains",
+          "oidc.providers[].auto_approve",
+          "oidc.providers[].groups_claim",
+          "oidc.providers[].group_map",
+          "oidc.providers[].insecure_skip_issuer_check"
+        ],
+        "name": "oidc",
+        "reason": "It holds provider secrets, and is needed before anyone can sign in."
+      },
+      {
+        "keys": [
+          "limits.attachment_mb",
+          "limits.sse_connections",
+          "limits.sse_per_user",
+          "limits.sse_anonymous"
+        ],
+        "name": "limits",
+        "reason": "Read before the database opens, so it cannot be kept in the database. The upload cap is sized to the machine's disk and the stream limits to its connections, which are the operator's to judge."
+      }
+    ],
+    "settings": [
+      {
+        "allowed": "a whole number, 1 or more",
+        "choices": [],
+        "default": 20,
+        "doc": "Writes an agent may make at once before its bucket refuses.",
+        "is_default": true,
+        "key": "agents.write_burst",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 20
+      },
+      {
+        "allowed": "a whole number from 1 to 604800",
+        "choices": [],
+        "default": 30,
+        "doc": "Seconds for an agent's bucket to regain one write.",
+        "is_default": true,
+        "key": "agents.write_refill_seconds",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 30
+      },
+      {
+        "allowed": "a whole number, 1 or more",
+        "choices": [],
+        "default": 3,
+        "doc": "Open flags on a post that hide it pending review.",
+        "is_default": true,
+        "key": "flags.auto_hide_threshold",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 3
+      },
+      {
+        "allowed": "a whole number, 0 or more",
+        "choices": [],
+        "default": 900,
+        "doc": "How long after posting an author may delete a post.",
+        "is_default": true,
+        "key": "posts.delete_window_seconds",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 900
+      },
+      {
+        "allowed": "a whole number, 0 or more",
+        "choices": [],
+        "default": 86400,
+        "doc": "How long after posting an author may edit a post.",
+        "is_default": true,
+        "key": "posts.edit_window_seconds",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 86400
+      },
+      {
+        "allowed": "a whole number, 0 or more",
+        "choices": [],
+        "default": 300,
+        "doc": "Edits within this many seconds of posting are shown as the original revision.",
+        "is_default": true,
+        "key": "posts.grace_edit_seconds",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 300
+      },
+      {
+        "allowed": "true or false",
+        "choices": [],
+        "default": true,
+        "doc": "Whether members, not only moderators, may read a post's revisions.",
+        "is_default": true,
+        "key": "public_edit_history",
+        "kind": "boolean",
+        "updated_at": null,
+        "updated_by": null,
+        "value": true
+      },
+      {
+        "allowed": "true or false",
+        "choices": [],
+        "default": false,
+        "doc": "Whether accounts may sign in with a local password as well as a provider.",
+        "is_default": true,
+        "key": "registration.allow_local_passwords",
+        "kind": "boolean",
+        "updated_at": null,
+        "updated_by": null,
+        "value": false
+      },
+      {
+        "allowed": "one of \"open\", \"approval\"",
+        "choices": [
+          "open",
+          "approval"
+        ],
+        "default": "approval",
+        "doc": "How a new visitor becomes a member: \"open\" or \"approval\".",
+        "is_default": true,
+        "key": "registration.mode",
+        "kind": "text",
+        "updated_at": null,
+        "updated_by": null,
+        "value": "approval"
+      },
+      {
+        "allowed": "text of 1 to 100 characters",
+        "choices": [],
+        "default": "Ketju",
+        "doc": "The site's name, shown in the header and page titles.",
+        "is_default": true,
+        "key": "site_name",
+        "kind": "text",
+        "updated_at": null,
+        "updated_by": null,
+        "value": "Ketju"
+      },
+      {
+        "allowed": "a whole number, 0 or more",
+        "choices": [],
+        "default": 0,
+        "doc": "Minimum seconds between one member's posts in a thread; 0 is off.",
+        "is_default": true,
+        "key": "slow_mode.default_seconds",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 0
+      },
+      {
+        "allowed": "a whole number, 0 or more",
+        "choices": [],
+        "default": 86400,
+        "doc": "How long after starting a thread its author may rename it.",
+        "is_default": true,
+        "key": "threads.rename_window_seconds",
+        "kind": "integer",
+        "updated_at": null,
+        "updated_by": null,
+        "value": 86400
+      }
+    ]
+  }
+}

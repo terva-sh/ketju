@@ -104,6 +104,14 @@ func New(d *db.DB) *Evaluator {
 	return &Evaluator{db: d, now: time.Now, gen: generationFor(d), entries: make(map[cacheKey]*entry)}
 }
 
+// NewAt is New reading an injected clock, for a test that pins the times
+// perm stamps on what it writes, such as an audit row's (TKT-01M3YME9G0).
+func NewAt(d *db.DB, now func() time.Time) *Evaluator {
+	e := New(d)
+	e.now = now
+	return e
+}
+
 // generations maps each open database to the generation counter its
 // Evaluators share, so a write through one Evaluator makes every other one's
 // entries stale. The key is weak and the entry is removed when the database

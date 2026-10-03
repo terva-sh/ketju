@@ -1,0 +1,20 @@
+{
+  "request": "POST /api/v1/admin/applications/1/notes",
+  "status": 201,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "author": {
+      "avatar": "",
+      "display_name": "Bob Iyer",
+      "handle": "bob",
+      "kind": "human",
+      "role": "moderator"
+    },
+    "body": "Knows alice.",
+    "created_at": 1757600000000,
+    "id": 1
+  }
+}
