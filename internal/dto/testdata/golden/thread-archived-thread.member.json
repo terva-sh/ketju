@@ -62,6 +62,7 @@
       "reply_to": null,
       "reply_to_suppressed": false,
       "reply_count": 1,
+      "quoted_by": [],
       "html": "<p>We are taking the Kallio unit.</p>",
       "attachments": [],
       "deleted": false,
