@@ -66,6 +66,14 @@ The run may do everything docs/14 "The grant" allows, for `phase-4`.
     route.
 - **Filed for this run:** `TKT-01M3YMG0NX`, Check Phase 4's exit criterion
   and prepare the v1.0 release.
+- **Placed in Phase 4 by the run, 2026-10-02,** because each fails CI on
+  changes that do not touch it, and the exit check needs reliable green CI.
+  docs/14's run placed `TKT-01M3TSZHSW` the same way. The maintainer may move
+  either back out.
+  - `TKT-01M3ZE2211`, Stop the Phase 3 exit Unread surface test failing under
+    CI load. It has failed four runs, main's push run included.
+  - `TKT-01M3Z50NKE`, Stop TestRunRetriesAFailedCatchUp cancelling before the
+    catch-up ends.
 
 Out of scope, and staying out:
 - `TKT-01M3VDYENN`, the runner record. It is outside the repository.

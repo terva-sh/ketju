@@ -42,6 +42,8 @@ dependencies:
   - TKT-01M3YSQ4CRYBDMEM1MY51D736K
   - TKT-01M3YTHAZB21Y6T36WC4FXZVR8
   - TKT-01M3YSQQ5XDCKEJ60MWJYQKWCW
+  - TKT-01M3ZE2211GDC23K09PZ1GJ8BQ
+  - TKT-01M3Z50NKE109GGWWC2WJA6S61
 blocks_on: none
 references:
   - ref: pr:375
@@ -49,12 +51,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-02T21:56:48Z
+updated_at: 2026-10-03T00:30:43Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-exit
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---

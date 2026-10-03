@@ -11,7 +11,7 @@ labels:
   - area:client
   - area:ci
 assignees: []
-milestone: null
+milestone: phase-4
 parent: null
 origin: null
 dependencies: []
@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-02T23:09:15Z
-updated_at: 2026-10-02T23:09:15Z
+updated_at: 2026-10-03T00:30:42Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -51,3 +51,15 @@ Do not raise the timeout without knowing which.
 
 - [ ] The cause of runs 2491 and 2522 is named in a note: a product lag, or a test that asserts before the state exists
 - [ ] The fix addresses that cause, and the test passes 20 times in a row under go test -race load locally
+
+## Notes
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T00:30:42Z
+
+Placed in Phase 4 by the run (orchestrator, 2026-10-02; the maintainer may move it back out). docs/15 keeps found work out of the milestone unless it blocks a Phase 4 exit criterion. This one does: TKT-01M3YMG0NX needs green CI on the exit tests, and the Phase 3 exit spec now fails under load often enough to stop that. docs/14's run placed a CI flake (TKT-01M3TSZHSW) the same way.
+
+More evidence since filing, all in `e2e/phase3-exit.spec.ts`, each on a change that does not touch the surface:
+- **Run 2571** (PR #382, account settings; phone): `:186` (mention and watched-thread alerts). After Back to the alerts list, the watched-thread alert landed on `/1` instead of `/2`, then timed out on `toHaveURL`.
+- **Run 2573** (main push of 4936e55c, ticket-only): `:151` on phone again, "1 new" where "2 new" was expected.
+
+So the scope is the Phase 3 exit spec under CI load, not only the Unread test. `:151` has now failed three times and `:186` once. Name the cause of each before changing a timeout.

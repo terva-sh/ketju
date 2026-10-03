@@ -10,7 +10,7 @@ due_on: null
 labels:
   - area:search
 assignees: []
-milestone: null
+milestone: phase-4
 parent: null
 origin: null
 dependencies: []
@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-02T20:31:13Z
-updated_at: 2026-10-02T20:31:13Z
+updated_at: 2026-10-03T00:30:42Z
 created_by:
   id: agent:claude-code/phase4-groom-moving-posts
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-moving-posts
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -49,3 +49,9 @@ Make the test wait for the catch-up to finish before it cancels. For example, wa
 ## Acceptance criteria
 
 - [ ] TestRunRetriesAFailedCatchUp waits for the catch-up to finish before cancelling, and passes 200 runs under -race
+
+## Notes
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T00:30:42Z
+
+Placed in Phase 4 by the run (orchestrator, 2026-10-02; the maintainer may move it back out), for the same reason as TKT-01M3ZE2211: it fails CI on unrelated changes (PR #371, a docs-only change), and the exit check TKT-01M3YMG0NX needs reliable green CI. docs/14's run placed TKT-01M3TSZHSW the same way.
