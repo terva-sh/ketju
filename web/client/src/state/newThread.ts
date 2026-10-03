@@ -45,8 +45,33 @@ export interface NewThread extends Files {
   // ordinary thread. createThread sends it.
   from: Signal<ContinueFrom | null>;
   // prefilled is the post whose quote was last put in this composer, so a
-  // second visit to the same address does not quote it again.
+  // second visit to the same address does not quote it again. It is kept in
+  // localStorage beside the draft's own copy (prefillMark), so a reload,
+  // which brings the quoted draft back, does not quote it a second time
+  // (Terva review 2059).
   prefilled: string;
+}
+
+// prefillMark is where the key of the post last quoted into owner's
+// composer for forum is kept, so it outlives a reload as the draft does. A
+// thread created or a draft discarded clears it.
+const prefillMark = (forum: string) => `ketju.prefilled.${owner ?? ''}.${forum}`;
+
+function readPrefill(forum: string): string {
+  try {
+    return localStorage.getItem(prefillMark(forum)) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writePrefill(forum: string, key: string) {
+  try {
+    if (key) localStorage.setItem(prefillMark(forum), key);
+    else localStorage.removeItem(prefillMark(forum));
+  } catch {
+    // Storage refused: the mark lives as long as the page does.
+  }
 }
 
 // ContinueFrom names the post a new thread continues.
@@ -90,7 +115,7 @@ export function newThreadFor(forum: string): NewThread {
       loaded: signal(false),
       loading: false,
       from: signal(null),
-      prefilled: '',
+      prefilled: readPrefill(forum),
       ...newFiles(),
     };
     states.set(forum, s);
@@ -139,12 +164,16 @@ export async function loadNewThreadDraft(forum: string): Promise<void> {
 // writes it, into forum's composer, once per post: in place of an empty
 // body, or after a draft's text, which it keeps. It waits for the draft to
 // load (loaded), so a draft is never written over before it is seen, and
-// does nothing while a thread is being posted.
+// does nothing while a thread is being posted. A draft that already holds
+// the quote, brought back from another device whose mark this one cannot
+// see, counts as quoted (Terva review 2059).
 export function prefillContinue(forum: string, from: ContinueFrom, quote: string) {
   const n = newThreadFor(forum);
   const key = continueKey(from);
   if (!n.loaded.value || n.posting.value || n.prefilled === key) return;
   n.prefilled = key;
+  writePrefill(forum, key);
+  if (n.source.value.includes(quote.trimEnd())) return;
   const had = n.source.value.trim();
   const source = had ? `${n.source.value.trimEnd()}\n\n${quote}\n\n` : `${quote}\n\n`;
   batch(() => {
@@ -198,6 +227,7 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
       n.from.value = null;
       n.prefilled = '';
     });
+    writePrefill(forum, '');
     return res;
   } catch (err) {
     n.failure.value = err;
@@ -243,7 +273,9 @@ export function discardNewThread(forum: string) {
     clearFiles(n);
     n.caret.value = 0;
     n.failure.value = null;
+    n.prefilled = '';
   });
+  writePrefill(forum, '');
 }
 
 // refusedHere is a refusal from the create route that trying again would

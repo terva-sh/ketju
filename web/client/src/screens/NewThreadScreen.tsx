@@ -2,7 +2,7 @@ import { useLocation, useRoute } from 'preact-iso';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { apiGet, forgetGets, peekGet } from '../api/client';
 import type { Forum, ForumTree, ThreadHeader, ThreadList, ThreadPage } from '../api/dto';
-import { asProblem, problemMessage, type ProblemError } from '../api/problem';
+import { asProblem, problemMessage, revokesAccess, type ProblemError } from '../api/problem';
 import { useResource } from '../api/resource';
 import { useVisualViewport } from '../composer/ComposerSheet';
 import { attachRefused } from '../composer/Composer';
@@ -98,8 +98,15 @@ export function NewThreadScreen() {
   }, [slug, signedIn]);
 
   // The post continued from, read once per address: its thread's header for
-  // the notice, and its quote for the composer.
-  const [origin, setOrigin] = useState<{ key: string; thread?: ThreadHeader; quote?: string; failed?: unknown } | null>(null);
+  // the notice, and its quote for the composer. gone is an answer that says
+  // the post is not there to continue: not found, not readable, or not shown
+  // as itself. Only that drops the continuation. Any other failure (the
+  // network, an unavailable server) keeps it, says so and offers a retry,
+  // and Post still sends from, so the server decides (Terva review 2059).
+  const [origin, setOrigin] = useState<{ key: string; thread?: ThreadHeader; quote?: string; gone?: true; failed?: unknown } | null>(
+    null,
+  );
+  const [tries, setTries] = useState(0);
   const fromKey = from ? `${from.thread}/${from.ordinal}` : '';
   useEffect(() => {
     if (!n) return;
@@ -113,20 +120,20 @@ export function NewThreadScreen() {
         // A post not shown as itself is not one to continue: the server
         // would refuse it too.
         if (!post || post.deleted || post.moved) {
-          setOrigin({ key: fromKey, failed: true });
+          setOrigin({ key: fromKey, gone: true });
           return;
         }
         setOrigin({ key: fromKey, thread: page.thread, quote: continueQuote(post.author.handle, post.html) });
       },
-      (err) => !ctl.signal.aborted && setOrigin({ key: fromKey, failed: err }),
+      (err) => !ctl.signal.aborted && setOrigin(revokesAccess(err) ? { key: fromKey, gone: true } : { key: fromKey, failed: err }),
     );
     return () => ctl.abort();
-  }, [slug, signedIn, fromKey]);
+  }, [slug, signedIn, fromKey, tries]);
   const shownOrigin = origin && origin.key === fromKey ? origin : null;
   const loaded = n?.loaded.value ?? false;
   useEffect(() => {
     if (!n || !from || !shownOrigin) return;
-    if (shownOrigin.failed !== undefined) {
+    if (shownOrigin.gone) {
       n.from.value = null;
       return;
     }
@@ -218,9 +225,17 @@ export function NewThreadScreen() {
                 {from.ordinal}.
               </p>
             )}
-            {shownOrigin && shownOrigin.failed !== undefined && (
+            {shownOrigin?.gone && (
               <p class="new-thread-notice" data-continues-gone>
                 The post you meant to continue is not there, or you cannot read it. This thread will start on its own.
+              </p>
+            )}
+            {shownOrigin && shownOrigin.failed !== undefined && (
+              <p class="new-thread-notice" data-continues-failed>
+                The post this thread continues could not be loaded, so it is not quoted. The thread still continues it.{' '}
+                <button type="button" onClick={() => setTries((t) => t + 1)}>
+                  Retry
+                </button>
               </p>
             )}
             {forum?.archived && (

@@ -483,6 +483,73 @@ describe('reply as a new thread', () => {
     expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => r.body)).toEqual([{ title: 'On its own', source: 'Just this.' }]);
   });
 
+  // Terva review 2059: a reload brings the quoted draft back, and must not
+  // quote the post into it again: not when the draft holds the quote as it
+  // was put there (it may come from another device), nor when the member
+  // has edited the quote, which this browser's mark remembers.
+  it('quotes nothing again into a draft a reload brings back', async () => {
+    let stored = `Saved body\n\n${quote}`;
+    serve('general', {
+      [pageOf]: () => ({ status: 200, body: source }),
+      'GET /api/v1/forums/general/draft': () => ({ status: 200, body: { forum: 'general', title: 'Saved', source: stored, updated_at: 0, revision: 4 } }),
+    });
+    let root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(stored);
+    await unmount();
+    resetNewThreads();
+    localStorage.clear();
+    stored = '@alice wrote:\n\n> The bill was the bigger half.\n\nMine.';
+    root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(`${stored}\n\n${quote}`);
+    // The quote was put there on this browser, which keeps the mark; the
+    // member edits it, and the draft as saved comes back after a reload.
+    stored = '@alice wrote:\n\n> The bill was half of it.\n\nMine.';
+    await unmount();
+    resetNewThreads();
+    root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(stored);
+  });
+
+  // Terva review 2059: only an answer that the post is not there drops the
+  // continuation. A failure to load it keeps from, says so, and retries.
+  it('keeps the continuation when the post fails to load, and quotes it on a retry', async () => {
+    let answer: () => Answer = () => problemAnswer('unavailable', 503);
+    const s = serve('general', { [pageOf]: () => answer() });
+    const root = await renderAt(continuing);
+    await wait(10);
+    expect(root.querySelector('[data-continues-gone]')).toBeNull();
+    const failed = root.querySelector('[data-continues-failed]')!;
+    expect(failed.textContent).toContain('could not be loaded');
+    expect(area(root).value).toBe('');
+    answer = () => ({ status: 200, body: source });
+    await click(failed.querySelector('button'));
+    await wait(10);
+    expect(root.querySelector('[data-continues-failed]')).toBeNull();
+    expect(root.querySelector('[data-continues]')!.textContent).toBe('Continuing Why we left Slack, post #61.');
+    expect(area(root).value).toBe(quote);
+    await fill(title(root), 'Continued');
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => (r.body as { from?: unknown }).from)).toEqual([
+      { thread: '3yymw47g00001', ordinal: 61 },
+    ]);
+  });
+
+  it('sends from even while the post cannot be loaded, so the server decides', async () => {
+    const s = serve('general', { [pageOf]: () => problemAnswer('unavailable', 503) });
+    const root = await renderAt(continuing);
+    await wait(10);
+    await write(root, 'Continued', 'In my own words.');
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => r.body)).toEqual([
+      { title: 'Continued', source: 'In my own words.', from: { thread: '3yymw47g00001', ordinal: 61 } },
+    ]);
+  });
+
   it('ignores an address that names no post', async () => {
     const s = serve('general');
     for (const q of ['?from=nope&ordinal=61', '?from=3yymw47g00001&ordinal=0', '?from=3yymw47g00001']) {
