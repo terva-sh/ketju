@@ -175,9 +175,16 @@ function current(forum: string, n: NewThread, at: number): boolean {
 }
 
 // canDiscard is whether Discard may act: the draft has loaded, nothing is
-// being posted, and there is something to discard.
+// being posted, and there is something to discard, the tags included,
+// which are not in the draft but stay in the form (Terva review 2047).
 export function canDiscard(n: NewThread): boolean {
-  return n.loaded.value && !n.posting.value && !!(n.title.value || n.source.value || n.attachments.value.length);
+  return n.loaded.value && !n.posting.value && !!(n.title.value || n.tags.value || n.source.value || n.attachments.value.length);
+}
+
+// drafted is whether n holds anything the forum draft saves: the tags are
+// not in it, so a form of tags alone has no draft to delete.
+function drafted(n: NewThread): boolean {
+  return !!(n.title.value || n.source.value || n.attachments.value.length);
 }
 
 // discardNewThread empties forum's composer, and any refusal, and deletes
@@ -188,7 +195,7 @@ export function discardNewThread(forum: string) {
   const n = newThreadFor(forum);
   n.failure.value = null;
   if (!canDiscard(n)) return;
-  drop(draftKey(forum));
+  if (drafted(n)) drop(draftKey(forum));
   batch(() => {
     n.title.value = '';
     n.tags.value = '';

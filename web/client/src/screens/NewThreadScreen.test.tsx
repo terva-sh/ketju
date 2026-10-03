@@ -270,6 +270,32 @@ describe('refusals', () => {
     expect(sent(s, 'POST', '/api/v1/forums/general/threads')[1].body).toEqual({ title: 'Another', source: 'text' });
   });
 
+  // Terva review 2047: tags alone are something to discard. They are not
+  // in the forum draft, so discarding them deletes no draft.
+  it('discards a form of tags alone, and deletes no draft', async () => {
+    const s = serve('general');
+    const root = await renderAt(general);
+    await wait(5);
+    const discard = () => root.querySelector<HTMLButtonElement>('.composer-foot .discard')!;
+    expect(discard().disabled).toBe(true);
+    await fill(tags(root), 'garden');
+    expect(discard().disabled).toBe(false);
+    await click(discard());
+    await wait(5);
+    expect(tags(root).value).toBe('');
+    expect(discard().disabled).toBe(true);
+    expect(sent(s, 'DELETE', '/api/v1/forums/general/draft')).toHaveLength(0);
+
+    // With a title too, Discard deletes the draft and the tags go with it.
+    vi.stubGlobal('confirm', () => true);
+    await fill(title(root), 'T');
+    await fill(tags(root), 'garden');
+    await click(discard());
+    await wait(5);
+    expect([title(root).value, tags(root).value]).toEqual(['', '']);
+    expect(sent(s, 'DELETE', '/api/v1/forums/general/draft')).toHaveLength(1);
+  });
+
   it('names each refused tag under the field and marks it invalid', async () => {
     serve('general', {
       'POST /api/v1/forums/general/threads': () =>
