@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
+  - ref: pr:402
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-03T11:58:18Z
+updated_at: 2026-10-03T11:58:32Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
