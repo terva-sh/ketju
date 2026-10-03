@@ -3,19 +3,19 @@
     "file": "assets/ApplyRoot-C_SWIqcC.css",
     "src": "_ApplyRoot-C_SWIqcC.css"
   },
-  "_ApplyRoot-Dm-aeR1I.js": {
-    "file": "assets/ApplyRoot-Dm-aeR1I.js",
+  "_ApplyRoot-DWQtFIsU.js": {
+    "file": "assets/ApplyRoot-DWQtFIsU.js",
     "name": "ApplyRoot",
     "imports": [
-      "_Icon-3Osv4awK.js",
+      "_Icon-Bi_U5Yed.js",
       "index.html"
     ],
     "css": [
       "assets/ApplyRoot-C_SWIqcC.css"
     ]
   },
-  "_Icon-3Osv4awK.js": {
-    "file": "assets/Icon-3Osv4awK.js",
+  "_Icon-Bi_U5Yed.js": {
+    "file": "assets/Icon-Bi_U5Yed.js",
     "name": "Icon"
   },
   "_icon-192-BjNXmPh-.png": {
@@ -35,20 +35,20 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-D53_xW2u.js",
+    "file": "assets/index-BpK8Vi7q.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
-      "_Icon-3Osv4awK.js"
+      "_Icon-Bi_U5Yed.js"
     ],
     "dynamicImports": [
       "src/components/thread/MovePosts.tsx",
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-Dm-aeR1I.js"
+      "_ApplyRoot-DWQtFIsU.js"
     ],
     "css": [
-      "assets/index-CBrb0wvt.css"
+      "assets/index-BJBzLzE1.css"
     ],
     "assets": [
       "assets/ibm-plex-sans-latin-400-normal-CDDApCn2.woff2",
@@ -109,12 +109,12 @@
     "src": "src/assets/icon/icon.svg"
   },
   "src/components/thread/MovePosts.tsx": {
-    "file": "assets/MovePosts-D_SNQBp9.js",
+    "file": "assets/MovePosts-D4dQ8Uoo.js",
     "name": "MovePosts",
     "src": "src/components/thread/MovePosts.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_Icon-3Osv4awK.js",
+      "_Icon-Bi_U5Yed.js",
       "index.html"
     ],
     "css": [
@@ -122,17 +122,17 @@
     ]
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-DL3pX4eP.js",
+    "file": "assets/AdminRoot-BdYwleic.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-Dm-aeR1I.js",
-      "_Icon-3Osv4awK.js",
+      "_ApplyRoot-DWQtFIsU.js",
+      "_Icon-Bi_U5Yed.js",
       "index.html"
     ],
     "css": [
-      "assets/AdminRoot-BMm5AVgs.css"
+      "assets/AdminRoot-DZyYCsbC.css"
     ]
   }
 }
