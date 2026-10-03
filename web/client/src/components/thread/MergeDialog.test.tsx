@@ -179,6 +179,23 @@ describe('the merge dialog', () => {
     expect(cachedThread(targetId)?.header.post_count).toBe(11);
   });
 
+  // Terva review 2057, on the split dialog: a dialog closed while its merge
+  // was on the way takes nobody to the target, but the caches still learn of
+  // the merge.
+  it('goes nowhere when closed before the merge answers', async () => {
+    let release = () => {};
+    server.routes[mergeUrl] = () => new Promise<Answer>((r) => (release = () => r({ status: 200, body: merged })));
+    const d = await open();
+    await type(d, targetId);
+    await act(async () => mergeButton(d).click());
+    await act(async () => render(null, root));
+    release();
+    await wait();
+    expect(merges()).toHaveLength(1);
+    expect(onMerge).not.toHaveBeenCalled();
+    expect(cachedThread(targetId)?.header.post_count).toBe(11);
+  });
+
   it.each([
     ['conflict', 409, 'A post may have been removed or moved, or a thread archived.'],
     ['forbidden', 403, 'You cannot move posts into that thread’s forum.'],

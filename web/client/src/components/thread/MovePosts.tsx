@@ -356,7 +356,8 @@ export function mergeRefusal(err: unknown): string {
 //
 // The answer is both threads' headers, which replace the cached ones; the
 // forum index and the lists are dropped, as after a split, and onMerge takes
-// the moderator to the target at the first copy. The copies are the last
+// the moderator to the target at the first copy, but only while the dialog
+// is still open. The copies are the last
 // posts of the target as the answer counts them. A refusal is shown in the
 // dialog, which keeps what was typed.
 export function MergeDialog({
@@ -428,7 +429,9 @@ export function MergeDialog({
       storeThreadHeader(r.target.id, r.target);
       forgetGets((u) => u.startsWith(forumsUrl));
       forgetLists();
-      onMerge(r.target, Math.max(1, r.target.post_count - ordinals.length + 1));
+      // As after a split: a dialog closed, or a page left, while the merge
+      // was on its way takes nobody anywhere (Terva review 2057).
+      if (mounted.current) onMerge(r.target, Math.max(1, r.target.post_count - ordinals.length + 1));
     } catch (err) {
       if (!mounted.current) return;
       setRefused(mergeRefusal(err));
