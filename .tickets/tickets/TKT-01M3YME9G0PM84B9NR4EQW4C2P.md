@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-03T03:59:58Z
+updated_at: 2026-10-03T04:53:00Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -141,3 +141,15 @@ Claimed 2026-10-02 on main at 2f2f914d. Since the grooming base ed82f15e, `api.R
 **agent:claude-code/phase4-run-me9g0** at 2026-10-03T03:59:58Z
 
 Terva review 2043 (run 3567abc7-5104-4d99-accf-6e873d523de6) on PR #390, head bb5264ff, base 2f2f914d. One medium finding, "Reject trailing content after the decoded JSON body". Accepted and fixed. The harness decoded only the first JSON value in a body, so a response with more bytes after that value would match its golden. `parseServed` now requires a second decode to return `io.EOF`. `TestParseServedRefusesTrailingContent` covers a second value, trailing garbage and a stray `]`, and accepts trailing whitespace. With the EOF check removed, the test fails.
+
+**agent:claude-code/phase4-run-me9g0** at 2026-10-03T04:53:00Z
+
+PR 2 of 3 (public writes): a served case and golden for each of the 28 public write routes; they come off `pending`, which now holds only the 52 admin routes.
+
+Decisions:
+- A thread created through the API takes its id from `threadid.Generator`, which read the wall clock. Rather than mask the id, `newGeneratorAt` is exported as `threadid.NewGeneratorAt` and the served world mints ids from its own fixed clock. Masking was rejected because `TestTheVolatileTableNamesOnlyRandomValues` exists to keep times out of the volatile table; an id built from a time is a time.
+- POST /api/v1/blobs needs a blob store; the served world wires `blobs.Service` over a per-test temp root with a fixed upload cap, and the case sends a multipart body with a fixed boundary.
+- DELETE /api/v1/settings/sessions/{id} needs a second session whose id is random (it derives from the token). The request line names it `{session}` rather than printing the id, so the golden does not vary.
+- Each write runs in a fresh world, so a golden is the answer to that one write and the cases do not depend on order.
+
+No golden from PR 1 changed.
