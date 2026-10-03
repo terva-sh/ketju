@@ -1,0 +1,44 @@
+{
+  "request": "GET /api/v1/threads/{thread}/posts/1/history",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "private, no-cache",
+    "Content-Type": "application/json",
+    "ETag": "\"0369k573g0001-718-r6-dd0314c6f3ed0296\""
+  },
+  "body": {
+    "deleted": false,
+    "ordinal": 1,
+    "redacted": false,
+    "revisions": [
+      {
+        "actor": {
+          "avatar": "",
+          "display_name": "Alice Nakamura",
+          "handle": "alice",
+          "kind": "human",
+          "role": "member"
+        },
+        "at": 1757500200000,
+        "grace": false,
+        "reason": "",
+        "revision": 1,
+        "source": "The bill was the *smaller* half of it."
+      },
+      {
+        "actor": {
+          "avatar": "",
+          "display_name": "Alice Nakamura",
+          "handle": "alice",
+          "kind": "human",
+          "role": "member"
+        },
+        "at": 1757500500000,
+        "grace": false,
+        "reason": "",
+        "revision": 2,
+        "source": "The bill was the **smaller** half of it."
+      }
+    ]
+  }
+}

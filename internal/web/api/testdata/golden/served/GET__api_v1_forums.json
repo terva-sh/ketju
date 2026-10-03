@@ -1,0 +1,40 @@
+{
+  "request": "GET /api/v1/forums",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "forums": [
+      {
+        "archived": false,
+        "can_upload": false,
+        "children": [],
+        "description": "",
+        "last_post": {
+          "at": 1757501000000,
+          "author": {
+            "avatar": "",
+            "display_name": "Alice Nakamura",
+            "handle": "alice",
+            "kind": "human",
+            "role": "member"
+          },
+          "thread": {
+            "id": "0369k573g0002",
+            "slug": "why-we-left-slack",
+            "title": "A thread nobody opened"
+          }
+        },
+        "name": "General",
+        "post_count": 4,
+        "slug": "general",
+        "thread_count": 2,
+        "unread": 2,
+        "visibility": "public"
+      }
+    ],
+    "members": 4
+  }
+}

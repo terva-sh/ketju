@@ -1,0 +1,48 @@
+{
+  "request": "GET /api/v1/search?q=bill",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "indexing": false,
+    "next_cursor": "",
+    "results": [
+      {
+        "author": {
+          "avatar": "",
+          "display_name": "Alice Nakamura",
+          "handle": "alice",
+          "kind": "human",
+          "role": "member"
+        },
+        "created_at": 1757500200000,
+        "forum": {
+          "name": "General",
+          "slug": "general"
+        },
+        "ordinal": 1,
+        "snippet": [
+          {
+            "match": false,
+            "text": "The "
+          },
+          {
+            "match": true,
+            "text": "bill"
+          },
+          {
+            "match": false,
+            "text": " was the smaller half of it."
+          }
+        ],
+        "thread": {
+          "id": "0369k573g0001",
+          "slug": "why-we-left-slack",
+          "title": "Why we left Slack"
+        }
+      }
+    ]
+  }
+}

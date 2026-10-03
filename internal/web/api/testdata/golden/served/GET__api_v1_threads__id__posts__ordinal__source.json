@@ -1,0 +1,13 @@
+{
+  "request": "GET /api/v1/threads/{thread}/posts/1/source",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "ordinal": 1,
+    "revision": 2,
+    "source": "The bill was the **smaller** half of it."
+  }
+}

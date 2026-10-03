@@ -1,0 +1,23 @@
+{
+  "request": "GET /api/v1/settings/identities",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "identities": [
+      {
+        "configured": true,
+        "created_at": 1,
+        "current": false,
+        "email": "carol@github.example",
+        "id": 1,
+        "last_login_at": null,
+        "provider": "github",
+        "provider_name": "GitHub",
+        "removable": false
+      }
+    ]
+  }
+}

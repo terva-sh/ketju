@@ -1,0 +1,47 @@
+{
+  "request": "GET /api/v1/notifications",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "next_cursor": "",
+    "notifications": [
+      {
+        "actor": null,
+        "at": 1757599999000,
+        "forum": {
+          "name": "General",
+          "slug": "general"
+        },
+        "id": 2,
+        "kind": "mention",
+        "ordinal": 4,
+        "read": false,
+        "thread": {
+          "id": "0369k573g0001",
+          "slug": "why-we-left-slack",
+          "title": "Why we left Slack"
+        }
+      },
+      {
+        "actor": null,
+        "at": 1757599998000,
+        "forum": {
+          "name": "General",
+          "slug": "general"
+        },
+        "id": 1,
+        "kind": "reply_to_you",
+        "ordinal": 2,
+        "read": false,
+        "thread": {
+          "id": "0369k573g0001",
+          "slug": "why-we-left-slack",
+          "title": "Why we left Slack"
+        }
+      }
+    ]
+  }
+}

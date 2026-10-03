@@ -1,0 +1,16 @@
+{
+  "request": "GET /api/v1/forums/general/draft",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "attachments": [],
+    "forum": "general",
+    "revision": 1,
+    "source": "Half a start.",
+    "title": "A new thread",
+    "updated_at": 1757501200000
+  }
+}

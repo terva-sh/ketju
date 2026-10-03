@@ -1,0 +1,18 @@
+{
+  "request": "GET /api/v1/apply/status",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "can_apply": true,
+    "can_apply_at": null,
+    "can_withdraw": false,
+    "decided_at": null,
+    "provider": "github",
+    "sign_in": null,
+    "status": "none",
+    "submitted_at": null
+  }
+}

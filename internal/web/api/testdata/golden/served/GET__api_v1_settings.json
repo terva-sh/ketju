@@ -1,0 +1,15 @@
+{
+  "request": "GET /api/v1/settings",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "locale": "en",
+    "page_size": 25,
+    "shortcuts": true,
+    "theme": "system",
+    "timezone": "UTC"
+  }
+}

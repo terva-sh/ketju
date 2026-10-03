@@ -1,0 +1,34 @@
+{
+  "request": "GET /api/v1/me",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "notifications": 0,
+    "pre_user": null,
+    "queue": null,
+    "settings": {
+      "locale": "en",
+      "page_size": 25,
+      "shortcuts": true,
+      "theme": "system",
+      "timezone": "UTC"
+    },
+    "site_name": "Ketju",
+    "unread": {
+      "new": 1,
+      "participated": 1,
+      "threads": 2,
+      "watching": 1
+    },
+    "user": {
+      "avatar": "",
+      "display_name": "Carol Ruiz",
+      "handle": "carol",
+      "kind": "human",
+      "role": "member"
+    }
+  }
+}

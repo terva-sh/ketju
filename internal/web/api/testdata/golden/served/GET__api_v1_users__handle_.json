@@ -1,0 +1,21 @@
+{
+  "request": "GET /api/v1/users/alice",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "bio_html": "",
+    "joined_at": 1,
+    "post_count": 2,
+    "status": null,
+    "user": {
+      "avatar": "",
+      "display_name": "Alice Nakamura",
+      "handle": "alice",
+      "kind": "human",
+      "role": "member"
+    }
+  }
+}

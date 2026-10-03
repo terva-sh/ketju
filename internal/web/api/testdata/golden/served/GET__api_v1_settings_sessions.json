@@ -1,0 +1,22 @@
+{
+  "request": "GET /api/v1/settings/sessions",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "sessions": [
+      {
+        "created_at": 1757600000000,
+        "current": true,
+        "device": "Unknown device",
+        "id": "<random>",
+        "ip": "",
+        "last_used_at": 1757600000000,
+        "provider": "",
+        "user_agent": ""
+      }
+    ]
+  }
+}

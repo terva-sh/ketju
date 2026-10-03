@@ -1,0 +1,12 @@
+{
+  "request": "GET /api/v1/settings/handle",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "handle": "carol",
+    "next_change_at": null
+  }
+}

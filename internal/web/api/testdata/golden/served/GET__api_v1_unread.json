@@ -1,0 +1,78 @@
+{
+  "request": "GET /api/v1/unread",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "forum": null,
+    "next_cursor": "",
+    "threads": [
+      {
+        "author": {
+          "avatar": "",
+          "display_name": "Alice Nakamura",
+          "handle": "alice",
+          "kind": "human",
+          "role": "member"
+        },
+        "forum": {
+          "name": "General",
+          "slug": "general"
+        },
+        "id": "0369k573g0002",
+        "last_post_at": 1757501000000,
+        "last_post_author": {
+          "avatar": "",
+          "display_name": "Alice Nakamura",
+          "handle": "alice",
+          "kind": "human",
+          "role": "member"
+        },
+        "last_read_ordinal": 0,
+        "locked": false,
+        "pinned": null,
+        "reply_count": 0,
+        "slug": "why-we-left-slack",
+        "tags": [],
+        "title": "A thread nobody opened",
+        "unread": 1
+      },
+      {
+        "author": {
+          "avatar": "",
+          "display_name": "Alice Nakamura",
+          "handle": "alice",
+          "kind": "human",
+          "role": "member"
+        },
+        "forum": {
+          "name": "General",
+          "slug": "general"
+        },
+        "id": "0369k573g0001",
+        "last_post_at": 1757500700000,
+        "last_post_author": {
+          "avatar": "",
+          "display_name": "Carol Ruiz",
+          "handle": "carol",
+          "kind": "human",
+          "role": "member"
+        },
+        "last_read_ordinal": 2,
+        "locked": false,
+        "pinned": null,
+        "reply_count": 3,
+        "slug": "why-we-left-slack",
+        "tags": [
+          "meta",
+          "tools"
+        ],
+        "title": "Why we left Slack",
+        "unread": 2
+      }
+    ],
+    "watch": ""
+  }
+}
