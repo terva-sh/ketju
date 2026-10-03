@@ -1,0 +1,107 @@
+{
+  "thread": {
+    "id": "3yymw47g000a7",
+    "slug": "office-move-decided",
+    "title": "Office move: decided",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "author": {
+      "handle": "bob",
+      "display_name": "Bob Iyer",
+      "avatar": "",
+      "role": "moderator",
+      "kind": "human"
+    },
+    "post_count": 2,
+    "log_length": 1841,
+    "locked": false,
+    "pinned": null,
+    "tags": [],
+    "created_at": 1757100000000,
+    "split_from": null
+  },
+  "page": {
+    "number": 1,
+    "size": 25,
+    "total_pages": 1
+  },
+  "lens": null,
+  "viewer": {
+    "last_read_ordinal": 0,
+    "last_read_at": null,
+    "watch": "",
+    "forum_watch": "",
+    "can_reply": false,
+    "can_upload": false,
+    "can_moderate": false,
+    "slow_mode_seconds": 0,
+    "next_post_at": null,
+    "rename_until": null,
+    "author_windows": null,
+    "forum_read_only": false
+  },
+  "posts": [
+    {
+      "ordinal": 1,
+      "revision": 1,
+      "author": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "created_at": 1757100000000,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 1,
+      "quoted_by": [],
+      "html": "<p>We are taking the Kallio unit.</p>",
+      "attachments": [],
+      "deleted": false,
+      "removal": null,
+      "redacted": false,
+      "moved": false,
+      "moved_to": null,
+      "move_notice": null,
+      "merge_notice": null,
+      "machine_authored": false
+    },
+    {
+      "ordinal": 2,
+      "revision": 1,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500500000,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "quoted_by": [],
+      "html": "<p>Moved here from the retention thread.</p>",
+      "attachments": [],
+      "deleted": false,
+      "removal": null,
+      "redacted": false,
+      "moved": false,
+      "moved_to": null,
+      "move_notice": null,
+      "merge_notice": {
+        "count": 1,
+        "thread": null,
+        "ordinal": null
+      },
+      "machine_authored": false
+    }
+  ]
+}

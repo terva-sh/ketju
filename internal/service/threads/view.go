@@ -624,7 +624,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 	if err != nil {
 		return nil, err
 	}
-	return out, s.drawMoves(ctx, a, id, out)
+	return out, s.drawMoves(ctx, a, id, snap, out)
 }
 
 // postsDeps is posts, also returning what the HTML was drawn against: every

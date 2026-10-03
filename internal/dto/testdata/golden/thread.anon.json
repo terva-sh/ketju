@@ -110,6 +110,7 @@
       "moved": false,
       "moved_to": null,
       "move_notice": null,
+      "merge_notice": null,
       "machine_authored": false
     },
     {
@@ -137,6 +138,7 @@
       "moved": false,
       "moved_to": null,
       "move_notice": null,
+      "merge_notice": null,
       "machine_authored": true
     },
     {
@@ -164,6 +166,7 @@
       "moved": false,
       "moved_to": null,
       "move_notice": null,
+      "merge_notice": null,
       "machine_authored": false
     },
     {
@@ -206,6 +209,7 @@
         },
         "ordinal": 1
       },
+      "merge_notice": null,
       "machine_authored": false
     }
   ]

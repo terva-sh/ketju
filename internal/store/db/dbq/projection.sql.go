@@ -292,6 +292,65 @@ func (q *Queries) ListProjectionLengths(ctx context.Context) ([]ListProjectionLe
 	return items, nil
 }
 
+const mergesIntoRange = `-- name: MergesIntoRange :many
+SELECT CAST(merged_offset AS INTEGER) AS merged_offset, source_thread_id, COUNT(*) AS posts,
+       CAST(MIN(target_ordinal) AS INTEGER) AS first_copy, CAST(MIN(source_ordinal) AS INTEGER) AS first_source
+FROM post_moves
+WHERE target_thread_id = ?1 AND merged_offset IS NOT NULL AND opens_thread = 0
+GROUP BY merged_offset, source_thread_id
+HAVING MIN(target_ordinal) >= CAST(?2 AS INTEGER)
+   AND MIN(target_ordinal) <= CAST(?3 AS INTEGER)
+`
+
+type MergesIntoRangeParams struct {
+	TargetThreadID int64
+	First          int64
+	Last           int64
+}
+
+type MergesIntoRangeRow struct {
+	MergedOffset   int64
+	SourceThreadID int64
+	Posts          int64
+	FirstCopy      int64
+	FirstSource    int64
+}
+
+// Each merge into target_thread_id the target has projected, by its
+// PostsMergedIn's offset, whose first copy is among first through last: the
+// thread it came from, how many posts it moved, its first copy, where the
+// target draws its notice, and the first moved post in the source. A
+// split's own copies are left out: the thread's header says where they
+// came from (TKT-01M29CYSBA).
+func (q *Queries) MergesIntoRange(ctx context.Context, arg MergesIntoRangeParams) ([]MergesIntoRangeRow, error) {
+	rows, err := q.db.QueryContext(ctx, mergesIntoRange, arg.TargetThreadID, arg.First, arg.Last)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MergesIntoRangeRow
+	for rows.Next() {
+		var i MergesIntoRangeRow
+		if err := rows.Scan(
+			&i.MergedOffset,
+			&i.SourceThreadID,
+			&i.Posts,
+			&i.FirstCopy,
+			&i.FirstSource,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const moveOfCopy = `-- name: MoveOfCopy :one
 SELECT source_thread_id, source_ordinal, source_revision FROM post_moves
 WHERE target_thread_id = ? AND target_ordinal = ?

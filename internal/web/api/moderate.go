@@ -39,6 +39,9 @@ func (h *handlers) registerModeration(mux *http.ServeMux) {
 	// A split needs moderate in the source's forum and the new thread's,
 	// which the service decides (TKT-01M29CYSAM).
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/split", moderatesGate, h.splitPosts)
+	// A merge needs moderate in the source's forum and the target's, and
+	// read access to the target, which the service decides (TKT-01M29CYSBA).
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/merge", moderatesGate, h.mergePosts)
 	// Archiving is an admin's alone (docs/08 "Primitives"), so it keeps the
 	// admin gate (TKT-01M29CRJ64).
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/archive", adminGate, h.archiveThread)
@@ -174,6 +177,42 @@ func (h *handlers) splitPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := h.threads.Split(r.Context(), domain.ViewerFrom(r.Context()), id, in.Ordinals, *in.Forum, *in.Title)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
+}
+
+// mergeRequest is the body of POST …/merge: the posts to move, by ordinal,
+// and the target thread's base32 id.
+type mergeRequest struct {
+	Ordinals []uint32 `json:"ordinals"`
+	Into     *string  `json:"into"`
+}
+
+// mergePosts is POST /api/v1/admin/threads/{id}/merge with {ordinals, into}:
+// a moderator's merge of posts to the end of an existing thread (docs/07
+// "Moving posts", TKT-01M29CYSBA). Both fields are required; the service
+// judges the target, the posts, and moderate in both forums. It answers 200
+// with both threads' headers, no-store. The body has the split's bound.
+func (h *handlers) mergePosts(w http.ResponseWriter, r *http.Request) {
+	id, err := threadid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in mergeRequest
+	if err := optionalJSON(r.Body, maxSplitBody, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.Ordinals == nil || in.Into == nil {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: a merge needs ordinals and a target")))
+		return
+	}
+	res, err := h.threads.Merge(r.Context(), domain.ViewerFrom(r.Context()), id, in.Ordinals, *in.Into)
 	if err != nil {
 		h.fail(w, r, err)
 		return

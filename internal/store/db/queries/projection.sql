@@ -273,6 +273,21 @@ FROM post_moves
 WHERE source_thread_id = ? AND split_offset IS NOT NULL
 GROUP BY split_offset;
 
+-- Each merge into target_thread_id the target has projected, by its
+-- PostsMergedIn's offset, whose first copy is among first through last: the
+-- thread it came from, how many posts it moved, its first copy, where the
+-- target draws its notice, and the first moved post in the source. A
+-- split's own copies are left out: the thread's header says where they
+-- came from (TKT-01M29CYSBA).
+-- name: MergesIntoRange :many
+SELECT CAST(merged_offset AS INTEGER) AS merged_offset, source_thread_id, COUNT(*) AS posts,
+       CAST(MIN(target_ordinal) AS INTEGER) AS first_copy, CAST(MIN(source_ordinal) AS INTEGER) AS first_source
+FROM post_moves
+WHERE target_thread_id = sqlc.arg(target_thread_id) AND merged_offset IS NOT NULL AND opens_thread = 0
+GROUP BY merged_offset, source_thread_id
+HAVING MIN(target_ordinal) >= CAST(sqlc.arg(first) AS INTEGER)
+   AND MIN(target_ordinal) <= CAST(sqlc.arg(last) AS INTEGER);
+
 -- The thread a split opened thread_id from: the source of its post 1, when
 -- that post is the copy a split wrote first.
 -- name: SplitSourceOf :one

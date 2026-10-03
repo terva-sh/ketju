@@ -580,6 +580,13 @@ type Querier interface {
 	// removed is gone here once projected. A scan of the thread's prefix of
 	// the primary key.
 	MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsParams) ([]int64, error)
+	// Each merge into target_thread_id the target has projected, by its
+	// PostsMergedIn's offset, whose first copy is among first through last: the
+	// thread it came from, how many posts it moved, its first copy, where the
+	// target draws its notice, and the first moved post in the source. A
+	// split's own copies are left out: the thread's header says where they
+	// came from (TKT-01M29CYSBA).
+	MergesIntoRange(ctx context.Context, arg MergesIntoRangeParams) ([]MergesIntoRangeRow, error)
 	// The move row of a copy, by where it landed.
 	MoveOfCopy(ctx context.Context, arg MoveOfCopyParams) (MoveOfCopyRow, error)
 	// The move rows of source_thread_id's posts first through last: where each

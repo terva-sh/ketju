@@ -466,15 +466,17 @@ for a moderator, who is exempt, and for an anonymous viewer. Setting slow
 mode moves no response cache key, because the cached posts do not depend on
 it. The page's ETag changes, because it hashes the viewer block.
 
-#### Moving posts (TKT-01M29CYSAM)
+#### Moving posts (TKT-01M29CYSAM, TKT-01M29CYSBA)
 
-A moderator moves posts out of a thread into a new one with a split,
-behind the `moderates` gate. The records and their order are docs/03 "How
-a move is written" (TKT-01M29CXJZZ).
+A moderator moves posts out of a thread into a new one with a split, or
+to the end of an existing one with a merge, behind the `moderates` gate.
+The records and their order are docs/03 "How a move is written"
+(TKT-01M29CXJZZ).
 
 | Route | Body | What it does |
 |---|---|---|
 | `POST /admin/threads/{id}/split` | `{ordinals, title, forum}`: the posts, the new thread's title and its forum's slug | opens a thread, started by the moderator and untagged, and moves the posts into it in ordinal order |
+| `POST /admin/threads/{id}/merge` | `{ordinals, into}`: the posts, and the target thread's base32 id | moves the posts to the end of the target, in their source order |
 
 The body is decoded strictly and bounded at 128 KiB, and each field is
 required: a body missing one, or with `ordinals` null, is `bad-request`.
@@ -498,6 +500,25 @@ threads' `ThreadHeader` as their pages now serve them to the moderator,
   record is written and whose copies are not: the split is committed then,
   and finishes from the logs within a minute.
 
+A merge is bounded and decoded as a split is, and answers 200
+`internal/dto` `MergedPosts` `{source, target}`, both threads'
+`ThreadHeader` as their pages now serve them to the moderator, `no-store`.
+Its refusals are the split's, with the target in place of the destination
+forum: `into` that is not a thread id, or is the thread itself, is
+`validation-failed`; a target that does not exist or that the moderator
+may not read is `not-found`, never `forbidden`, so a merge does not confirm
+that a hidden thread exists; a target in a forum the moderator does not
+moderate is `forbidden`; and an archived target, or one in an archived
+forum except to an admin, is `conflict`.
+
+The copies land after every post of the target, whatever their times, in
+their source order, each keeping its author and time (docs/06 "Moderator
+flow for drift", run decision of 2026-10-02): ordinals are positions and
+are never renumbered. A merge does not bump the target, which keeps its
+last post, and notifies nobody. It is reversed by the opposite merge,
+which copies the copies back to the end of the source; the original
+ordinals stay moved.
+
 The source keeps every ordinal; each moved post reads as "Removed posts"
 below sets out. The new thread's header carries `split_from`
 `{thread: {id, slug, title}}`, naming the thread its posts came from, with
@@ -505,6 +526,15 @@ below sets out. The new thread's header carries `split_from`
 is its content. It is set when post 1 is the copy a split wrote first,
 read from `post_moves` on every request, and left out while the
 projection has not recorded the split. Every other thread's is null.
+
+The first copy of each merge carries `merge_notice` `{count, thread,
+ordinal}`, where the page draws "N posts were merged from <link>": how
+many posts the merge brought, the thread they came from and the first
+moved post there. `thread` and `ordinal` are null for a viewer who may not
+read the source, who learns that posts were merged in and nothing more.
+It is drawn per viewer as `moved_to` is ("Removed posts" below), from the
+`post_moves` rows of the merge, and is null on every other post, a split
+thread's first copy included, whose `split_from` says it instead.
 
 #### Renaming and moving threads (TKT-01M29CKRH9)
 
@@ -805,13 +835,20 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
      "created_at": 1757500100000, "edited_at": 1757500200000,
      "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3, "quoted_by": [66, 71],
      "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "redacted": false,
-     "moved": false, "moved_to": null, "move_notice": null, "machine_authored": false, "edited_by_moderator": false},
+     "moved": false, "moved_to": null, "move_notice": null, "merge_notice": null, "machine_authored": false, "edited_by_moderator": false},
     {"ordinal": 64, "revision": 1, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500500000, "edited_at": null,
      "reply_to": null, "reply_to_suppressed": false, "reply_count": 0, "quoted_by": [],
      "html": "", "attachments": [], "deleted": true, "removal": null, "redacted": false,
      "moved": true, "moved_to": {"thread": {"id": "3yymw47g00099", "slug": "retention-split-out", "title": "…"}, "ordinal": 1},
      "move_notice": {"count": 1, "thread": {"id": "3yymw47g00099", "slug": "retention-split-out", "title": "…"}, "ordinal": 1},
+     "merge_notice": null, "machine_authored": false, "edited_by_moderator": false},
+    {"ordinal": 212, "revision": 1, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
+     "created_at": 1757400000000, "edited_at": null,
+     "reply_to": null, "reply_to_suppressed": false, "reply_count": 0, "quoted_by": [],
+     "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "redacted": false,
+     "moved": false, "moved_to": null, "move_notice": null,
+     "merge_notice": {"count": 1, "thread": {"id": "3yymw47g00042", "slug": "slack-exports", "title": "…"}, "ordinal": 9},
      "machine_authored": false, "edited_by_moderator": false}
   ]
 }
@@ -1073,8 +1110,9 @@ body as served, so two viewers who differ only there get different tags.
 They read `post_moves`, a projection: a moved post whose row is not
 written yet is drawn moved with both null, which fails closed. The page,
 the single post, replies, `/users/{handle}/posts` and the moderator queue
-draw them alike. A split thread's header carries `split_from`, set out
-under "Moving posts" above.
+draw them alike. A split thread's header carries `split_from`, and a
+merge's first copy `merge_notice`, both set out under "Moving posts" above
+and drawn the same way.
 
 Who is served a removed post's body is one rule, `revealRemoved` in
 `internal/service/threads`, used by the page, the single post, replies,

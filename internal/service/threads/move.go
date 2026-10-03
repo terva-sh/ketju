@@ -246,6 +246,37 @@ func (s *Service) Split(ctx context.Context, v domain.Viewer, source threadid.ID
 	return out, err
 }
 
+// Merge moves posts of source, by ordinal, to the end of the existing
+// thread into names by its base32 id, in their source order (docs/06
+// "Moderator flow for drift", TKT-01M29CYSBA). It answers both threads'
+// headers as their pages now serve them to v. into is checked before
+// anything else: one that is not a thread id is validation-failed, as is
+// the source itself; one that names no thread, or a thread v may not read,
+// is not-found. Every other refusal is movePosts', before anything is
+// written. A merge whose source record is written and whose copies are not
+// is unavailable, and finishes from the logs.
+func (s *Service) Merge(ctx context.Context, v domain.Viewer, source threadid.ID, ordinals []uint32, into string) (dto.MergedPosts, error) {
+	var out dto.MergedPosts
+	if err := s.MayWrite(v); err != nil {
+		return out, err
+	}
+	target, err := threadid.Parse(into)
+	if err != nil {
+		return out, problem.Coded(problem.CodeValidationFailed, fmt.Errorf("threads: merge target %q: %w", into, err))
+	}
+	if target == source {
+		return out, problem.Coded(problem.CodeValidationFailed, errors.New("threads: a merge into its own thread"))
+	}
+	if _, err := s.movePosts(ctx, v, MoveRequest{Source: source, Ordinals: ordinals, Target: target}); err != nil {
+		return out, err
+	}
+	if out.Source, err = s.threadHeader(ctx, v, source); err != nil {
+		return out, err
+	}
+	out.Target, err = s.threadHeader(ctx, v, target)
+	return out, err
+}
+
 // decideMove holds the source to the move's rules, as the source stands at
 // the length v was admitted at.
 func (s *Service) decideMove(ctx context.Context, v domain.Viewer, a access, src *threadcache.Thread, ords []uint32) error {
@@ -275,10 +306,17 @@ func (s *Service) decideMove(ctx context.Context, v domain.Viewer, a access, src
 
 // admitTarget holds a merge's target to the move's rules: v reads it and
 // moderates its forum, it is not archived, and its forum is not archived
-// unless v is an admin. It is projected first, as the source is.
+// unless v is an admin. It is projected first, as the source is. A target v
+// may not read is not-found, whatever access said, so a merge never tells
+// a thread that is hidden from v apart from one that does not exist
+// (TKT-01M29CYSBA).
 func (s *Service) admitTarget(ctx context.Context, v domain.Viewer, target threadid.ID) error {
 	return s.Threads.With(target, func(dst *threadcache.Thread) error {
 		a, _, err := s.admitAt(ctx, v, target, dst)
+		switch problem.FromError(err) {
+		case problem.CodeForbidden, problem.CodeUnauthenticated:
+			return problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s is not readable by this viewer: %w", target, err))
+		}
 		if err != nil {
 			return err
 		}

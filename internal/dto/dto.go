@@ -328,6 +328,12 @@ type Post struct {
 	// where the page says how many posts were moved, and to where when the
 	// viewer may read the target. Drawn per viewer, as MovedTo is.
 	MoveNotice *MoveNotice `json:"move_notice"`
+	// MergeNotice is set on the first copy of each merge into this thread,
+	// where the page says how many posts were merged in, and from where
+	// when the viewer may read the source: its thread and the first moved
+	// post's ordinal there (TKT-01M29CYSBA). A split's own copies take the
+	// header's split_from instead. Drawn per viewer, as MovedTo is.
+	MergeNotice *MoveNotice `json:"merge_notice"`
 
 	// MachineAuthored comes from the log's frame flag and records what was
 	// true when the post was written (docs/03). It is not Author.Kind, which
@@ -369,6 +375,14 @@ type SplitFrom struct {
 type MovedPosts struct {
 	Source ThreadHeader `json:"source"`
 	Thread ThreadHeader `json:"thread"`
+}
+
+// MergedPosts answers a merge (POST /admin/threads/{id}/merge): the thread
+// the posts left and the thread they joined, each as its page now serves it
+// to the moderator (TKT-01M29CYSBA).
+type MergedPosts struct {
+	Source ThreadHeader `json:"source"`
+	Target ThreadHeader `json:"target"`
 }
 
 // ThreadPage is the response to GET /threads/{id}.

@@ -498,6 +498,28 @@ func splitThread(class string) ThreadPage {
 	return p
 }
 
+// mergedThread is a thread posts were merged into (TKT-01M29CYSBA): its
+// second post is the merge's first copy, which carries the merge's notice,
+// naming the thread it came from to a reader of that thread. An anonymous
+// reader may not read that thread here, so is told only that posts were
+// merged in.
+func mergedThread(class string) ThreadPage {
+	p := lockedThread()
+	p.Thread.Locked = false
+	p.Thread.PostCount = 2
+	copied := p.Posts[0]
+	copied.Ordinal, copied.Author, copied.CreatedAt, copied.ReplyCount = 2, alice, 1757500500000, 0
+	copied.HTML = "<p>Moved here from the retention thread.</p>"
+	copied.MergeNotice = &MoveNotice{Count: 1,
+		Thread: &ThreadLink{ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack"}, Ordinal: ptr(64)}
+	p.Posts = append(p.Posts, copied)
+	if class == tAnon {
+		p.Posts[1].MergeNotice = &MoveNotice{Count: 1, Thread: nil, Ordinal: nil}
+		p.Viewer = ThreadViewer{}
+	}
+	return p
+}
+
 // movedPost is a moved post as one of two readers sees it: a reader of the
 // target while the move is unfinished, its copies not yet written, and a
 // reader who may not read the target, who learns only that posts moved.
@@ -612,6 +634,11 @@ var corpus = map[string]any{
 	"post-moved-hidden." + tMember:     movedPost(false),
 	"split." + tModerator: MovedPosts{Source: threadPage(tModerator).Thread,
 		Thread: splitThread(tMember).Thread},
+	// A merge's target (TKT-01M29CYSBA), and the merge's answer.
+	"thread-merged." + tMember: mergedThread(tMember),
+	"thread-merged." + tAnon:   mergedThread(tAnon),
+	"merge." + tModerator: MergedPosts{Source: threadPage(tModerator).Thread,
+		Target: mergedThread(tMember).Thread},
 
 	"slow-mode." + tModerator: SlowMode{Seconds: 30},
 

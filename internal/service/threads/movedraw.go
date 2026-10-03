@@ -10,6 +10,7 @@ import (
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadid"
+	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
 // What a moved post and a split thread say about the other end of the move
@@ -66,15 +67,33 @@ func refusal(err error) bool {
 	return false
 }
 
-// drawMoves fills, in place, moved_to on each of thread id's moved posts and
-// move_notice on the first post of each move, for a's viewer. posts are as
-// drawn or as the cache held them, which carry neither.
+// drawMoves fills, in place, moved_to on each of thread id's moved posts,
+// move_notice on the first post of each move out of it, and merge_notice on
+// the first copy of each merge into it, for a's viewer. posts are as drawn
+// or as the cache held them, which carry none of them.
 //
 // It reads post_moves, a projection. A moved post whose row the projection
 // has not written yet is drawn moved with no target, and a move whose
-// source record is not projected yet has no notice: both fail closed, and
-// the next request after the projection catches up draws them.
-func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, posts []dto.Post) error {
+// record is not projected yet on either side has no notice there: each
+// fails closed, and the next request after the projection catches up draws
+// them.
+//
+// snap is the snapshot the posts were drawn from, whose index entries say
+// which of them are copies: only a copy can be a merge's first copy, so a
+// page with none reads no merges, and a thread nothing was ever moved into
+// pays no statement for them.
+func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, snap snapshot, posts []dto.Post) error {
+	lo, hi := 0, 0
+	for i, e := range snap.entries {
+		if !e.Flags.Has(threadlog.EntryCopied) {
+			continue
+		}
+		o := int(snap.ordinals[i])
+		if lo == 0 || o < lo {
+			lo = o
+		}
+		hi = max(hi, o)
+	}
 	first, last := 0, 0
 	for _, p := range posts {
 		if !p.Moved {
@@ -85,15 +104,23 @@ func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, posts
 		}
 		last = max(last, p.Ordinal)
 	}
-	if first == 0 {
-		return nil
-	}
 	var (
 		rows   []dbq.MovesFromRangeRow
 		groups []dbq.MovesOutOfRow
+		merges []dbq.MergesIntoRangeRow
 	)
+	if lo == 0 && first == 0 {
+		return nil
+	}
 	if err := s.DB.Read(ctx, func(dq *dbq.Queries, _ *sql.Tx) error {
 		var err error
+		if lo != 0 {
+			merges, err = dq.MergesIntoRange(ctx, dbq.MergesIntoRangeParams{TargetThreadID: int64(id),
+				First: int64(lo), Last: int64(hi)})
+		}
+		if err != nil || first == 0 {
+			return err
+		}
 		rows, err = dq.MovesFromRange(ctx, dbq.MovesFromRangeParams{SourceThreadID: int64(id),
 			First: int64(first), Last: int64(last)})
 		if err != nil {
@@ -104,6 +131,13 @@ func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, posts
 	}); err != nil {
 		return err
 	}
+	links := s.moveLinks(a.viewer)
+	if err := s.drawMerges(ctx, links, posts, merges); err != nil {
+		return err
+	}
+	if first == 0 {
+		return nil
+	}
 	byOrdinal := make(map[int]dbq.MovesFromRangeRow, len(rows))
 	for _, r := range rows {
 		byOrdinal[int(r.SourceOrdinal)] = r
@@ -112,7 +146,6 @@ func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, posts
 	for _, g := range groups {
 		bySplit[g.SplitOffset] = g
 	}
-	links := s.moveLinks(a.viewer)
 	for i := range posts {
 		p := &posts[i]
 		r, ok := byOrdinal[p.Ordinal]
@@ -136,6 +169,36 @@ func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, posts
 			// The move's posts are copied in source order, so its first
 			// post's copy is its first copy.
 			p.MoveNotice.Thread, p.MoveNotice.Ordinal = l, copyAt
+		}
+	}
+	return nil
+}
+
+// drawMerges sets merge_notice on the first copy of each merge on the page:
+// how many posts it brought, and, to a viewer who may read the source, the
+// source and the first moved post there.
+func (s *Service) drawMerges(ctx context.Context, links *moveLinks, posts []dto.Post, merges []dbq.MergesIntoRangeRow) error {
+	if len(merges) == 0 {
+		return nil
+	}
+	byCopy := make(map[int]dbq.MergesIntoRangeRow, len(merges))
+	for _, m := range merges {
+		byCopy[int(m.FirstCopy)] = m
+	}
+	for i := range posts {
+		p := &posts[i]
+		m, ok := byCopy[p.Ordinal]
+		if !ok {
+			continue
+		}
+		l, err := links.link(ctx, threadid.ID(m.SourceThreadID))
+		if err != nil {
+			return err
+		}
+		p.MergeNotice = &dto.MoveNotice{Count: int(m.Posts)}
+		if l != nil {
+			at := int(m.FirstSource)
+			p.MergeNotice.Thread, p.MergeNotice.Ordinal = l, &at
 		}
 	}
 	return nil

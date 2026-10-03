@@ -66,7 +66,7 @@ func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id thre
 	if body, ok := s.Responses.Get(key, current); ok {
 		var out []dto.Post
 		if err := json.Unmarshal(body, &out); err == nil && out != nil {
-			return out, s.drawMoves(ctx, a, id, out)
+			return out, s.drawMoves(ctx, a, id, snap, out)
 		}
 	}
 	out, deps, err := s.postsDeps(ctx, th, id, snap, authors, q, a)
@@ -76,7 +76,7 @@ func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id thre
 	if body, err := json.Marshal(out); err == nil {
 		s.Responses.Put(key, body, deps)
 	}
-	return out, s.drawMoves(ctx, a, id, out)
+	return out, s.drawMoves(ctx, a, id, snap, out)
 }
 
 // authorsDigest hashes the authors' rows as the posts draw them, in user id
