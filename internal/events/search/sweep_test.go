@@ -92,12 +92,17 @@ func TestRunRetriesAFailedCatchUp(t *testing.T) {
 		defer close(done)
 		f.x.Run(ctx)
 	}()
+	// The row is visible as soon as the catch-up has written it, a moment
+	// before the catch-up clears Indexing, and a cancel in that moment ends
+	// the catch-up early with the flag rightly still set
+	// (TKT-01M3Z50NKE). So wait for both before cancelling.
 	deadline := time.Now().Add(10 * time.Second)
-	for f.hits("found") != 1 {
+	for f.hits("found") != 1 || f.x.Indexing() {
 		if time.Now().After(deadline) {
 			cancel()
 			<-done
-			t.Fatalf("Run never caught up after the failed sweeps:\n%s", f.log)
+			t.Fatalf("Run never caught up after the failed sweeps (found %d, Indexing %v):\n%s",
+				f.hits("found"), f.x.Indexing(), f.log)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -109,7 +114,10 @@ func TestRunRetriesAFailedCatchUp(t *testing.T) {
 		t.Errorf("the walk ran %d times, want the two failures and a success", calls)
 	}
 	if f.x.Indexing() {
-		t.Error("Indexing is still true after a catch-up finished")
+		t.Error("Indexing went back to true after the catch-up finished")
+	}
+	if !strings.Contains(f.log.String(), "search catch-up finished") {
+		t.Errorf("the catch-up did not log that it finished:\n%s", f.log)
 	}
 	if !strings.Contains(f.log.String(), "the search catch-up failed; it will be run again") {
 		t.Errorf("the failed sweep was not logged:\n%s", f.log)
