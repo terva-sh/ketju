@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSAMEVQ7MJG41HR7HPRH
 title: Implement split posts into a new thread
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,17 +23,10 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:359
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-cysam
-  branch: run/cysam-split-posts
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
-  commit: c0563a5904a98570a5c3336e19da0561cff94b1b
-  session: null
-  claimed_at: 2026-10-03T02:42:59Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T03:21:13Z
+updated_at: 2026-10-03T07:50:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,7 +51,7 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
 - [x] A split into another forum is refused unless the actor holds moderate in both, by role or through a group, and a refusal writes nothing (TestSplitAcrossForumsNeedsModerateInBoth)
 - [x] The source notice, moved_to and the split-from header name the other thread only to viewers who may read it, and the cached posts never hold them (TestSplitNoticeRevealsTargetOnlyToReaders, TestSplitFromRevealsSourceOnlyToReaders, TestMovedToNotInCachedPosts)
 - [x] The split route has a row in adminRouteGates and in docs/07, and docs/07's post example and Removed posts describe moved, moved_to and move_notice
-- [ ] The committed dist is regenerated and the reader, MovePosts chunk included, stays within the 120000 B gzip budget
+- [x] The committed dist is regenerated and the reader, MovePosts chunk included, stays within the 120000 B gzip budget
 
 ## Implementation plan
 
@@ -221,3 +214,18 @@ The TestMovedPost* tests now exist:
 - The reader bundle, MovePosts included, goes from 79983 to 83279 B gzip. The MovePosts chunk is 2183 B of JS and 509 B of CSS.
 - `e2e/posts-split.spec.ts` passes at 390 and 1440 px.
 - So do `thread-moderation`, `thread-rename-move`, `thread`, `targets` and `a11y`.
+
+## Summary
+
+Landed in one PR on main, rebased onto ead49125.
+
+- **Route.** A moderator splits selected posts into a new thread with `POST /api/v1/admin/threads/{id}/split`.
+  - The route is gated by moderatesGate and has a row in adminRouteGates.
+  - The service checks moderate in both forums.
+  - An archived source, or an archived target forum for a non-admin, is conflict.
+- **Logs.** The source log keeps every ordinal and gains a move record. The new thread's ThreadCreated and EntryCopied records carry the posts' original authors and timestamps.
+- **Drawing.** `moved_to`, `move_notice` and the header's `split_from` are drawn per viewer at draw time. They name the other thread only to its readers, and the cached posts never hold them.
+- **Client.** The reader gets the selection mode, the selection bar and the split dialog, in a lazy MovePosts chunk.
+- **Docs.** docs/07 describes the route, `moved`, `moved_to` and `move_notice`.
+- **Rebase onto main.** It brought in archived (#395), quoted_by and the served goldens (#390). The split route gained its servedCases entry and golden under `internal/web/api/testdata/golden/served/`.
+- **Bundle.** The thread view is 88081 B gzip against the 120000 B budget, with MovePosts counted. Main is 83350 B. The bundler now puts the modules the entry and the three lazy chunks share into a preloaded Icon chunk.
