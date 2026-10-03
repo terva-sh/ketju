@@ -89,6 +89,7 @@
       {
         "keys": [
           "limits.attachment_mb",
+          "limits.unattached_upload_mb",
           "limits.sse_connections",
           "limits.sse_per_user",
           "limits.sse_anonymous"
