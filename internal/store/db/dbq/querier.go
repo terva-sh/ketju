@@ -116,6 +116,7 @@ type Querier interface {
 	ClearSearchDocs(ctx context.Context) error
 	ClearSearchMeta(ctx context.Context) error
 	ClearSearchState(ctx context.Context) error
+	ClearThreadContinuations(ctx context.Context) error
 	ClearThreadTags(ctx context.Context) error
 	ClearThreadWatch(ctx context.Context, arg ClearThreadWatchParams) error
 	// The statements ClearProjections runs, one per table in ProjectionTables.
@@ -123,6 +124,9 @@ type Querier interface {
 	// Resolving or dismissing a flag updates it in place; only an open flag can
 	// be closed, so a second moderator's click finds nothing to change.
 	CloseFlag(ctx context.Context, arg CloseFlagParams) (int64, error)
+	// The threads continuing posts first..last of source_thread_id, in post
+	// then thread order, for the "continued in" notes (TKT-01M29CYSC0).
+	ContinuationsInRange(ctx context.Context, arg ContinuationsInRangeParams) ([]ContinuationsInRangeRow, error)
 	// The admin users, groups and permissions screens (TKT-01M29CXK1X). Every
 	// write here that changes a permission decision is called only from
 	// internal/perm (TestMutationsGoThroughPerm); the group writes change no
@@ -813,9 +817,6 @@ type Querier interface {
 	// suspension's reason never outlives it, and counts the change in
 	// status_version.
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) error
-	// The thread a split opened thread_id from: the source of its post 1, when
-	// that post is the copy a split wrote first.
-	SplitSourceOf(ctx context.Context, targetThreadID int64) (int64, error)
 	// SweepSessions deletes every session LookupSession would refuse: the exact
 	// complement of its liveness test. internal/auth/session binds both cutoffs
 	// from session.ExpiredBefore, so the sweeper deletes nothing a lookup at the
@@ -823,6 +824,15 @@ type Querier interface {
 	SweepSessions(ctx context.Context, arg SweepSessionsParams) (int64, error)
 	// The tags of a page of threads, for a thread list.
 	TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error)
+	// What a thread's header says of the threads it came from, and whether its
+	// page has "continued in" notes to read, in one statement on every view
+	// (TKT-01M29CYSAM, TKT-01M29CYSC0):
+	//   - split_source, the thread a split opened it from: the source of its
+	//     post 1, when that post is the copy a split wrote first; 0 for none;
+	//   - continues_thread and continues_ordinal, the post a reply as a new
+	//     thread continues; 0 for none;
+	//   - continued, whether any thread continues a post of this one.
+	ThreadLinksOf(ctx context.Context, threadID int64) (ThreadLinksOfRow, error)
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
 	// ThreadWatchers is every watches row that bears on a thread: its own rows,
@@ -888,6 +898,9 @@ type Querier interface {
 	// SQLite does not promise to short-circuit AND and json_type raises on
 	// malformed JSON (Terva reviews 1704 and 1734).
 	UpdateUserSettings(ctx context.Context, arg UpdateUserSettingsParams) (UpdateUserSettingsRow, error)
+	// A ThreadCreated's continues (TKT-01M29CYSC0). A thread opens once, so a
+	// replay writes the same row.
+	UpsertContinuation(ctx context.Context, arg UpsertContinuationParams) error
 	// PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
 	// draft per (user, forum). The title and attachments are replaced as a
 	// whole, so a save without them clears them.

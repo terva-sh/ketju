@@ -65,6 +65,15 @@ func (q *Queries) ClearProjectionState(ctx context.Context) error {
 	return err
 }
 
+const clearThreadContinuations = `-- name: ClearThreadContinuations :exec
+DELETE FROM thread_continuations
+`
+
+func (q *Queries) ClearThreadContinuations(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearThreadContinuations)
+	return err
+}
+
 const clearThreadTags = `-- name: ClearThreadTags :exec
 DELETE FROM thread_tags
 `
@@ -82,6 +91,49 @@ DELETE FROM threads
 func (q *Queries) ClearThreads(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, clearThreads)
 	return err
+}
+
+const continuationsInRange = `-- name: ContinuationsInRange :many
+SELECT source_ordinal, thread_id FROM thread_continuations
+WHERE source_thread_id = ?1
+  AND source_ordinal >= CAST(?2 AS INTEGER) AND source_ordinal <= CAST(?3 AS INTEGER)
+ORDER BY source_ordinal, thread_id
+`
+
+type ContinuationsInRangeParams struct {
+	SourceThreadID int64
+	First          int64
+	Last           int64
+}
+
+type ContinuationsInRangeRow struct {
+	SourceOrdinal int64
+	ThreadID      int64
+}
+
+// The threads continuing posts first..last of source_thread_id, in post
+// then thread order, for the "continued in" notes (TKT-01M29CYSC0).
+func (q *Queries) ContinuationsInRange(ctx context.Context, arg ContinuationsInRangeParams) ([]ContinuationsInRangeRow, error) {
+	rows, err := q.db.QueryContext(ctx, continuationsInRange, arg.SourceThreadID, arg.First, arg.Last)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ContinuationsInRangeRow
+	for rows.Next() {
+		var i ContinuationsInRangeRow
+		if err := rows.Scan(&i.SourceOrdinal, &i.ThreadID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteMentions = `-- name: DeleteMentions :exec
@@ -957,20 +1009,6 @@ func (q *Queries) SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) 
 	return result.RowsAffected()
 }
 
-const splitSourceOf = `-- name: SplitSourceOf :one
-SELECT source_thread_id FROM post_moves
-WHERE target_thread_id = ? AND target_ordinal = 1 AND opens_thread = 1
-`
-
-// The thread a split opened thread_id from: the source of its post 1, when
-// that post is the copy a split wrote first.
-func (q *Queries) SplitSourceOf(ctx context.Context, targetThreadID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, splitSourceOf, targetThreadID)
-	var source_thread_id int64
-	err := row.Scan(&source_thread_id)
-	return source_thread_id, err
-}
-
 const tagsForThreads = `-- name: TagsForThreads :many
 SELECT thread_id, tag FROM thread_tags WHERE thread_id IN (/*SLICE:thread_ids*/?) ORDER BY thread_id, tag
 `
@@ -1007,6 +1045,45 @@ func (q *Queries) TagsForThreads(ctx context.Context, threadIds []int64) ([]Thre
 		return nil, err
 	}
 	return items, nil
+}
+
+const threadLinksOf = `-- name: ThreadLinksOf :one
+SELECT
+	CAST(coalesce((SELECT source_thread_id FROM post_moves
+		WHERE target_thread_id = ?1 AND target_ordinal = 1 AND opens_thread = 1), 0) AS INTEGER) AS split_source,
+	CAST(coalesce((SELECT c.source_thread_id FROM thread_continuations AS c
+		WHERE c.thread_id = ?1), 0) AS INTEGER) AS continues_thread,
+	CAST(coalesce((SELECT c.source_ordinal FROM thread_continuations AS c
+		WHERE c.thread_id = ?1), 0) AS INTEGER) AS continues_ordinal,
+	CAST(EXISTS (SELECT 1 FROM thread_continuations AS c
+		WHERE c.source_thread_id = ?1) AS INTEGER) AS continued
+`
+
+type ThreadLinksOfRow struct {
+	SplitSource      int64
+	ContinuesThread  int64
+	ContinuesOrdinal int64
+	Continued        int64
+}
+
+// What a thread's header says of the threads it came from, and whether its
+// page has "continued in" notes to read, in one statement on every view
+// (TKT-01M29CYSAM, TKT-01M29CYSC0):
+//   - split_source, the thread a split opened it from: the source of its
+//     post 1, when that post is the copy a split wrote first; 0 for none;
+//   - continues_thread and continues_ordinal, the post a reply as a new
+//     thread continues; 0 for none;
+//   - continued, whether any thread continues a post of this one.
+func (q *Queries) ThreadLinksOf(ctx context.Context, threadID int64) (ThreadLinksOfRow, error) {
+	row := q.db.QueryRowContext(ctx, threadLinksOf, threadID)
+	var i ThreadLinksOfRow
+	err := row.Scan(
+		&i.SplitSource,
+		&i.ContinuesThread,
+		&i.ContinuesOrdinal,
+		&i.Continued,
+	)
+	return i, err
 }
 
 const threadTags = `-- name: ThreadTags :many
@@ -1173,6 +1250,26 @@ func (q *Queries) UnpinThread(ctx context.Context, arg UnpinThreadParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const upsertContinuation = `-- name: UpsertContinuation :exec
+INSERT INTO thread_continuations (thread_id, source_thread_id, source_ordinal)
+VALUES (?1, ?2, ?3)
+ON CONFLICT (thread_id) DO UPDATE SET
+	source_thread_id = excluded.source_thread_id, source_ordinal = excluded.source_ordinal
+`
+
+type UpsertContinuationParams struct {
+	ThreadID       int64
+	SourceThreadID int64
+	SourceOrdinal  int64
+}
+
+// A ThreadCreated's continues (TKT-01M29CYSC0). A thread opens once, so a
+// replay writes the same row.
+func (q *Queries) UpsertContinuation(ctx context.Context, arg UpsertContinuationParams) error {
+	_, err := q.db.ExecContext(ctx, upsertContinuation, arg.ThreadID, arg.SourceThreadID, arg.SourceOrdinal)
+	return err
 }
 
 const upsertMergedMove = `-- name: UpsertMergedMove :exec

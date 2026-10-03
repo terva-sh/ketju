@@ -3,7 +3,6 @@ package threads
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -15,7 +14,9 @@ import (
 
 // What a moved post and a split thread say about the other end of the move
 // (TKT-01M29CYSAM): a moved post's moved_to, the source's "N posts were
-// moved" notice, and the split thread's "split from" header.
+// moved" notice, and the split thread's "split from" header. A reply as a new
+// thread is drawn the same way (TKT-01M29CYSC0): the source post's
+// "continued in" note, and the new thread's "continued from" header.
 //
 // Each names another thread, and docs/15 "Invariants, added" lets it name
 // that thread only to a viewer who may read it; everyone else learns that
@@ -82,7 +83,15 @@ func refusal(err error) bool {
 // which of them are copies: only a copy can be a merge's first copy, so a
 // page with none reads no merges, and a thread nothing was ever moved into
 // pays no statement for them.
+//
+// It also fills continued_in, the threads continuing each post that a's
+// viewer may read, from thread_continuations. snap.continued says whether
+// the thread has any, when the caller has read it (the thread page's header
+// does); a thread the header says has none pays no statement for them.
 func (s *Service) drawMoves(ctx context.Context, a access, id threadid.ID, snap snapshot, posts []dto.Post) error {
+	if err := s.drawContinued(ctx, a, id, snap, posts); err != nil {
+		return err
+	}
 	lo, hi := 0, 0
 	for i, e := range snap.entries {
 		if !e.Flags.Has(threadlog.EntryCopied) {
@@ -204,6 +213,59 @@ func (s *Service) drawMerges(ctx context.Context, links *moveLinks, posts []dto.
 	return nil
 }
 
+// drawContinued fills continued_in on posts, for a's viewer: each thread
+// continuing a post, by the order the threads were started, that the viewer
+// may read. A thread they may not read is left out, so a viewer who reads
+// none of them sees no note (docs/06 "Reply as a new thread").
+func (s *Service) drawContinued(ctx context.Context, a access, id threadid.ID, snap snapshot, posts []dto.Post) error {
+	if len(posts) == 0 || snap.continued == continuedNone {
+		return nil
+	}
+	lo, hi := posts[0].Ordinal, posts[0].Ordinal
+	for _, p := range posts {
+		lo, hi = min(lo, p.Ordinal), max(hi, p.Ordinal)
+	}
+	var rows []dbq.ContinuationsInRangeRow
+	if err := s.DB.Read(ctx, func(dq *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		rows, err = dq.ContinuationsInRange(ctx, dbq.ContinuationsInRangeParams{SourceThreadID: int64(id),
+			First: int64(lo), Last: int64(hi)})
+		return err
+	}); err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	links := s.moveLinks(a.viewer)
+	byOrdinal := map[int][]dto.ThreadLink{}
+	for _, r := range rows {
+		l, err := links.link(ctx, threadid.ID(r.ThreadID))
+		if err != nil {
+			return err
+		}
+		if l != nil {
+			byOrdinal[int(r.SourceOrdinal)] = append(byOrdinal[int(r.SourceOrdinal)], *l)
+		}
+	}
+	for i := range posts {
+		if ls, ok := byOrdinal[posts[i].Ordinal]; ok {
+			posts[i].ContinuedIn = ls
+		}
+	}
+	return nil
+}
+
+// continuedGate is what a caller knows of whether any thread continues a
+// post of the thread it is drawing: nothing, or what the header read.
+type continuedGate uint8
+
+const (
+	continuedUnknown continuedGate = iota
+	continuedNone
+	continuedSome
+)
+
 func nullOrdinal(n sql.NullInt64) *int {
 	if !n.Valid {
 		return nil
@@ -212,26 +274,53 @@ func nullOrdinal(n sql.NullInt64) *int {
 	return &o
 }
 
-// splitSource is the thread id was split from, if a split opened it: the
-// source of its post 1, a split's first copy. ok is false for any other
-// thread, and for a split whose copy the projection has not reached.
-func splitSource(ctx context.Context, dq *dbq.Queries, id threadid.ID) (threadid.ID, bool, error) {
-	src, err := dq.SplitSourceOf(ctx, int64(id))
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return 0, false, nil
-	case err != nil:
-		return 0, false, err
-	}
-	return threadid.ID(src), true, nil
+// headerLinks is what a thread's header says of the threads it came from,
+// read in one statement (ThreadLinksOf): the thread a split opened it from,
+// the post a reply as a new thread continues, and whether any thread
+// continues a post of it. A split whose copy the projection has not reached
+// reads as no split, and a continuation not yet projected as none, which
+// fails closed.
+type headerLinks struct {
+	splitFrom threadid.ID // 0 for none
+	continues threadid.ID // 0 for none
+	ordinal   int
+	continued continuedGate
 }
 
-// drawSplitFrom is the split_from header of a thread split from src, for v:
-// the link only when v may read src, whose title is its content.
-func (s *Service) drawSplitFrom(ctx context.Context, v domain.Viewer, src threadid.ID) (*dto.SplitFrom, error) {
-	l, err := s.moveLinks(v).link(ctx, src)
+func readHeaderLinks(ctx context.Context, dq *dbq.Queries, id threadid.ID) (headerLinks, error) {
+	r, err := dq.ThreadLinksOf(ctx, int64(id))
 	if err != nil {
-		return nil, err
+		return headerLinks{}, err
 	}
-	return &dto.SplitFrom{Thread: l}, nil
+	h := headerLinks{splitFrom: threadid.ID(r.SplitSource), continues: threadid.ID(r.ContinuesThread),
+		ordinal: int(r.ContinuesOrdinal), continued: continuedNone}
+	if r.Continued != 0 {
+		h.continued = continuedSome
+	}
+	return h, nil
+}
+
+// draw sets split_from and continued_from on h, for v. split_from says a
+// split opened the thread to everyone, linked only when v may read the
+// source, whose title is its content; continued_from is there only when v
+// may read the source (docs/06 "Reply as a new thread").
+func (l headerLinks) draw(ctx context.Context, s *Service, v domain.Viewer, h *dto.ThreadHeader) error {
+	links := s.moveLinks(v)
+	if l.splitFrom != 0 {
+		t, err := links.link(ctx, l.splitFrom)
+		if err != nil {
+			return err
+		}
+		h.SplitFrom = &dto.SplitFrom{Thread: t}
+	}
+	if l.continues != 0 {
+		t, err := links.link(ctx, l.continues)
+		if err != nil {
+			return err
+		}
+		if t != nil {
+			h.ContinuedFrom = &dto.ContinuedFrom{Thread: *t, Ordinal: l.ordinal}
+		}
+	}
+	return nil
 }

@@ -113,8 +113,9 @@ func threadPage(class string) ThreadPage {
 				ReplyCount:        3,
 				// Quoted by two later posts, each shown to every reader as
 				// itself (docs/06 "Post anatomy", TKT-01M3YME9AZ).
-				QuotedBy: []int{66, 71},
-				HTML:     "<p>The bill was the smaller half of it.</p>",
+				QuotedBy:    []int{66, 71},
+				ContinuedIn: []ThreadLink{},
+				HTML:        "<p>The bill was the smaller half of it.</p>",
 				// An image, with its dimensions, and a file that is not one,
 				// whose dimensions are null (TKT-01M29CXK0K).
 				Attachments: []Attachment{{
@@ -148,6 +149,7 @@ func threadPage(class string) ThreadPage {
 				HTML:              "<p>Summarising the thread so far.</p>",
 				Attachments:       []Attachment{},
 				QuotedBy:          []int{},
+				ContinuedIn:       []ThreadLink{},
 				Deleted:           false,
 				MovedTo:           nil,
 				MachineAuthored:   true,
@@ -166,6 +168,7 @@ func threadPage(class string) ThreadPage {
 				HTML:              deletedHTML,
 				Attachments:       []Attachment{},
 				QuotedBy:          []int{},
+				ContinuedIn:       []ThreadLink{},
 				Deleted:           true,
 				Removal:           ptr(RemovalModerator),
 				MovedTo:           nil,
@@ -186,6 +189,7 @@ func threadPage(class string) ThreadPage {
 				HTML:              "",
 				Attachments:       []Attachment{},
 				QuotedBy:          []int{},
+				ContinuedIn:       []ThreadLink{},
 				Deleted:           true,
 				Removal:           nil,
 				Moved:             true,
@@ -215,6 +219,7 @@ func threadPage(class string) ThreadPage {
 			HTML:              "",
 			Attachments:       []Attachment{},
 			QuotedBy:          []int{},
+			ContinuedIn:       []ThreadLink{},
 			Deleted:           true,
 			Removal:           ptr(RemovalModerator),
 			Redacted:          true,
@@ -455,6 +460,7 @@ func lockedThread() ThreadPage {
 			HTML:        "<p>We are taking the Kallio unit.</p>",
 			Attachments: []Attachment{},
 			QuotedBy:    []int{},
+			ContinuedIn: []ThreadLink{},
 		}},
 	}
 }
@@ -517,6 +523,36 @@ func mergedThread(class string) ThreadPage {
 		p.Posts[1].MergeNotice = &MoveNotice{Count: 1, Thread: nil, Ordinal: nil}
 		p.Viewer = ThreadViewer{}
 	}
+	return p
+}
+
+// continuedLink is the thread a reply as a new thread started from post 61
+// of the fixtures' thread (TKT-01M29CYSC0).
+var continuedLink = ThreadLink{ID: "3yymw47g000a1", Slug: "export-tooling", Title: "Export tooling"}
+
+// continuedThread is a thread a reply as a new thread started, as one of two
+// readers sees it: a reader of the thread it continues gets its header, and
+// an anonymous reader, who may not read that thread here, gets none.
+func continuedThread(class string) ThreadPage {
+	p := lockedThread()
+	p.Thread.ID, p.Thread.Slug, p.Thread.Title = continuedLink.ID, continuedLink.Slug, continuedLink.Title
+	p.Thread.Locked = false
+	p.Thread.ContinuedFrom = &ContinuedFrom{
+		Thread: ThreadLink{ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack"}, Ordinal: 61}
+	p.Posts[0].HTML = "<p>@drew wrote:</p><blockquote><p>The thing nobody mentions is the export.</p></blockquote>"
+	p.Viewer.CanReply, p.Viewer.CanCreateThread = true, true
+	if class == tAnon {
+		p.Thread.ContinuedFrom = nil
+		p.Viewer = ThreadViewer{}
+	}
+	return p
+}
+
+// continuedPost is post 61 of the fixtures' thread, which a reply as a new
+// thread continued, as a reader of that new thread sees it.
+func continuedPost() Post {
+	p := threadPage(tMember).Posts[0]
+	p.ContinuedIn = []ThreadLink{continuedLink}
 	return p
 }
 
@@ -637,6 +673,11 @@ var corpus = map[string]any{
 	// A merge's target (TKT-01M29CYSBA), and the merge's answer.
 	"thread-merged." + tMember: mergedThread(tMember),
 	"thread-merged." + tAnon:   mergedThread(tAnon),
+	// Reply as a new thread (TKT-01M29CYSC0): the new thread both ways, and
+	// the post it continues.
+	"thread-continued." + tMember: continuedThread(tMember),
+	"thread-continued." + tAnon:   continuedThread(tAnon),
+	"post-continued." + tMember:   continuedPost(),
 	"merge." + tModerator: MergedPosts{Source: threadPage(tModerator).Thread,
 		Target: mergedThread(tMember).Thread, FirstCopy: 2},
 

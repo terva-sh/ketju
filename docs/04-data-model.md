@@ -1244,6 +1244,22 @@ source's from its newest post, by time and then by ordinal, that is
 neither moved nor a merged copy, and a thread left with none reads as its
 `ThreadCreated` left it, at ordinal 0.
 
+### thread_continuations
+```
+thread_id, source_thread_id, source_ordinal
+PRIMARY KEY (thread_id)
+INDEX (source_thread_id, source_ordinal)
+```
+One row per thread a reply as a new thread started (03
+"`ThreadCreated.continues`", migration 0027, TKT-01M29CYSC0): the thread,
+and the post its `ThreadCreated`'s `continues` names. Only the new thread's
+log writes it, so the source post's "continued in" note and the new
+thread's "continued from" header are rebuilt by a reindex of the new
+thread alone. Whether the source thread or post is there, and whether the
+viewer may read either thread, is decided when the rows are read (07
+"Reply as a new thread"). No log written before the migration carries the
+key, so it needs no backfill.
+
 ### search (FTS)
 Full-text index over `(thread_id, ordinal, revision, title, source_plain)`.
 Kept in the same database if the engine supports FTS (SQLite FTS5) or in a

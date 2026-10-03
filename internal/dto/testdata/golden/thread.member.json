@@ -27,7 +27,8 @@
       "tools"
     ],
     "created_at": 1757500000000,
-    "split_from": null
+    "split_from": null,
+    "continued_from": null
   },
   "page": {
     "number": 3,
@@ -57,6 +58,7 @@
     "forum_watch": "mute",
     "can_reply": true,
     "can_upload": true,
+    "can_create_thread": false,
     "can_moderate": false,
     "slow_mode_seconds": 30,
     "next_post_at": 1757500530000,
@@ -114,6 +116,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     },
     {
@@ -142,6 +145,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": true
     },
     {
@@ -170,6 +174,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     },
     {
@@ -213,6 +218,7 @@
         "ordinal": 1
       },
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     }
   ]

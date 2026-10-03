@@ -103,11 +103,25 @@ func (t RecordType) Advisory() bool { return t != 0 && !t.Critical() }
 // the zero value either way.
 type (
 	// ThreadCreatedBody opens a log. Exactly one per thread, always ordinal 0.
+	//
+	// Continues names the post a thread started by "reply as a new thread"
+	// continues from, and is nil for any other thread, a split's included
+	// (docs/03 "ThreadCreated.continues", TKT-01M29CYSC0). Only that action
+	// writes it, the actor holds it to its shape (CheckThreadCreated), and the
+	// source post's "continued in" note is a projection of it, so the
+	// source's log is never written.
 	ThreadCreatedBody struct {
-		Title   string   `cbor:"title,omitempty" json:"title,omitempty"`
-		Slug    string   `cbor:"slug,omitempty" json:"slug,omitempty"`
-		ForumID uint64   `cbor:"forum_id,omitempty" json:"forum_id,omitempty"`
-		Tags    []string `cbor:"tags,omitempty" json:"tags,omitempty"`
+		Title     string   `cbor:"title,omitempty" json:"title,omitempty"`
+		Slug      string   `cbor:"slug,omitempty" json:"slug,omitempty"`
+		ForumID   uint64   `cbor:"forum_id,omitempty" json:"forum_id,omitempty"`
+		Tags      []string `cbor:"tags,omitempty" json:"tags,omitempty"`
+		Continues *PostRef `cbor:"continues,omitempty" json:"continues,omitempty"`
+	}
+
+	// PostRef names a post in another thread: its thread and its ordinal.
+	PostRef struct {
+		ThreadID uint64 `cbor:"thread_id,omitempty" json:"thread_id,omitempty"`
+		Ordinal  uint32 `cbor:"ordinal,omitempty" json:"ordinal,omitempty"`
 	}
 
 	// PostBody is a new post. Source is markdown; the rendered HTML is a cache
@@ -361,6 +375,37 @@ func (t RecordType) String() string {
 func (t RecordType) Known() bool {
 	_, ok := catalogue[t]
 	return ok
+}
+
+// CheckThreadCreated holds a ThreadCreated body to its shape: a continues,
+// when there is one, names neither thread 0, ordinal 0, nor self, the thread
+// whose log holds the record. A body of any other type is ErrMalformed. The
+// actor checks it before it writes the record; the index fold does not, and
+// the projection takes a bad one as a log fault.
+func CheckThreadCreated(body any, self uint64) error {
+	var c *PostRef
+	switch b := body.(type) {
+	case *ThreadCreatedBody:
+		if b == nil {
+			return fmt.Errorf("%w: a nil ThreadCreated body", ErrMalformed)
+		}
+		c = b.Continues
+	case ThreadCreatedBody:
+		c = b.Continues
+	default:
+		return fmt.Errorf("%w: %T is not a ThreadCreated body", ErrMalformed, body)
+	}
+	switch {
+	case c == nil:
+		return nil
+	case c.ThreadID == 0:
+		return fmt.Errorf("%w: a ThreadCreated continues thread 0", ErrMalformed)
+	case c.Ordinal == 0:
+		return fmt.Errorf("%w: a ThreadCreated continues ordinal 0", ErrMalformed)
+	case c.ThreadID == self:
+		return fmt.Errorf("%w: a ThreadCreated continues its own thread", ErrMalformed)
+	}
+	return nil
 }
 
 // MaxMoveOrdinals is the most posts one move names, so one PostsSplitOut and

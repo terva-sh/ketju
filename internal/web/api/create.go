@@ -31,6 +31,16 @@ type threadRequest struct {
 	Source      *string         `json:"source"`
 	Tags        json.RawMessage `json:"tags"`
 	Attachments []string        `json:"attachments"`
+	// From is the post a reply as a new thread continues, absent or null
+	// for an ordinary thread (TKT-01M29CYSC0).
+	From *fromRequest `json:"from"`
+}
+
+// fromRequest is a thread body's from: the source thread's base32 id and the
+// post's ordinal, both required.
+type fromRequest struct {
+	Thread  *string `json:"thread"`
+	Ordinal *uint32 `json:"ordinal"`
 }
 
 // decodeTags reads a request's tags: absent or null is none, and otherwise
@@ -120,8 +130,16 @@ func (h *handlers) createThread(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	var from *threads.ContinueFrom
+	if in.From != nil {
+		if in.From.Thread == nil || in.From.Ordinal == nil {
+			h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: a thread's from needs a thread and an ordinal")))
+			return
+		}
+		from = &threads.ContinueFrom{Thread: *in.From.Thread, Ordinal: *in.From.Ordinal}
+	}
 	res, err := h.threads.CreateThread(r.Context(), v, r.PathValue("slug"), threads.CreateThreadRequest{
-		Title: *in.Title, Source: *in.Source, Tags: tags, Attachments: in.Attachments,
+		Title: *in.Title, Source: *in.Source, Tags: tags, Attachments: in.Attachments, From: from,
 	})
 	if err != nil {
 		h.fail(w, r, err)

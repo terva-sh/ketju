@@ -679,6 +679,18 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 			}
 		}
 
+	case TypeThreadCreated:
+		// Held to its shape here, as a move is: a continues naming thread
+		// 0, ordinal 0 or this thread is refused before it reaches the log
+		// (TKT-01M29CYSC0).
+		if req.Ordinal != 0 {
+			return h, nil, fmt.Errorf("%w: a ThreadCreated is thread-level and names no ordinal", ErrMalformed)
+		}
+		h.Revision = 1
+		if err := CheckThreadCreated(req.Body, a.ix.Header.ThreadID); err != nil {
+			return h, nil, err
+		}
+
 	default:
 		h.Ordinal = req.Ordinal
 		h.Revision = 1

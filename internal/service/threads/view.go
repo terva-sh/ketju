@@ -279,8 +279,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		watch      string
 		forumWatch string
 		authorW    *dto.AuthorWindows
-		splitFrom  threadid.ID
-		split      bool
+		links      headerLinks
 	)
 	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
 		var err error
@@ -290,7 +289,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		if tags, err = dq.ThreadTags(ctx, int64(id)); err != nil {
 			return err
 		}
-		if splitFrom, split, err = splitSource(ctx, dq, id); err != nil {
+		if links, err = readHeaderLinks(ctx, dq, id); err != nil {
 			return err
 		}
 		if !v.Member() {
@@ -322,13 +321,11 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	if err != nil {
 		return Result{}, err
 	}
-	// The header is never cached, and the ETag hashes it, so the link back
-	// is drawn for v here (TKT-01M29CYSAM).
-	var splitHeader *dto.SplitFrom
-	if split {
-		if splitHeader, err = s.drawSplitFrom(ctx, v, splitFrom); err != nil {
-			return Result{}, err
-		}
+	// The header is never cached, and the ETag hashes it, so the links back
+	// are drawn for v here (TKT-01M29CYSAM, TKT-01M29CYSC0).
+	var linked dto.ThreadHeader
+	if err := links.draw(ctx, s, v, &linked); err != nil {
+		return Result{}, err
 	}
 	// Access came first, so a thread hidden from v is not-found whatever
 	// the lens says (docs/07 "Access"). The lens resolves after the viewer's
@@ -350,6 +347,10 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	if err != nil {
 		return Result{}, err
 	}
+	canCreate, err := s.canCreateThread(ctx, a)
+	if err != nil {
+		return Result{}, err
+	}
 	viewer := dto.ThreadViewer{
 		LastReadOrdinal: int(lastRead),
 		LastReadAt:      readAt,
@@ -357,6 +358,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		ForumWatch:      forumWatch,
 		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
 		CanUpload:       canUpload,
+		CanCreateThread: canCreate,
 		CanModerate:     canModerate,
 		SlowModeSeconds: slow,
 		AuthorWindows:   authorW,
@@ -421,6 +423,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		if pageErr != nil {
 			return pageErr
 		}
+		snap.continued = links.continued
 
 		// The starter is read in the same batch as the page's authors, so
 		// the header's author costs the page no statement (TKT-01M29CTY58).
@@ -442,7 +445,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		res.Body.Thread.SplitFrom = splitHeader
+		res.Body.Thread.SplitFrom, res.Body.Thread.ContinuedFrom = linked.SplitFrom, linked.ContinuedFrom
 		lensKey := ""
 		if rl != nil {
 			// Page and total_pages count the lens's posts (docs/07).
@@ -470,6 +473,9 @@ type snapshot struct {
 	ordinals []uint32
 	entries  []threadlog.IndexEntry
 	replies  map[uint32]int
+	// continued is whether any thread continues a post of this one, when
+	// the caller has read it (drawContinued).
+	continued continuedGate
 }
 
 // take fills the snapshot for ordinals, which must be in the index. Call it
@@ -702,6 +708,8 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			// Where it went is drawn per viewer by drawMoves, after the
 			// posts are taken from the cache (TKT-01M29CYSAM).
 			Moved: p.Flags.Has(threadlog.EntryMoved),
+			// Filled per viewer by drawContinued, likewise (TKT-01M29CYSC0).
+			ContinuedIn: []dto.ThreadLink{},
 		}
 		// A hard-redacted post is deleted above, and removal names who took
 		// it down: the moderator's, as an admin redacted it, or the

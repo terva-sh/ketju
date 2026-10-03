@@ -171,6 +171,11 @@ type ThreadHeader struct {
 	// the rest of the header is, and is left out while the projection has
 	// not recorded the split, which fails closed.
 	SplitFrom *SplitFrom `json:"split_from"`
+	// ContinuedFrom is set on a thread a reply as a new thread started, and
+	// only for a viewer who may read the thread it continues; nil otherwise
+	// (TKT-01M29CYSC0, docs/06 "Reply as a new thread"). It is resolved per
+	// viewer on every request, as SplitFrom is.
+	ContinuedFrom *ContinuedFrom `json:"continued_from"`
 }
 
 // ThreadViewer is the only per-viewer part of a thread response.
@@ -202,8 +207,13 @@ type ThreadViewer struct {
 	// CanUpload is whether this viewer may upload a file to attach here:
 	// upload in the thread's forum, which is not read-only to them. False
 	// for an anonymous viewer (TKT-01M29CXK0K).
-	CanUpload   bool `json:"can_upload"`
-	CanModerate bool `json:"can_moderate"`
+	CanUpload bool `json:"can_upload"`
+	// CanCreateThread is whether this viewer may start a thread in the
+	// thread's forum, which offers "reply as a new thread" under each post
+	// shown as itself, a locked or archived thread's included
+	// (TKT-01M29CYSC0). False for an anonymous viewer.
+	CanCreateThread bool `json:"can_create_thread"`
+	CanModerate     bool `json:"can_moderate"`
 	// SlowModeSeconds is the thread's slow mode, the minimum seconds between
 	// one member's posts: the thread's own value, or the site default when it
 	// has none. 0 is off. Moderators are exempt, but it is served to them
@@ -334,6 +344,11 @@ type Post struct {
 	// post's ordinal there (TKT-01M29CYSBA). A split's own copies take the
 	// header's split_from instead. Drawn per viewer, as MovedTo is.
 	MergeNotice *MoveNotice `json:"merge_notice"`
+	// ContinuedIn lists the threads a reply as a new thread started from
+	// this post, oldest first, that the viewer may read; empty otherwise
+	// (TKT-01M29CYSC0). It is drawn per viewer when the response is
+	// assembled, never cached with the posts.
+	ContinuedIn []ThreadLink `json:"continued_in"`
 
 	// MachineAuthored comes from the log's frame flag and records what was
 	// true when the post was written (docs/03). It is not Author.Kind, which
@@ -360,6 +375,13 @@ type MoveNotice struct {
 	Count   int         `json:"count"`
 	Thread  *ThreadLink `json:"thread"`
 	Ordinal *int        `json:"ordinal"`
+}
+
+// ContinuedFrom is a thread's "continued from" header: the post a reply as a
+// new thread started it from, to a viewer who may read that post's thread.
+type ContinuedFrom struct {
+	Thread  ThreadLink `json:"thread"`
+	Ordinal int        `json:"ordinal"`
 }
 
 // SplitFrom is a split thread's "split from" header: the thread its posts

@@ -21,7 +21,8 @@
     "pinned": null,
     "tags": [],
     "created_at": 1757500000000,
-    "split_from": null
+    "split_from": null,
+    "continued_from": null
   },
   "post": {
     "post": {
@@ -50,6 +51,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     },
     "ordinal": 1,

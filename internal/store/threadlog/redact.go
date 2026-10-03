@@ -265,9 +265,12 @@ type (
 		ReplyTo uint32 `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
 		Grace   bool   `cbor:"grace,omitempty" json:"grace,omitempty"`
 	}
+	// blankCreated keeps continues: it names a post, not the title, and the
+	// source's "continued in" note is rebuilt from it (TKT-01M29CYSC0).
 	blankCreated struct {
-		ForumID uint64   `cbor:"forum_id,omitempty" json:"forum_id,omitempty"`
-		Tags    []string `cbor:"tags,omitempty" json:"tags,omitempty"`
+		ForumID   uint64   `cbor:"forum_id,omitempty" json:"forum_id,omitempty"`
+		Tags      []string `cbor:"tags,omitempty" json:"tags,omitempty"`
+		Continues *PostRef `cbor:"continues,omitempty" json:"continues,omitempty"`
 	}
 	blankRenamed struct{}
 )
@@ -297,7 +300,7 @@ func BlankBody(h FrameHeader, body []byte) ([]byte, error) {
 	case *EditBody:
 		kept = blankEdit{ReplyTo: b.ReplyTo, Grace: b.Grace}
 	case *ThreadCreatedBody:
-		kept = blankCreated{ForumID: b.ForumID, Tags: b.Tags}
+		kept = blankCreated{ForumID: b.ForumID, Tags: b.Tags, Continues: b.Continues}
 	case *ThreadRenamedBody:
 		kept = blankRenamed{}
 	default:

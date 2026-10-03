@@ -47,6 +47,16 @@ type CreateThreadRequest struct {
 	Tags []string
 	// Attachments are the first post's, as for a reply.
 	Attachments []string
+	// From is the post a reply as a new thread continues, nil for an
+	// ordinary new thread (TKT-01M29CYSC0).
+	From *ContinueFrom
+}
+
+// ContinueFrom names the post a new thread continues: its thread's base32
+// id and its ordinal.
+type ContinueFrom struct {
+	Thread  string
+	Ordinal uint32
 }
 
 // Attachments is what posting needs of the blob store
@@ -245,6 +255,12 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 	if err != nil {
 		return out, err
 	}
+	var continues *threadlog.PostRef
+	if req.From != nil {
+		if continues, err = s.continuesFrom(ctx, v, *req.From); err != nil {
+			return out, err
+		}
+	}
 	// No thread to quote from or reply to yet: this is for the render's
 	// errors and mentions. The post is drawn against its thread when read.
 	r, err := s.renderSource(ctx, nil, req.Source, nil)
@@ -265,7 +281,8 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 		defer s.Threads.Release(th)
 		if _, err := s.Writer.Append(th, threadlog.Append{
 			Type: threadlog.TypeThreadCreated, Flags: flags, Author: uint64(v.UserID), TimeMS: now,
-			Body: &threadlog.ThreadCreatedBody{Title: title, Slug: Slug(title), ForumID: uint64(forum.ID), Tags: tags},
+			Body: &threadlog.ThreadCreatedBody{Title: title, Slug: Slug(title), ForumID: uint64(forum.ID), Tags: tags,
+				Continues: continues},
 		}); err != nil {
 			return threadlog.Result{}, err
 		}
@@ -295,6 +312,59 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 		}
 	}
 	return out, fmt.Errorf("threads: new thread %s's page has no post %d", id, res.Ordinal)
+}
+
+// continuesFrom is the post a reply as a new thread continues, as its
+// ThreadCreated records it (TKT-01M29CYSC0): one v may read, shown as itself.
+// A thread id that is not one is validation-failed. A thread v may not read,
+// one that does not exist, a post it does not hold and a post not shown as
+// itself (removed, hidden, pending review, redacted or moved) are all
+// not-found, so the request never confirms a thread or a post v cannot see.
+// A locked or archived thread is not refused: the action writes only the
+// new thread's log (docs/06 "Reply as a new thread", run decision of
+// 2026-10-02).
+func (s *Service) continuesFrom(ctx context.Context, v domain.Viewer, from ContinueFrom) (*threadlog.PostRef, error) {
+	id, err := threadid.Parse(from.Thread)
+	if err != nil {
+		return nil, problem.Coded(problem.CodeValidationFailed, fmt.Errorf("threads: the post continued from: %w", err))
+	}
+	gone := func(why error) error {
+		return problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s/%d is not a post this viewer can continue: %w", id, from.Ordinal, why))
+	}
+	if from.Ordinal == 0 {
+		return nil, gone(errors.New("ordinal 0"))
+	}
+	if _, err := s.access(ctx, v, id); err != nil {
+		if refusal(err) && problem.FromError(err) != problem.CodeUnavailable {
+			return nil, gone(err)
+		}
+		return nil, err
+	}
+	err = s.Threads.With(id, func(th *threadcache.Thread) error {
+		e, err := th.Index.Entry(from.Ordinal)
+		if err != nil {
+			return gone(err)
+		}
+		if !e.Flags.Visible() {
+			return gone(fmt.Errorf("flags %#x", uint16(e.Flags)))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &threadlog.PostRef{ThreadID: uint64(id), Ordinal: from.Ordinal}, nil
+}
+
+// canCreateThread is whether a's viewer may start a thread in the thread's
+// forum, as forumForThread decides it: a member, the forum not read-only to
+// them, and create_thread there. The thread page offers "reply as a new
+// thread" on it (TKT-01M29CYSC0).
+func (s *Service) canCreateThread(ctx context.Context, a access) (bool, error) {
+	if !a.viewer.Member() || readOnlyForum(a) != nil {
+		return false, nil
+	}
+	return s.Perm.Can(ctx, a.viewer, a.row.ForumID, domain.PermCreateThread)
 }
 
 // forumForThread finds the forum v is starting a thread in, answering the

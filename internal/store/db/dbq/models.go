@@ -354,6 +354,12 @@ type Thread struct {
 	LivePostCount      int64
 }
 
+type ThreadContinuation struct {
+	ThreadID       int64
+	SourceThreadID int64
+	SourceOrdinal  int64
+}
+
 type ThreadSlowMode struct {
 	ThreadID int64
 	Seconds  int64

@@ -21,7 +21,8 @@
     "pinned": null,
     "tags": [],
     "created_at": 1757100000000,
-    "split_from": null
+    "split_from": null,
+    "continued_from": null
   },
   "page": {
     "number": 1,
@@ -36,6 +37,7 @@
     "forum_watch": "",
     "can_reply": false,
     "can_upload": false,
+    "can_create_thread": false,
     "can_moderate": false,
     "slow_mode_seconds": 0,
     "next_post_at": null,
@@ -73,6 +75,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     }
   ]

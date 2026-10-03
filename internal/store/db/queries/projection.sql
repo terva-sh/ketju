@@ -34,6 +34,9 @@ DELETE FROM forum_thread_counts;
 -- name: ClearPostMoves :exec
 DELETE FROM post_moves;
 
+-- name: ClearThreadContinuations :exec
+DELETE FROM thread_continuations;
+
 -- The projection writer's statements (TKT-01M29C2WW5). Every one sets an
 -- absolute value, never an increment, so replaying a range the database has
 -- already seen converges on the same rows.
@@ -288,11 +291,40 @@ GROUP BY merged_offset, source_thread_id
 HAVING MIN(target_ordinal) >= CAST(sqlc.arg(first) AS INTEGER)
    AND MIN(target_ordinal) <= CAST(sqlc.arg(last) AS INTEGER);
 
--- The thread a split opened thread_id from: the source of its post 1, when
--- that post is the copy a split wrote first.
--- name: SplitSourceOf :one
-SELECT source_thread_id FROM post_moves
-WHERE target_thread_id = ? AND target_ordinal = 1 AND opens_thread = 1;
+-- What a thread's header says of the threads it came from, and whether its
+-- page has "continued in" notes to read, in one statement on every view
+-- (TKT-01M29CYSAM, TKT-01M29CYSC0):
+--   - split_source, the thread a split opened it from: the source of its
+--     post 1, when that post is the copy a split wrote first; 0 for none;
+--   - continues_thread and continues_ordinal, the post a reply as a new
+--     thread continues; 0 for none;
+--   - continued, whether any thread continues a post of this one.
+-- name: ThreadLinksOf :one
+SELECT
+	CAST(coalesce((SELECT source_thread_id FROM post_moves
+		WHERE target_thread_id = sqlc.arg(thread_id) AND target_ordinal = 1 AND opens_thread = 1), 0) AS INTEGER) AS split_source,
+	CAST(coalesce((SELECT c.source_thread_id FROM thread_continuations AS c
+		WHERE c.thread_id = sqlc.arg(thread_id)), 0) AS INTEGER) AS continues_thread,
+	CAST(coalesce((SELECT c.source_ordinal FROM thread_continuations AS c
+		WHERE c.thread_id = sqlc.arg(thread_id)), 0) AS INTEGER) AS continues_ordinal,
+	CAST(EXISTS (SELECT 1 FROM thread_continuations AS c
+		WHERE c.source_thread_id = sqlc.arg(thread_id)) AS INTEGER) AS continued;
+
+-- The threads continuing posts first..last of source_thread_id, in post
+-- then thread order, for the "continued in" notes (TKT-01M29CYSC0).
+-- name: ContinuationsInRange :many
+SELECT source_ordinal, thread_id FROM thread_continuations
+WHERE source_thread_id = sqlc.arg(source_thread_id)
+  AND source_ordinal >= CAST(sqlc.arg(first) AS INTEGER) AND source_ordinal <= CAST(sqlc.arg(last) AS INTEGER)
+ORDER BY source_ordinal, thread_id;
+
+-- A ThreadCreated's continues (TKT-01M29CYSC0). A thread opens once, so a
+-- replay writes the same row.
+-- name: UpsertContinuation :exec
+INSERT INTO thread_continuations (thread_id, source_thread_id, source_ordinal)
+VALUES (sqlc.arg(thread_id), sqlc.arg(source_thread_id), sqlc.arg(source_ordinal))
+ON CONFLICT (thread_id) DO UPDATE SET
+	source_thread_id = excluded.source_thread_id, source_ordinal = excluded.source_ordinal;
 
 -- Whether an Edit at revision of the post at (target_thread_id,
 -- target_ordinal) is one a move carried rather than a new one: the post is

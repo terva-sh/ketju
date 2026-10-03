@@ -27,7 +27,8 @@
         "slug": "why-we-left-slack",
         "title": "Why we left Slack"
       }
-    }
+    },
+    "continued_from": null
   },
   "page": {
     "number": 1,
@@ -42,6 +43,7 @@
     "forum_watch": "",
     "can_reply": true,
     "can_upload": false,
+    "can_create_thread": false,
     "can_moderate": false,
     "slow_mode_seconds": 0,
     "next_post_at": null,
@@ -79,6 +81,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     }
   ]

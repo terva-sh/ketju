@@ -27,6 +27,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": true
     },
     {
@@ -55,6 +56,7 @@
       "moved_to": null,
       "move_notice": null,
       "merge_notice": null,
+      "continued_in": [],
       "machine_authored": false
     }
   ]

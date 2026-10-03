@@ -71,6 +71,17 @@ func applyThreadCreated(ctx context.Context, q *dbq.Queries, f frame) error {
 	}); err != nil {
 		return err
 	}
+	// The source post's "continued in" note is this row; the source's log
+	// is never written (TKT-01M29CYSC0).
+	if c := b.Continues; c != nil {
+		if c.ThreadID == 0 || c.Ordinal == 0 || c.ThreadID == uint64(f.thread) {
+			return logFault{fmt.Errorf("a ThreadCreated at offset %d continues %d/%d", f.offset, c.ThreadID, c.Ordinal)}
+		}
+		if err := q.UpsertContinuation(ctx, dbq.UpsertContinuationParams{ThreadID: int64(f.thread),
+			SourceThreadID: int64(c.ThreadID), SourceOrdinal: int64(c.Ordinal)}); err != nil {
+			return err
+		}
+	}
 	return replaceTags(ctx, q, f.thread, b.Tags)
 }
 

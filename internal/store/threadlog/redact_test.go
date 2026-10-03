@@ -47,7 +47,8 @@ func redactFixture(t *testing.T) []byte {
 	}
 	m := []uint64{4343}
 	add(FrameHeader{Type: TypeThreadCreated, Actor: 1},
-		&ThreadCreatedBody{Title: "Secret Title One", Slug: "secret-title-one", ForumID: 7, Tags: []string{"meta"}})
+		&ThreadCreatedBody{Title: "Secret Title One", Slug: "secret-title-one", ForumID: 7, Tags: []string{"meta"},
+			Continues: &PostRef{ThreadID: 99, Ordinal: 4}})
 	add(FrameHeader{Type: TypePost, Ordinal: 1, Actor: 1}, &PostBody{Source: "plain first"})
 	add(FrameHeader{Type: TypePost, Ordinal: 2, Actor: 2, Flags: FrameFlagMachineAuthored},
 		&PostBody{Source: "SECRET-POST-TWO", ReplyTo: 1, Mentions: []uint64{4242}, Attachments: []string{hashA, hashB}})
@@ -434,7 +435,9 @@ func TestRedactTitleBlanksEveryTitleFrame(t *testing.T) {
 		}
 	}
 	v, _ := DecodeBody(TypeThreadCreated, EncodingCBOR, after[0].Body)
-	if c := v.(*ThreadCreatedBody); c.Title != "" || c.Slug != "" || c.ForumID != 7 || !slices.Equal(c.Tags, []string{"meta"}) {
+	// continues names a post, not the title, and is kept (TKT-01M29CYSC0).
+	if c := v.(*ThreadCreatedBody); c.Title != "" || c.Slug != "" || c.ForumID != 7 || !slices.Equal(c.Tags, []string{"meta"}) ||
+		c.Continues == nil || *c.Continues != (PostRef{ThreadID: 99, Ordinal: 4}) {
 		t.Errorf("ThreadCreated = %+v", c)
 	}
 	mk, rn := after[len(after)-2], after[len(after)-1]

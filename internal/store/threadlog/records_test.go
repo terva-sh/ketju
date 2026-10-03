@@ -20,6 +20,7 @@ var everyType = []struct {
 }{
 	{1, "ThreadCreated", TypeThreadCreated, &ThreadCreatedBody{
 		Title: "Why we left Slack", Slug: "why-we-left-slack", ForumID: 7, Tags: []string{"meta", "tools"},
+		Continues: &PostRef{ThreadID: 1 << 40, Ordinal: 4},
 	}},
 	{2, "Post", TypePost, &PostBody{
 		Source: "The thing nobody mentions is the *export*.", ReplyTo: 3,

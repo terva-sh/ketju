@@ -27,7 +27,8 @@
       "tools"
     ],
     "created_at": 1757500000000,
-    "split_from": null
+    "split_from": null,
+    "continued_from": null
   },
   "thread": {
     "id": "3yymw47g00099",
@@ -57,6 +58,7 @@
         "slug": "why-we-left-slack",
         "title": "Why we left Slack"
       }
-    }
+    },
+    "continued_from": null
   }
 }
