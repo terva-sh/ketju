@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:50:48Z
-updated_at: 2026-10-03T04:07:19Z
+updated_at: 2026-10-03T04:18:22Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -51,12 +51,12 @@ Found while grooming TKT-01M29CXK0K (Build the content-addressed blob store and 
 
 ## Acceptance criteria
 
-- [ ] An upload of new bytes that would take an account's unattached bytes over limits.unattached_upload_mb is validation-failed with file upload_budget and leaves no file or row; bytes already stored are never refused for it (TestUploadBudget, TestUploadBudgetRace)
-- [ ] limits.unattached_upload_mb defaults to 100, reads KETJU_LIMITS_UNATTACHED_UPLOAD_MB, and ketju config check refuses a value below limits.attachment_mb (validate tests; docs/02 and docs/07 rows)
-- [ ] The query uses a partial index on blobs (uploaded_by) where refcount = 0, in a migration with the next free number, and a test reads its plan
-- [ ] The composer shows the upload_budget words (Composer.test.tsx), and e2e/attachments.spec.ts passes at 390 px and 1440 px with one axe scan per test
+- [x] An upload of new bytes that would take an account's unattached bytes over limits.unattached_upload_mb is validation-failed with file upload_budget and leaves no file or row; bytes already stored are never refused for it (TestUploadBudget, TestUploadBudgetRace)
+- [x] limits.unattached_upload_mb defaults to 100, reads KETJU_LIMITS_UNATTACHED_UPLOAD_MB, and ketju config check refuses a value below limits.attachment_mb (validate tests; docs/02 and docs/07 rows)
+- [x] The query uses a partial index on blobs (uploaded_by) where refcount = 0, in a migration with the next free number, and a test reads its plan
+- [x] The composer shows the upload_budget words (Composer.test.tsx), and e2e/attachments.spec.ts passes at 390 px and 1440 px with one axe scan per test
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
-- [ ] Through the HTTP handler, an account at the bound is refused new bytes and gets 201 for bytes the server already holds (TestUploadBudgetOverHTTP)
+- [x] Through the HTTP handler, an account at the bound is refused new bytes and gets 201 for bytes the server already holds (TestUploadBudgetOverHTTP)
 
 ## Implementation plan
 
@@ -134,3 +134,25 @@ run decision: pending maintainer review. Bound the bytes an account has stored t
 **agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:33:37Z
 
 Terva review 1945 on PR #360 (head 1359e58, base ed82f15), medium, 'Pre-read budget rejection blocks the stored-byte exemption'. Fixed. The bound is now asked once, after the file is read and hashed, in the write that stores new bytes. The refusal before the read is dropped, because it could not tell stored bytes from new ones. The read it saved is already bounded by limits.attachment_mb and the per-address write limiter. docs/07 'Attachments' records this as an alternative that lost. The plan replaces TestUploadBudgetRefusedBeforeRead with TestUploadBudgetOverHTTP, which goes through the handler so MayUpload is on the path. This supersedes the run-decision note's 'asked before the body is read and again in the write'.
+
+**agent:claude-code/phase4-run-v73km1** at 2026-10-03T04:18:22Z
+
+Phase A done on run/v73km1-upload-bound at 4e64f39 (source only; the dist is not committed, criterion 5 waits for Phase B).
+
+### What landed
+- Migration 0027_blobs_uploader_unreferenced (0027 was the next free number on origin/main at 2f2f914d and again at fetch before this note; recheck at push). UnattachedBytes in queries/blobs.sql; TestUnattachedBytesUsesItsIndex reads EXPLAIN QUERY PLAN and wants `SEARCH blobs USING INDEX blobs_uploader_unreferenced (uploaded_by=?)`.
+- blobs.Service.Budget (bytes; zero is config.DefaultUnattachedUploadMB), wired in cmd/ketju/serve.go beside Max. Upload asks UnattachedBytes only in the GetBlob ErrNoRows branch and refuses with invalid("file", CodeUploadBudget) when used > budget-n. The RefreshBlob branch is never asked.
+- config: Limits.UnattachedUploadMB, KETJU_LIMITS_UNATTACHED_UPLOAD_MB, validate refuses below attachment_mb and above 1<<20. testdata/full.toml and cmd/ketju/testdata/config-check.golden updated.
+- Client: uploadFailure's upload_budget case; Composer.test.tsx refusal table row (the removal count at the end of that test now reads refusals.length - 1 rather than a literal 4).
+- docs/02 Blob GC row, docs/07 POST /blobs row, Request limits table row, and the Attachments decision.
+
+### One departure from the plan, and why
+The plan says the key defaults to 100. It defaults to max(100, limits.attachment_mb) when the key is absent. With a fixed 100, validate's "below attachment_mb" rule would refuse every installation that already runs with attachment_mb above 100 and never set the new key, so the upgrade would stop it starting. Alternatives that lost: dropping the below-attachment_mb rule (the criterion asks for it, and a bound under one full-size file is a misconfiguration); clamping the budget inside blobs.Service (an explicit, invalid value would then be silently replaced rather than refused). An explicit value below attachment_mb is still refused, from the file or the environment (TestUnattachedUploadDefaultsAndEnv, TestInvalidValuesAreRefusedByName). docs/07 records the alternative that lost.
+
+### Tests run
+- go vet ./...; go test -p 4 ./internal/... ./tools/... green; go test ./cmd/ketju alone green (39 s); go test -race ./internal/service/blobs green (TestUploadBudgetRace runs ten rounds).
+- tsc --noEmit; vitest 92 files, 2616 tests green.
+- e2e/attachments.spec.ts at phone (390 px) and desktop (1440 px): 10 passed, including setup. Its two UI tests each scan with axe; the third, "a stranger cannot fetch the blob", is request-only and renders no page, so it has no scan, as before this ticket.
+
+### Bundle
+go generate ./internal/web/spa then npm run budget: reader 81492 B before, 81554 B after (+62 B gzip), within 120000 B. The generated dist was restored, not committed.
