@@ -504,13 +504,41 @@ describe('reply as a new thread', () => {
     await wait(10);
     expect(area(root).value).toBe(`${stored}\n\n${quote}`);
     // The quote was put there on this browser, which keeps the mark; the
-    // member edits it, and the draft as saved comes back after a reload.
-    stored = '@alice wrote:\n\n> The bill was half of it.\n\nMine.';
+    // member edits it, the edit is saved, and that draft comes back after a
+    // reload.
+    const edited = '@alice wrote:\n\n> The bill was half of it.\n\nMine.';
+    await fill(area(root), edited);
+    stored = edited;
     await unmount();
     resetNewThreads();
     root = await renderAt(continuing);
     await wait(10);
-    expect(area(root).value).toBe(stored);
+    expect(area(root).value).toBe(edited);
+  });
+
+  // Terva review 2061: the mark answers only for the text it tracked. A
+  // reload before the quoted draft was saved brings back an older draft,
+  // which lacks the quote, and is quoted into again.
+  it('quotes again into an older draft a reload brings back before the quote was saved', async () => {
+    let stored = '';
+    serve('general', {
+      [pageOf]: () => ({ status: 200, body: source }),
+      'GET /api/v1/forums/general/draft': () =>
+        stored ? { status: 200, body: { forum: 'general', title: 'Saved', source: stored, updated_at: 0, revision: 4 } } : none(),
+    });
+    let root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(quote);
+    await unmount();
+    resetNewThreads();
+    // The draft never saved: this browser's copy of it is gone, and the
+    // server holds an older one, while the mark is still there.
+    for (const k of Object.keys(localStorage)) if (k.startsWith('ketju.draft.')) localStorage.removeItem(k);
+    expect(Object.keys(localStorage).some((k) => k.startsWith('ketju.prefilled.'))).toBe(true);
+    stored = 'Older body';
+    root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(`Older body\n\n${quote}`);
   });
 
   // Terva review 2059: only an answer that the post is not there drops the

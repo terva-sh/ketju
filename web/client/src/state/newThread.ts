@@ -1,4 +1,4 @@
-import { batch, signal, type Signal } from '@preact/signals';
+import { batch, effect, signal, type Signal } from '@preact/signals';
 import { apiSend } from '../api/client';
 import type { CreatedThread, ForumDraft } from '../api/dto';
 import { isProblem } from '../api/problem';
@@ -44,30 +44,38 @@ export interface NewThread extends Files {
   // (TKT-01M29CYSC0), as the screen's address names it; null for an
   // ordinary thread. createThread sends it.
   from: Signal<ContinueFrom | null>;
-  // prefilled is the post whose quote was last put in this composer, so a
-  // second visit to the same address does not quote it again. It is kept in
-  // localStorage beside the draft's own copy (prefillMark), so a reload,
-  // which brings the quoted draft back, does not quote it a second time
-  // (Terva review 2059).
+  // prefilled is the post whose quote was put in this composer this
+  // session, so a second visit to the same address does not quote it again.
+  // A reload starts with none, and prefillContinue reads prefillMark.
   prefilled: string;
 }
 
-// prefillMark is where the key of the post last quoted into owner's
-// composer for forum is kept, so it outlives a reload as the draft does. A
-// thread created or a draft discarded clears it.
+// PrefillMark is the post last quoted into owner's composer for forum, and
+// the composer's text as it last stood since. It is kept in localStorage,
+// where it outlives a reload (Terva review 2059). It answers for a restored
+// draft only when that draft is the text it tracked. A draft older than the
+// quote, from a save that never happened, is another text, and is quoted
+// into again (Terva review 2061). A thread created or a draft discarded
+// clears it.
+type PrefillMark = { key: string; source: string };
+
 const prefillMark = (forum: string) => `ketju.prefilled.${owner ?? ''}.${forum}`;
 
-function readPrefill(forum: string): string {
+function readPrefill(forum: string): PrefillMark | null {
   try {
-    return localStorage.getItem(prefillMark(forum)) ?? '';
+    const m = JSON.parse(localStorage.getItem(prefillMark(forum)) ?? 'null') as unknown;
+    if (m && typeof m === 'object' && typeof (m as PrefillMark).key === 'string' && typeof (m as PrefillMark).source === 'string') {
+      return m as PrefillMark;
+    }
   } catch {
-    return '';
+    // Unreadable or refused: no mark.
   }
+  return null;
 }
 
-function writePrefill(forum: string, key: string) {
+function writePrefill(forum: string, mark: PrefillMark | null) {
   try {
-    if (key) localStorage.setItem(prefillMark(forum), key);
+    if (mark) localStorage.setItem(prefillMark(forum), JSON.stringify(mark));
     else localStorage.removeItem(prefillMark(forum));
   } catch {
     // Storage refused: the mark lives as long as the page does.
@@ -115,10 +123,16 @@ export function newThreadFor(forum: string): NewThread {
       loaded: signal(false),
       loading: false,
       from: signal(null),
-      prefilled: readPrefill(forum),
+      prefilled: '',
       ...newFiles(),
     };
     states.set(forum, s);
+    // The mark follows the text once a quote is in it, the member's edits
+    // included, so a reload that brings this text back is known.
+    effect(() => {
+      const source = s.source.value;
+      if (s.prefilled) writePrefill(forum, { key: s.prefilled, source });
+    });
     // Disarmed until loadNewThreadDraft answers, so an empty form never
     // deletes a draft before it has loaded, and a failed load never does.
     watch(draftKey(forum), () => ({ title: s.title.value, source: s.source.value, attachments: s.attachments.value }));
@@ -164,16 +178,20 @@ export async function loadNewThreadDraft(forum: string): Promise<void> {
 // writes it, into forum's composer, once per post: in place of an empty
 // body, or after a draft's text, which it keeps. It waits for the draft to
 // load (loaded), so a draft is never written over before it is seen, and
-// does nothing while a thread is being posted. A draft that already holds
-// the quote, brought back from another device whose mark this one cannot
-// see, counts as quoted (Terva review 2059).
+// does nothing while a thread is being posted. A restored draft counts as
+// quoted when it holds the quote, as one from another device would, or
+// when it is the very text this browser's mark tracked, its quote edited
+// or not. Any other draft is quoted into (Terva reviews 2059 and 2061).
 export function prefillContinue(forum: string, from: ContinueFrom, quote: string) {
   const n = newThreadFor(forum);
   const key = continueKey(from);
   if (!n.loaded.value || n.posting.value || n.prefilled === key) return;
+  const mark = readPrefill(forum);
   n.prefilled = key;
-  writePrefill(forum, key);
-  if (n.source.value.includes(quote.trimEnd())) return;
+  if (n.source.value.includes(quote.trimEnd()) || (mark?.key === key && mark.source === n.source.value)) {
+    writePrefill(forum, { key, source: n.source.value });
+    return;
+  }
   const had = n.source.value.trim();
   const source = had ? `${n.source.value.trimEnd()}\n\n${quote}\n\n` : `${quote}\n\n`;
   batch(() => {
@@ -227,7 +245,7 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
       n.from.value = null;
       n.prefilled = '';
     });
-    writePrefill(forum, '');
+    writePrefill(forum, null);
     return res;
   } catch (err) {
     n.failure.value = err;
@@ -275,7 +293,7 @@ export function discardNewThread(forum: string) {
     n.failure.value = null;
     n.prefilled = '';
   });
-  writePrefill(forum, '');
+  writePrefill(forum, null);
 }
 
 // refusedHere is a refusal from the create route that trying again would
