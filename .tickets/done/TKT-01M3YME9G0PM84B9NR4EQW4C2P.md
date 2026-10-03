@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9G0PM84B9NR4EQW4C2P
 title: Golden-test what every API endpoint actually serves
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ references:
     path: null
   - ref: pr:392
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-me9g0
-  branch: run/me9g0-served-goldens
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-me9g0
-  commit: 2f2f914df101afe6e7a2f4dd9e4c9004319130c5
-  session: null
-  claimed_at: 2026-10-03T03:41:37Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-03T04:59:39Z
+updated_at: 2026-10-03T05:25:19Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -54,9 +47,9 @@ Add a test that walks the registered API routes and fails for any route without 
 ## Acceptance criteria
 
 - [x] TestEveryRouteHasAServedGolden walks api.Routes and fails on a route with no served case, a stale case and a mutation route registered in a test world
-- [ ] Every route api.Routes returns has a served golden under testdata/golden/served, with status, Content-Type, Cache-Control and any Location, Allow and ETag, and the pending list is deleted
-- [ ] Every volatile mask names a value random by design, and TestTheVolatileTableNamesOnlyRandomValues passes
-- [ ] The PR that closes the ticket records a shape mutation (a dto.SessionInfo field) caught by TestServedGoldens, and every PR on the ticket passed a full Terva review without context_limit
+- [x] Every route api.Routes returns has a served golden under testdata/golden/served, with status, Content-Type, Cache-Control and any Location, Allow and ETag, and the pending list is deleted
+- [x] Every volatile mask names a value random by design, and TestTheVolatileTableNamesOnlyRandomValues passes
+- [x] The PR that closes the ticket records a shape mutation (a dto.SessionInfo field) caught by TestServedGoldens, and every PR on the ticket passed a full Terva review without context_limit
 
 ## Implementation plan
 
@@ -155,3 +148,26 @@ Decisions:
 - Each write runs in a fresh world, so a golden is the answer to that one write and the cases do not depend on order.
 
 No golden from PR 1 changed.
+
+**agent:claude-code/phase4-run-me9g0** at 2026-10-03T05:25:11Z
+
+PR 3 of 3 (admin routes): a served case and golden for each of the 52 admin routes. `pending` is deleted and `servedCoverage(routes, cases)` no longer takes it. All 105 routes `api.Routes` returns now have a golden, every one a 2xx, and they are stable across runs (`-count=2`).
+
+Decisions:
+- Admin writes stamp times through perm (audit rows) and the forms service (`created_at`). Both now read the served world's clock: `perm.NewAt(db, now)` is new beside `perm.New`, and `formsvc.Service.Now` was already injectable. The alternative was to mask those values. That was rejected for the same reason as the thread id in PR 2: the volatile table holds only values that are random by design, and `TestTheVolatileTableNamesOnlyRandomValues` enforces it.
+- dana is seeded as an admin with a session, because admin routes need an admin viewer who is not also the subject of the case. As a side effect, GET /api/v1/forums counts 5 members instead of 4; that is the only PR 1/PR 2 golden that changes.
+- POST /api/v1/admin/threads/{id}/move moves the thread to a new public forum, "lounge", not to the restricted forum. bob is a moderator but not a member of the restricted forum, so moving the thread there answers 404, and a 404 golden would be pinning a refusal instead of the route's answer.
+- The second volatile row is the credential `POST /api/v1/admin/users/{handle}/credential` issues: `agentcred.Issue` draws it from crypto/rand. The volatile test passes for it.
+- The walker's message no longer mentions `pending`, now that the list is gone. The fixture walk still requires a missing case, a stale case and two adminRoute fixture routes to be reported, four problems in all.
+
+Mutation (AC 4): renaming the JSON tag of `dto.SessionInfo.Device` from "device" to "device_name" fails `TestServedGoldens/GET_/api/v1/settings/sessions`. I reverted it afterwards.
+
+Reviews: PR 1 #390 got a medium finding in review 2043 (trailing content after a served body went unrefused). It was fixed, and the second full review was clean (comment 25115). PR 2 #392 had one full review, clean (run 956739ee). None hit context_limit. AC 4 is ticked in this PR before its own review runs, because the merge gate refuses a PR whose review did not run. If PR 3's review fails on context_limit, the PR is split and the tick removed before anything merges.
+
+## Summary
+
+Every route `api.Routes` returns (105) has a served golden under `internal/web/api/testdata/golden/served/`. Each golden records the status, `Allow`, `Cache-Control`, `Content-Type`, `ETag`, `Location` and the canonical body, served through `web.New` with the real session and agent-credential middleware and fixed clocks. This landed in three PRs: #390 (harness, walker, public reads), #392 (public writes), and the third (admin routes; `pending` deleted).
+
+`TestEveryRouteHasAServedGolden` walks `api.Routes`. It fails on a route with no case and on a case that names no route, and it requires adminRoute fixture routes to be reported. Its message tells the PR author exactly what to add. `TestServedGoldens` also fails on a golden no case writes. `TestTheVolatileTableNamesOnlyRandomValues` keeps the volatile table to two values that are random by design: a session id, and an issued agent credential. Values derived from time are pinned through injected clocks instead: `threadid.NewGeneratorAt`, `perm.NewAt`, and `formsvc.Service.Now`.
+
+For later work: a PR that adds an `/api/v1` route adds a `servedCases` entry and runs `go test ./internal/web/api -run TestServedGoldens -update`. A PR that changes a DTO shape regenerates the goldens it moves and reviews that diff as the API change it is.
