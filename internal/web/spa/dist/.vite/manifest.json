@@ -1,6 +1,10 @@
 {
-  "_ApplyRoot-0fXPIHAW.js": {
-    "file": "assets/ApplyRoot-0fXPIHAW.js",
+  "_ApplyRoot-C_SWIqcC.css": {
+    "file": "assets/ApplyRoot-C_SWIqcC.css",
+    "src": "_ApplyRoot-C_SWIqcC.css"
+  },
+  "_ApplyRoot-RLiK5kvv.js": {
+    "file": "assets/ApplyRoot-RLiK5kvv.js",
     "name": "ApplyRoot",
     "imports": [
       "index.html"
@@ -8,10 +12,6 @@
     "css": [
       "assets/ApplyRoot-C_SWIqcC.css"
     ]
-  },
-  "_ApplyRoot-C_SWIqcC.css": {
-    "file": "assets/ApplyRoot-C_SWIqcC.css",
-    "src": "_ApplyRoot-C_SWIqcC.css"
   },
   "_icon-192-BjNXmPh-.png": {
     "file": "assets/icon-192-BjNXmPh-.png",
@@ -30,16 +30,16 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-Bk8yeGGt.js",
+    "file": "assets/index-BThZbQHW.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-0fXPIHAW.js"
+      "_ApplyRoot-RLiK5kvv.js"
     ],
     "css": [
-      "assets/index-C80kXYId.css"
+      "assets/index-C_eq5J2G.css"
     ],
     "assets": [
       "assets/ibm-plex-sans-latin-400-normal-CDDApCn2.woff2",
@@ -100,12 +100,12 @@
     "src": "src/assets/icon/icon.svg"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-CgQMPog1.js",
+    "file": "assets/AdminRoot-DySgAC2m.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-0fXPIHAW.js",
+      "_ApplyRoot-RLiK5kvv.js",
       "index.html"
     ],
     "css": [
