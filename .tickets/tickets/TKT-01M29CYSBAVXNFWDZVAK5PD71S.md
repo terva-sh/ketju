@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSBAVXNFWDZVAK5PD71S
 title: Implement merge into an existing thread
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -23,15 +23,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:359
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-cysba
+  branch: run/cysba-merge-posts
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
+  commit: dadad068d54759ae465dc537a6abc1f2f201577e
+  session: null
+  claimed_at: 2026-10-03T03:29:32Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T18:03:28Z
+updated_at: 2026-10-03T03:29:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-moving-posts
+  id: agent:claude-code/phase4-run-cysba
   name: ""
 extensions: {}
 ---
