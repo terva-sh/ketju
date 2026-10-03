@@ -1438,14 +1438,17 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	threads := []string{v, a, s, c, tagged, z}
 	viewers := []*actor{kim, gail, pat}
 
-	// The writer: 40 replies, through the backup. The backup is held after
-	// serve answers its snapshot until three more replies have landed, so
-	// the logs it copies have grown past what the snapshot projected.
-	var wrote atomic.Int32
+	// The writer: at least 40 replies, through the backup. The backup is
+	// held after serve answers its snapshot until three more replies have
+	// landed, so the logs it copies have grown past what the snapshot
+	// projected, and the writer goes on until those three have landed
+	// whenever the snapshot came (Terva review 2064).
+	var wrote, need atomic.Int32
+	need.Store(1 << 30) // until the snapshot says how many
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for wrote.Load() < 40 {
+		for n := wrote.Load(); n < 40 || n < need.Load(); n = wrote.Load() {
 			res := kim.do(t, http.MethodPost, "/api/v1/threads/"+busy+"/posts", map[string]any{"source": fmt.Sprintf("Reply %d.", wrote.Load())})
 			switch res.status {
 			case http.StatusCreated:
@@ -1463,7 +1466,8 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 		ans, release, err := backup.Ask(ctx, sock)
 		if err == nil {
 			at := wrote.Load()
-			waitUntil(t, func() bool { return wrote.Load() >= min(at+3, 40) })
+			need.Store(at + 3)
+			waitUntil(t, func() bool { return wrote.Load() >= at+3 })
 		}
 		return ans, release, err
 	}
@@ -1478,8 +1482,8 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 		t.Fatalf("the report is not JSON: %v\n%s", err, &out)
 	}
 	t.Logf("ketju backup: %+v", sum)
-	if sum.Mode != "online" || wrote.Load() != 40 {
-		t.Errorf("the backup ran %q beside %d replies, want online beside 40", sum.Mode, wrote.Load())
+	if sum.Mode != "online" || wrote.Load() < 40 || need.Load() > wrote.Load() {
+		t.Errorf("the backup ran %q beside %d replies, %d wanted; want online beside at least 40", sum.Mode, wrote.Load(), need.Load())
 	}
 	// Each log is copied at the length the snapshot projected it to, so
 	// the copy has nothing to catch up and no drift, though the source's
@@ -1522,8 +1526,8 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 			}
 		}
 		b := cw.logOf(busy)
-		if len(b) == 0 || !bytes.HasPrefix(source, b) {
-			t.Errorf("%s: the busy thread's log (%d bytes) is not a prefix of the source's (%d)", when, len(b), len(source))
+		if len(b) == 0 || len(b) >= len(source) || !bytes.HasPrefix(source, b) {
+			t.Errorf("%s: the busy thread's log (%d bytes) is not a strict prefix of the source's (%d)", when, len(b), len(source))
 		}
 	}
 	cw.serve()

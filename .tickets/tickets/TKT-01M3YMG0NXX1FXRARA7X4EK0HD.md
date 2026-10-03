@@ -61,7 +61,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T13:16:11Z
+updated_at: 2026-10-03T13:40:26Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -348,3 +348,7 @@ Prepared on branch run/mg0nx-phase4-exit (unpushed), from main at fbe569d4, whil
 ### Found by the exit spec
 
 TKT-01M40PCE7P (Give a removed post's footer buttons the contrast its links have): axe color-contrast at 1440 px on a removed post's footer buttons, 4.44:1. Filed phase-4 because it fails criterion 1; this ticket depends on it, and its CSS fix rides in this PR with the regenerated dist once the dist is handed to this lane.
+
+**agent:claude-code/phase4-run-mg0nx** at 2026-10-03T13:40:26Z
+
+Terva review 2064 (PR #404, head 78dbef2b, base c7fec0e8): one medium, 'Keep the writer alive until the backup snapshot has been taken'. Accepted and fixed: the writer now goes on until 40 replies and three more than the count at the snapshot, whichever is later, so at least three land after it on any schedule; the restored busy log must be a strict prefix of the source's. The whole-log-copy mutation is still caught (caught_up 1). CI run 2737 on 78dbef2b was green.
