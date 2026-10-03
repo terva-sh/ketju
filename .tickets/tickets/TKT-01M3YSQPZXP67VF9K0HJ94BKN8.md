@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQPZXP67VF9K0HJ94BKN8
 title: Show, filter and set thread tags in the client
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: pr:361
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-SQPZX
+  branch: run/sqpzx-thread-tags
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
+  commit: 4936e55c66801fc088f48541ade58c3bc89c871a
+  session: null
+  claimed_at: 2026-10-03T00:17:45Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-02T17:24:09Z
+updated_at: 2026-10-03T00:17:48Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-tags-archive
+  id: agent:claude-code/phase4-run-SQPZX
   name: ""
 extensions: {}
 ---
