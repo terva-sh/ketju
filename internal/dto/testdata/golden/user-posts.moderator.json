@@ -32,7 +32,9 @@
         "deleted": false,
         "removal": null,
         "redacted": false,
+        "moved": false,
         "moved_to": null,
+        "move_notice": null,
         "machine_authored": false
       }
     },
@@ -68,7 +70,9 @@
         "deleted": true,
         "removal": "author",
         "redacted": false,
+        "moved": false,
         "moved_to": null,
+        "move_notice": null,
         "machine_authored": false
       }
     },
@@ -104,7 +108,9 @@
         "deleted": false,
         "removal": null,
         "redacted": false,
+        "moved": false,
         "moved_to": null,
+        "move_notice": null,
         "machine_authored": false
       }
     }

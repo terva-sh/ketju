@@ -1,0 +1,83 @@
+{
+  "thread": {
+    "id": "3yymw47g00099",
+    "slug": "retention-split-out",
+    "title": "Retention, split out",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "author": {
+      "handle": "bob",
+      "display_name": "Bob Iyer",
+      "avatar": "",
+      "role": "moderator",
+      "kind": "human"
+    },
+    "post_count": 1,
+    "log_length": 1841,
+    "locked": false,
+    "pinned": null,
+    "tags": [],
+    "created_at": 1757100000000,
+    "split_from": {
+      "thread": {
+        "id": "3yymw47g00001",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      }
+    }
+  },
+  "page": {
+    "number": 1,
+    "size": 25,
+    "total_pages": 1
+  },
+  "lens": null,
+  "viewer": {
+    "last_read_ordinal": 2,
+    "last_read_at": 1757100100000,
+    "watch": "",
+    "forum_watch": "",
+    "can_reply": true,
+    "can_upload": false,
+    "can_moderate": false,
+    "slow_mode_seconds": 0,
+    "next_post_at": null,
+    "rename_until": null,
+    "author_windows": {
+      "edit_seconds": 86400,
+      "delete_seconds": 900
+    },
+    "forum_read_only": false
+  },
+  "posts": [
+    {
+      "ordinal": 1,
+      "revision": 1,
+      "author": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "created_at": 1757100000000,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "quoted_by": [],
+      "html": "<p>We are taking the Kallio unit.</p>",
+      "attachments": [],
+      "deleted": false,
+      "removal": null,
+      "redacted": false,
+      "moved": false,
+      "moved_to": null,
+      "move_notice": null,
+      "machine_authored": false
+    }
+  ]
+}

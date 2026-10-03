@@ -20,7 +20,8 @@
     "archived": false,
     "pinned": null,
     "tags": [],
-    "created_at": 1757500000000
+    "created_at": 1757500000000,
+    "split_from": null
   },
   "post": {
     "post": {
@@ -45,7 +46,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     },
     "ordinal": 1,

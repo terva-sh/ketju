@@ -596,9 +596,11 @@ func (s *Service) threadHeader(ctx context.Context, v domain.Viewer, id threadid
 		return dto.ThreadHeader{}, err
 	}
 	var (
-		forum   dbq.Forum
-		starter dto.Author
-		tags    []string
+		forum     dbq.Forum
+		starter   dto.Author
+		tags      []string
+		splitFrom threadid.ID
+		split     bool
 	)
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
@@ -608,10 +610,20 @@ func (s *Service) threadHeader(ctx context.Context, v domain.Viewer, id threadid
 		if starter, err = starterOf(ctx, q, a.row.AuthorID); err != nil {
 			return err
 		}
-		tags, err = q.ThreadTags(ctx, int64(id))
+		if tags, err = q.ThreadTags(ctx, int64(id)); err != nil {
+			return err
+		}
+		splitFrom, split, err = splitSource(ctx, q, id)
 		return err
 	}); err != nil {
 		return dto.ThreadHeader{}, err
+	}
+	var splitHeader *dto.SplitFrom
+	if split {
+		var err error
+		if splitHeader, err = s.drawSplitFrom(ctx, a.viewer, splitFrom); err != nil {
+			return dto.ThreadHeader{}, err
+		}
 	}
 	var (
 		n         int
@@ -623,7 +635,9 @@ func (s *Service) threadHeader(ctx context.Context, v domain.Viewer, id threadid
 	}); err != nil {
 		return dto.ThreadHeader{}, err
 	}
-	return header(id, a.row, forum, starter, tags, n, logLength, s.now()), nil
+	h := header(id, a.row, forum, starter, tags, n, logLength, s.now())
+	h.SplitFrom = splitHeader
+	return h, nil
 }
 
 // pinActive reports whether row is pinned at now: a pin whose pinned_until

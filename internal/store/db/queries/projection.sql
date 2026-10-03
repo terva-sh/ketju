@@ -252,6 +252,33 @@ WHERE target_thread_id = ? AND target_ordinal = ?;
 -- name: GetPostMove :one
 SELECT * FROM post_moves WHERE source_thread_id = ? AND source_ordinal = ?;
 
+-- The move rows of source_thread_id's posts first through last: where each
+-- moved post on a page went, which the page resolves for its viewer when it
+-- is drawn (TKT-01M29CYSAM). target_ordinal is null until the copy is
+-- projected.
+-- name: MovesFromRange :many
+SELECT source_ordinal, target_thread_id, target_ordinal, split_offset FROM post_moves
+WHERE source_thread_id = sqlc.arg(source_thread_id)
+  AND source_ordinal >= CAST(sqlc.arg(first) AS INTEGER)
+  AND source_ordinal <= CAST(sqlc.arg(last) AS INTEGER)
+ORDER BY source_ordinal;
+
+-- Each move out of source_thread_id the source has projected, by its
+-- PostsSplitOut's offset: how many posts it moved and the first of them,
+-- where the source draws its notice.
+-- name: MovesOutOf :many
+SELECT CAST(split_offset AS INTEGER) AS split_offset, COUNT(*) AS posts,
+       CAST(MIN(source_ordinal) AS INTEGER) AS first_ordinal
+FROM post_moves
+WHERE source_thread_id = ? AND split_offset IS NOT NULL
+GROUP BY split_offset;
+
+-- The thread a split opened thread_id from: the source of its post 1, when
+-- that post is the copy a split wrote first.
+-- name: SplitSourceOf :one
+SELECT source_thread_id FROM post_moves
+WHERE target_thread_id = ? AND target_ordinal = 1 AND opens_thread = 1;
+
 -- Whether an Edit at revision of the post at (target_thread_id,
 -- target_ordinal) is one a move carried rather than a new one: the post is
 -- a copy, and the revision is at most the source post's, or the source's

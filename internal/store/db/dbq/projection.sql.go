@@ -316,6 +316,99 @@ func (q *Queries) MoveOfCopy(ctx context.Context, arg MoveOfCopyParams) (MoveOfC
 	return i, err
 }
 
+const movesFromRange = `-- name: MovesFromRange :many
+SELECT source_ordinal, target_thread_id, target_ordinal, split_offset FROM post_moves
+WHERE source_thread_id = ?1
+  AND source_ordinal >= CAST(?2 AS INTEGER)
+  AND source_ordinal <= CAST(?3 AS INTEGER)
+ORDER BY source_ordinal
+`
+
+type MovesFromRangeParams struct {
+	SourceThreadID int64
+	First          int64
+	Last           int64
+}
+
+type MovesFromRangeRow struct {
+	SourceOrdinal  int64
+	TargetThreadID int64
+	TargetOrdinal  sql.NullInt64
+	SplitOffset    sql.NullInt64
+}
+
+// The move rows of source_thread_id's posts first through last: where each
+// moved post on a page went, which the page resolves for its viewer when it
+// is drawn (TKT-01M29CYSAM). target_ordinal is null until the copy is
+// projected.
+func (q *Queries) MovesFromRange(ctx context.Context, arg MovesFromRangeParams) ([]MovesFromRangeRow, error) {
+	rows, err := q.db.QueryContext(ctx, movesFromRange, arg.SourceThreadID, arg.First, arg.Last)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MovesFromRangeRow
+	for rows.Next() {
+		var i MovesFromRangeRow
+		if err := rows.Scan(
+			&i.SourceOrdinal,
+			&i.TargetThreadID,
+			&i.TargetOrdinal,
+			&i.SplitOffset,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const movesOutOf = `-- name: MovesOutOf :many
+SELECT CAST(split_offset AS INTEGER) AS split_offset, COUNT(*) AS posts,
+       CAST(MIN(source_ordinal) AS INTEGER) AS first_ordinal
+FROM post_moves
+WHERE source_thread_id = ? AND split_offset IS NOT NULL
+GROUP BY split_offset
+`
+
+type MovesOutOfRow struct {
+	SplitOffset  int64
+	Posts        int64
+	FirstOrdinal int64
+}
+
+// Each move out of source_thread_id the source has projected, by its
+// PostsSplitOut's offset: how many posts it moved and the first of them,
+// where the source draws its notice.
+func (q *Queries) MovesOutOf(ctx context.Context, sourceThreadID int64) ([]MovesOutOfRow, error) {
+	rows, err := q.db.QueryContext(ctx, movesOutOf, sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MovesOutOfRow
+	for rows.Next() {
+		var i MovesOutOfRow
+		if err := rows.Scan(&i.SplitOffset, &i.Posts, &i.FirstOrdinal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const movesWithoutSourceRevision = `-- name: MovesWithoutSourceRevision :many
 SELECT source_ordinal FROM post_moves
 WHERE source_thread_id = ? AND source_revision IS NULL ORDER BY source_ordinal
@@ -803,6 +896,20 @@ func (q *Queries) SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const splitSourceOf = `-- name: SplitSourceOf :one
+SELECT source_thread_id FROM post_moves
+WHERE target_thread_id = ? AND target_ordinal = 1 AND opens_thread = 1
+`
+
+// The thread a split opened thread_id from: the source of its post 1, when
+// that post is the copy a split wrote first.
+func (q *Queries) SplitSourceOf(ctx context.Context, targetThreadID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, splitSourceOf, targetThreadID)
+	var source_thread_id int64
+	err := row.Scan(&source_thread_id)
+	return source_thread_id, err
 }
 
 const tagsForThreads = `-- name: TagsForThreads :many

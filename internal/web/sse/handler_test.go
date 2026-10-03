@@ -540,6 +540,41 @@ func TestStreamClosesWhenReadRevoked(t *testing.T) {
 	s.ended(5 * time.Second)
 }
 
+// TestMovedPostSSEHintOnly is the live-events half of TKT-01M29CXJZZ's sixth
+// criterion: a post split from general into staff gives alice, who reads
+// general alone, the source's hint and nothing of the new thread, on her
+// stream of the thread and her stream of general, and both stay open; dave,
+// who reads staff, hears the new thread. A hint carries an id and a length
+// and nothing else (decodeHint).
+func TestMovedPostSSEHintOnly(t *testing.T) {
+	w := newWorld(t, defaultOpts())
+	id := w.thread("general", "alice")
+	w.reply(id, "carol")
+	w.quiesce()
+	alice := w.signIn("alice")
+	byThread := w.open(eventsPath(ids(id)), alice...)
+	byThread.ready(1)
+	byForum := w.open(eventsPath(nil, "general"), alice...)
+	byForum.ready(0)
+	staff := w.open(eventsPath(nil, "staff"), w.signIn("dave")...)
+	staff.ready(0)
+
+	res, err := w.svc.Split(t.Context(), w.viewer("root"), id, []uint32{2}, "staff", "Moved to staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := threadid.Parse(res.Thread.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := w.length(id)
+	byThread.hintAt(id, n)
+	byForum.hintAt(id, n)
+	staff.hintAt(target, w.length(target))
+	byThread.quiet(300 * time.Millisecond)
+	byForum.quiet(300 * time.Millisecond)
+}
+
 // TestStreamClosesWhenThreadMovedToUnreadableForum: a thread moved where
 // the viewer cannot read ends their stream on it.
 func TestStreamClosesWhenThreadMovedToUnreadableForum(t *testing.T) {

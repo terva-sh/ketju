@@ -26,7 +26,8 @@
       "meta",
       "tools"
     ],
-    "created_at": 1757500000000
+    "created_at": 1757500000000,
+    "split_from": null
   },
   "page": {
     "number": 3,
@@ -106,7 +107,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     },
     {
@@ -131,7 +134,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": true
     },
     {
@@ -156,7 +161,9 @@
       "deleted": true,
       "removal": "moderator",
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     },
     {
@@ -181,7 +188,24 @@
       "deleted": true,
       "removal": null,
       "redacted": false,
-      "moved_to": "3yymw47g00099",
+      "moved": true,
+      "moved_to": {
+        "thread": {
+          "id": "3yymw47g00099",
+          "slug": "retention-split-out",
+          "title": "Retention, split out"
+        },
+        "ordinal": 1
+      },
+      "move_notice": {
+        "count": 1,
+        "thread": {
+          "id": "3yymw47g00099",
+          "slug": "retention-split-out",
+          "title": "Retention, split out"
+        },
+        "ordinal": 1
+      },
       "machine_authored": false
     }
   ]

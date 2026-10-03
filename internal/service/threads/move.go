@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -222,6 +223,27 @@ func (s *Service) movePosts(ctx context.Context, v domain.Viewer, req MoveReques
 		out.Copies = append(out.Copies, copies[o])
 	}
 	return out, nil
+}
+
+// Split moves posts of source, by ordinal, into a new thread titled title in
+// the forum with slug forum, which v starts (docs/06 "Moderator flow for
+// drift", TKT-01M29CYSAM). It answers both threads' headers as their pages
+// now serve them to v. Every refusal is movePosts', before anything is
+// written; a split whose source record is written and whose copies are not
+// is unavailable, and finishes from the logs. The new thread starts
+// untagged.
+func (s *Service) Split(ctx context.Context, v domain.Viewer, source threadid.ID, ordinals []uint32, forum, title string) (dto.MovedPosts, error) {
+	var out dto.MovedPosts
+	res, err := s.movePosts(ctx, v, MoveRequest{Source: source, Ordinals: ordinals,
+		Split: &NewThread{Forum: forum, Title: title}})
+	if err != nil {
+		return out, err
+	}
+	if out.Source, err = s.threadHeader(ctx, v, source); err != nil {
+		return out, err
+	}
+	out.Thread, err = s.threadHeader(ctx, v, res.Target)
+	return out, err
 }
 
 // decideMove holds the source to the move's rules, as the source stands at

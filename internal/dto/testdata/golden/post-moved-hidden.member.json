@@ -1,0 +1,31 @@
+{
+  "ordinal": 64,
+  "revision": 1,
+  "author": {
+    "handle": "alice",
+    "display_name": "Alice Nakamura",
+    "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+    "role": "member",
+    "kind": "human"
+  },
+  "created_at": 1757500500000,
+  "edited_at": null,
+  "edited_by_moderator": false,
+  "reply_to": null,
+  "reply_to_suppressed": false,
+  "reply_count": 0,
+  "quoted_by": [],
+  "html": "",
+  "attachments": [],
+  "deleted": true,
+  "removal": null,
+  "redacted": false,
+  "moved": true,
+  "moved_to": null,
+  "move_notice": {
+    "count": 2,
+    "thread": null,
+    "ordinal": null
+  },
+  "machine_authored": false
+}

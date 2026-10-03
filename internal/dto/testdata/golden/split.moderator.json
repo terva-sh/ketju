@@ -1,0 +1,60 @@
+{
+  "source": {
+    "id": "3yymw47g00001",
+    "slug": "why-we-left-slack",
+    "title": "Why we left Slack",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "author": {
+      "handle": "alice",
+      "display_name": "Alice Nakamura",
+      "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+      "role": "member",
+      "kind": "human"
+    },
+    "post_count": 212,
+    "log_length": 483920,
+    "locked": false,
+    "pinned": {
+      "scope": "forum",
+      "until": 1760000000000
+    },
+    "tags": [
+      "meta",
+      "tools"
+    ],
+    "created_at": 1757500000000,
+    "split_from": null
+  },
+  "thread": {
+    "id": "3yymw47g00099",
+    "slug": "retention-split-out",
+    "title": "Retention, split out",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "author": {
+      "handle": "bob",
+      "display_name": "Bob Iyer",
+      "avatar": "",
+      "role": "moderator",
+      "kind": "human"
+    },
+    "post_count": 1,
+    "log_length": 1841,
+    "locked": false,
+    "pinned": null,
+    "tags": [],
+    "created_at": 1757100000000,
+    "split_from": {
+      "thread": {
+        "id": "3yymw47g00001",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      }
+    }
+  }
+}

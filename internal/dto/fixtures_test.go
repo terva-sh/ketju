@@ -23,6 +23,9 @@ import "encoding/json"
 
 func ptr[T any](v T) *T { return &v }
 
+// splitLink is the thread post #64 of the thread page was split into.
+var splitLink = ThreadLink{ID: "3yymw47g00099", Slug: "retention-split-out", Title: "Retention, split out"}
+
 const (
 	tAnon      = "anon"
 	tMember    = "member"
@@ -169,8 +172,9 @@ func threadPage(class string) ThreadPage {
 				MachineAuthored:   false,
 			},
 			{
-				// A moved post: a pointer to the thread it went to, with no
-				// removal and no body for anyone.
+				// A moved post: a pointer to the thread it went to and the
+				// copy there, and the move's notice, since it is the move's
+				// first post, with no removal and no body for anyone.
 				Ordinal:           64,
 				Revision:          1,
 				Author:            alice,
@@ -184,7 +188,9 @@ func threadPage(class string) ThreadPage {
 				QuotedBy:          []int{},
 				Deleted:           true,
 				Removal:           nil,
-				MovedTo:           ptr("3yymw47g00099"),
+				Moved:             true,
+				MovedTo:           &MovedTo{Thread: splitLink, Ordinal: ptr(1)},
+				MoveNotice:        &MoveNotice{Count: 1, Thread: &splitLink, Ordinal: ptr(1)},
 				MachineAuthored:   false,
 			},
 		},
@@ -474,6 +480,39 @@ func archivedThread() ThreadPage {
 	return p
 }
 
+// splitThread is a thread a split opened, whose header links back to the
+// thread its posts came from (TKT-01M29CYSAM). An anonymous reader may not
+// read that thread here, so they are told only that it was split.
+func splitThread(class string) ThreadPage {
+	p := lockedThread()
+	p.Thread.ID, p.Thread.Slug, p.Thread.Title = splitLink.ID, splitLink.Slug, splitLink.Title
+	p.Thread.Locked = false
+	p.Thread.PostCount = 1
+	p.Posts[0].ReplyCount = 0
+	p.Thread.SplitFrom = &SplitFrom{Thread: &ThreadLink{ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack"}}
+	p.Viewer.CanReply = true
+	if class == tAnon {
+		p.Thread.SplitFrom = &SplitFrom{Thread: nil}
+		p.Viewer = ThreadViewer{}
+	}
+	return p
+}
+
+// movedPost is a moved post as one of two readers sees it: a reader of the
+// target while the move is unfinished, its copies not yet written, and a
+// reader who may not read the target, who learns only that posts moved.
+func movedPost(readsTarget bool) Post {
+	p := threadPage(tMember).Posts[3]
+	if readsTarget {
+		p.MovedTo = &MovedTo{Thread: splitLink, Ordinal: nil}
+		p.MoveNotice = &MoveNotice{Count: 2, Thread: &splitLink, Ordinal: nil}
+	} else {
+		p.MovedTo = nil
+		p.MoveNotice = &MoveNotice{Count: 2, Thread: nil, Ordinal: nil}
+	}
+	return p
+}
+
 // crossForumList is /unread and its siblings: the same rows with no forum,
 // which is the one field that separates "this forum" from "anywhere".
 func crossForumList() ThreadList {
@@ -564,6 +603,15 @@ var corpus = map[string]any{
 	"thread-archived." + tMember: archivedForumThread(),
 	// An archived thread, not an archived forum's (TKT-01M3YSQQ33).
 	"thread-archived-thread." + tMember: archivedThread(),
+
+	// A split's two ends (TKT-01M29CYSAM): the thread it opened, and a
+	// moved post unfinished and as a reader of the source alone reads it.
+	"thread-split." + tMember:          splitThread(tMember),
+	"thread-split." + tAnon:            splitThread(tAnon),
+	"post-moved-unfinished." + tMember: movedPost(true),
+	"post-moved-hidden." + tMember:     movedPost(false),
+	"split." + tModerator: MovedPosts{Source: threadPage(tModerator).Thread,
+		Thread: splitThread(tMember).Thread},
 
 	"slow-mode." + tModerator: SlowMode{Seconds: 30},
 

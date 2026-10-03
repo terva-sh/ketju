@@ -36,6 +36,9 @@ func (h *handlers) registerModeration(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unpin", moderatesGate, h.unpinThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/move", moderatesGate, h.moveThread)
 	h.adminRoute(mux, "PUT /api/v1/admin/threads/{id}/tags", moderatesGate, h.retagThread)
+	// A split needs moderate in the source's forum and the new thread's,
+	// which the service decides (TKT-01M29CYSAM).
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/split", moderatesGate, h.splitPosts)
 	// Archiving is an admin's alone (docs/08 "Primitives"), so it keeps the
 	// admin gate (TKT-01M29CRJ64).
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/archive", adminGate, h.archiveThread)
@@ -136,6 +139,47 @@ func (h *handlers) moveThread(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.threads.Move(r.Context(), domain.ViewerFrom(r.Context()), id, *in.Forum)
 	h.answerHeader(w, r, res, err)
+}
+
+// maxSplitBody bounds a split's body: room for threadlog.MaxMoveOrdinals
+// ordinals of the longest a thread can hold, a title and a forum slug.
+const maxSplitBody = 128 << 10
+
+// splitRequest is the body of POST …/split: the posts to move, by ordinal,
+// and the new thread's title and forum, by slug.
+type splitRequest struct {
+	Ordinals []uint32 `json:"ordinals"`
+	Title    *string  `json:"title"`
+	Forum    *string  `json:"forum"`
+}
+
+// splitPosts is POST /api/v1/admin/threads/{id}/split with {ordinals, title,
+// forum}: a moderator's split of posts into a new thread (docs/07 "Moving
+// posts", TKT-01M29CYSAM). Each field is required; the service judges the
+// posts, the title as a new thread's, and moderate in both forums. It
+// answers 200 with both threads' headers, no-store.
+func (h *handlers) splitPosts(w http.ResponseWriter, r *http.Request) {
+	id, err := threadid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in splitRequest
+	if err := optionalJSON(r.Body, maxSplitBody, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.Ordinals == nil || in.Title == nil || in.Forum == nil {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: a split needs ordinals, a title and a forum")))
+		return
+	}
+	res, err := h.threads.Split(r.Context(), domain.ViewerFrom(r.Context()), id, in.Ordinals, *in.Forum, *in.Title)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
 }
 
 // pinRequest is the body of POST …/pin. Until is Unix ms, null for no end.

@@ -166,6 +166,11 @@ type ThreadHeader struct {
 	Pinned    *Pinned  `json:"pinned"`
 	Tags      []string `json:"tags"`
 	CreatedAt Millis   `json:"created_at"`
+	// SplitFrom is set on a thread a split opened, nil on any other
+	// (TKT-01M29CYSAM). It is resolved for the viewer on every request, as
+	// the rest of the header is, and is left out while the projection has
+	// not recorded the split, which fails closed.
+	SplitFrom *SplitFrom `json:"split_from"`
 }
 
 // ThreadViewer is the only per-viewer part of a thread response.
@@ -309,14 +314,61 @@ type Post struct {
 	// edited. Removal still says who took it down. It is the same for every
 	// viewer class, since it comes from the index alone.
 	Redacted bool `json:"redacted"`
-	// MovedTo is the thread id a split moved this post to, nil otherwise.
-	MovedTo *string `json:"moved_to"`
+	// Moved marks a post a split or merge moved to another thread
+	// (TKT-01M29CYSAM). Such a post is also Deleted, with no removal and no
+	// HTML for anyone. It is the same for every viewer class, and says
+	// nothing about where the post went.
+	Moved bool `json:"moved"`
+	// MovedTo is where a moved post went, nil for a post that did not move
+	// and for a viewer who may not read the thread it went to. It is drawn
+	// per viewer when the response is assembled, never cached with the
+	// posts (docs/15 "Invariants, added").
+	MovedTo *MovedTo `json:"moved_to"`
+	// MoveNotice is set on the first post of each move out of this thread,
+	// where the page says how many posts were moved, and to where when the
+	// viewer may read the target. Drawn per viewer, as MovedTo is.
+	MoveNotice *MoveNotice `json:"move_notice"`
 
 	// MachineAuthored comes from the log's frame flag and records what was
 	// true when the post was written (docs/03). It is not Author.Kind, which
 	// is the account as it stands now. They disagree after an account changes
 	// hands, and docs/07 says the log is right when they do.
 	MachineAuthored bool `json:"machine_authored"`
+}
+
+// MovedTo is where a moved post went: the thread it was copied into, and
+// the copy's own ordinal there. A copy's ordinal is never its source
+// ordinal: posts 20 and 30 split out become 1 and 2, and a merge appends
+// after the target's posts. Ordinal is nil while the move is unfinished,
+// until the copy is written and projected.
+type MovedTo struct {
+	Thread  ThreadLink `json:"thread"`
+	Ordinal *int       `json:"ordinal"`
+}
+
+// MoveNotice is a source thread's "N posts were moved" line, on the first
+// post the move took. Thread and Ordinal, the move's first copy there, are
+// nil for a viewer who may not read the target; Ordinal is nil too while
+// the move is unfinished.
+type MoveNotice struct {
+	Count   int         `json:"count"`
+	Thread  *ThreadLink `json:"thread"`
+	Ordinal *int        `json:"ordinal"`
+}
+
+// SplitFrom is a split thread's "split from" header: the thread its posts
+// were split out of. Thread is nil for a viewer who may not read that
+// thread, since its title is its content (docs/15 "Invariants, added").
+type SplitFrom struct {
+	Thread *ThreadLink `json:"thread"`
+}
+
+// MovedPosts answers a split (POST /admin/threads/{id}/split): the thread
+// the posts left and the thread they went to, each as its page now serves
+// it to the moderator (TKT-01M29CYSAM).
+type MovedPosts struct {
+	Source ThreadHeader `json:"source"`
+	Thread ThreadHeader `json:"thread"`
 }
 
 // ThreadPage is the response to GET /threads/{id}.

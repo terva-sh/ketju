@@ -32,7 +32,9 @@
           "deleted": true,
           "removal": "review",
           "redacted": false,
+          "moved": false,
           "moved_to": null,
+          "move_notice": null,
           "machine_authored": false
         },
         "flags": [

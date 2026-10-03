@@ -214,7 +214,7 @@ func TestModeratesGate(t *testing.T) {
 }
 
 // adminRouteGates is the gate each admin route is registered with. Only the
-// moderator queue and the seven thread moderation routes are behind moderates:
+// moderator queue and the eight thread moderation routes are behind moderates:
 // thread moderation follows the forum grant, and admin screens and account
 // actions keep their role gates (docs/08 "Decided 2026-09-30").
 var adminRouteGates = map[string]string{
@@ -227,6 +227,7 @@ var adminRouteGates = map[string]string{
 	"POST /api/v1/admin/threads/{id}/move":              "moderates",
 	"PUT /api/v1/admin/threads/{id}/slow-mode":          "moderates",
 	"PUT /api/v1/admin/threads/{id}/tags":               "moderates",
+	"POST /api/v1/admin/threads/{id}/split":             "moderates",
 	"POST /api/v1/admin/threads/{id}/archive":           "admin",
 	"GET /api/v1/admin/applications":                    "staff",
 	"GET /api/v1/admin/applications/{id}":               "staff",
@@ -304,8 +305,8 @@ func TestThreadModerationRoutesUseTheModeratesGate(t *testing.T) {
 			moderates++
 		}
 	}
-	if moderates != 9 {
-		t.Errorf("%d routes in the table are behind moderates, want the queue's two and the seven thread routes", moderates)
+	if moderates != 10 {
+		t.Errorf("%d routes in the table are behind moderates, want the queue's two and the eight thread routes", moderates)
 	}
 }
 

@@ -466,6 +466,46 @@ for a moderator, who is exempt, and for an anonymous viewer. Setting slow
 mode moves no response cache key, because the cached posts do not depend on
 it. The page's ETag changes, because it hashes the viewer block.
 
+#### Moving posts (TKT-01M29CYSAM)
+
+A moderator moves posts out of a thread into a new one with a split,
+behind the `moderates` gate. The records and their order are docs/03 "How
+a move is written" (TKT-01M29CXJZZ).
+
+| Route | Body | What it does |
+|---|---|---|
+| `POST /admin/threads/{id}/split` | `{ordinals, title, forum}`: the posts, the new thread's title and its forum's slug | opens a thread, started by the moderator and untagged, and moves the posts into it in ordinal order |
+
+The body is decoded strictly and bounded at 128 KiB, and each field is
+required: a body missing one, or with `ordinals` null, is `bad-request`.
+It answers 200 `internal/dto` `MovedPosts` `{source, thread}`, both
+threads' `ThreadHeader` as their pages now serve them to the moderator,
+`no-store`. A split is refused, writing nothing, with:
+- `validation-failed` for no ordinal, more than 10000, an ordinal named
+  twice, or a title refused as a new thread's would be;
+- `not-found` for a forum that is missing or hidden from the moderator,
+  and for an ordinal the thread does not hold;
+- `forbidden` without `moderate` in the thread's forum, or in the new
+  thread's: a split into another forum needs `moderate` in both, by role
+  or through a group (docs/08 "Decided 2026-09-30");
+- `conflict` for an archived thread, moderators and admins included, for a
+  destination forum that is archived, except to an admin, and for a post
+  not shown as itself: removed, hidden pending review or already moved.
+  Only posts shown as themselves move;
+- `conflict` too when the thread kept changing while the split was
+  decided;
+- `unavailable` for a quarantined thread, and for a split whose source
+  record is written and whose copies are not: the split is committed then,
+  and finishes from the logs within a minute.
+
+The source keeps every ordinal; each moved post reads as "Removed posts"
+below sets out. The new thread's header carries `split_from`
+`{thread: {id, slug, title}}`, naming the thread its posts came from, with
+`thread` null for a viewer who may not read that thread, since its title
+is its content. It is set when post 1 is the copy a split wrote first,
+read from `post_moves` on every request, and left out while the
+projection has not recorded the split. Every other thread's is null.
+
 #### Renaming and moving threads (TKT-01M29CKRH9)
 
 Renaming lives on the thread resource, `PATCH /threads/{id}` with
@@ -752,7 +792,7 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
              "forum": {"slug": "general", "name": "General"},
              "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
              "post_count": 212, "log_length": 483920, "locked": false, "pinned": null,
-             "tags": ["meta"], "created_at": 1757500000000},
+             "tags": ["meta"], "created_at": 1757500000000, "split_from": null},
   "page": {"number": 3, "size": 25, "total_pages": 9},
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205,
            "gaps": [{"after": 52, "count": 8}, {"after": 61, "count": 14}]},
@@ -765,7 +805,14 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
      "created_at": 1757500100000, "edited_at": 1757500200000,
      "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3, "quoted_by": [66, 71],
      "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "redacted": false,
-     "moved_to": null, "machine_authored": false, "edited_by_moderator": false}
+     "moved": false, "moved_to": null, "move_notice": null, "machine_authored": false, "edited_by_moderator": false},
+    {"ordinal": 64, "revision": 1, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
+     "created_at": 1757500500000, "edited_at": null,
+     "reply_to": null, "reply_to_suppressed": false, "reply_count": 0, "quoted_by": [],
+     "html": "", "attachments": [], "deleted": true, "removal": null, "redacted": false,
+     "moved": true, "moved_to": {"thread": {"id": "3yymw47g00099", "slug": "retention-split-out", "title": "…"}, "ordinal": 1},
+     "move_notice": {"count": 1, "thread": {"id": "3yymw47g00099", "slug": "retention-split-out", "title": "…"}, "ordinal": 1},
+     "machine_authored": false, "edited_by_moderator": false}
   ]
 }
 ```
@@ -999,9 +1046,35 @@ and the replies expander hold (08 "Tombstones"). `removal` says who removed
 it: `"author"` for a post its author deleted, `"moderator"` for one a
 moderator hid, and `"review"` for one auto-hidden pending review (08
 "Flags", TKT-01M29CP2PJ). It is null for a visible post and for a moved
-one, whose `moved_to` names the thread it went to. A post carrying both the
-deleted and hidden-by-mod bits, which only a log appended without the
-service's checks can hold, is `"author"`.
+one. A post carrying both the deleted and hidden-by-mod bits, which only a
+log appended without the service's checks can hold, is `"author"`.
+
+A post a split or merge moved to another thread (TKT-01M29CXJZZ,
+TKT-01M29CYSAM) carries `deleted: true`, `removal: null` and `moved: true`,
+with no body for anyone, moderators included. `moved` is the same for every
+viewer. Where the post went is told only to a viewer who may read the
+thread it went to, by the thread page's own admission (docs/15
+"Invariants, added"):
+- `moved_to` is `{thread: {id, slug, title}, ordinal}`, the copy's own
+  ordinal there, which is never the source ordinal: posts 20 and 30 split
+  out become 1 and 2, and a merge appends after the target's posts.
+  `ordinal` is null while the move is unfinished, until the copy is
+  written and projected. `moved_to` is null for a post that did not move
+  and for a viewer who may not read the target.
+- `move_notice` is set on the first post of each move, where the page
+  draws "N posts were moved": `{count, thread, ordinal}`, `ordinal` being
+  the move's first copy. `thread` and `ordinal` are null for a viewer who
+  may not read the target, who learns that posts moved and nothing more.
+
+Both are drawn per viewer when the response is assembled, after the posts
+are taken from the response cache, and the cache never holds them: whether
+a viewer may read another forum is not in its key. The ETag hashes the
+body as served, so two viewers who differ only there get different tags.
+They read `post_moves`, a projection: a moved post whose row is not
+written yet is drawn moved with both null, which fails closed. The page,
+the single post, replies, `/users/{handle}/posts` and the moderator queue
+draw them alike. A split thread's header carries `split_from`, set out
+under "Moving posts" above.
 
 Who is served a removed post's body is one rule, `revealRemoved` in
 `internal/service/threads`, used by the page, the single post, replies,

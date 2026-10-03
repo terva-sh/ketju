@@ -275,6 +275,8 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		watch      string
 		forumWatch string
 		authorW    *dto.AuthorWindows
+		splitFrom  threadid.ID
+		split      bool
 	)
 	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
 		var err error
@@ -282,6 +284,9 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			return fmt.Errorf("threads: the forum of %s: %w", id, err)
 		}
 		if tags, err = dq.ThreadTags(ctx, int64(id)); err != nil {
+			return err
+		}
+		if splitFrom, split, err = splitSource(ctx, dq, id); err != nil {
 			return err
 		}
 		if !v.Member() {
@@ -312,6 +317,14 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	})
 	if err != nil {
 		return Result{}, err
+	}
+	// The header is never cached, and the ETag hashes it, so the link back
+	// is drawn for v here (TKT-01M29CYSAM).
+	var splitHeader *dto.SplitFrom
+	if split {
+		if splitHeader, err = s.drawSplitFrom(ctx, v, splitFrom); err != nil {
+			return Result{}, err
+		}
 	}
 	// Access came first, so a thread hidden from v is not-found whatever
 	// the lens says (docs/07 "Access"). The lens resolves after the viewer's
@@ -425,6 +438,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
+		res.Body.Thread.SplitFrom = splitHeader
 		lensKey := ""
 		if rl != nil {
 			// Page and total_pages count the lens's posts (docs/07).
@@ -602,11 +616,15 @@ func starterOf(ctx context.Context, dq *dbq.Queries, id int64) (dto.Author, erro
 
 // posts reads, renders and assembles the page's posts for a, reading the
 // revisions the snapshot names rather than whatever the index holds by now.
-// A removed post carries its body only where revealRemoved says so.
+// A removed post carries its body only where revealRemoved says so. Moved
+// posts say where they went as drawMoves draws it for a.
 func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
 	users map[int64]dto.Author, q Query, a access) ([]dto.Post, error) {
 	out, _, err := s.postsDeps(ctx, th, id, snap, users, q, a)
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	return out, s.drawMoves(ctx, a, id, out)
 }
 
 // postsDeps is posts, also returning what the HTML was drawn against: every
@@ -677,6 +695,9 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 				threadlog.EntryMoved) != 0,
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
 			Redacted:        p.Flags.Has(threadlog.EntryRedacted),
+			// Where it went is drawn per viewer by drawMoves, after the
+			// posts are taken from the cache (TKT-01M29CYSAM).
+			Moved: p.Flags.Has(threadlog.EntryMoved),
 		}
 		// A hard-redacted post is deleted above, and removal names who took
 		// it down: the moderator's, as an admin redacted it, or the

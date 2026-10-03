@@ -582,6 +582,15 @@ type Querier interface {
 	MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsParams) ([]int64, error)
 	// The move row of a copy, by where it landed.
 	MoveOfCopy(ctx context.Context, arg MoveOfCopyParams) (MoveOfCopyRow, error)
+	// The move rows of source_thread_id's posts first through last: where each
+	// moved post on a page went, which the page resolves for its viewer when it
+	// is drawn (TKT-01M29CYSAM). target_ordinal is null until the copy is
+	// projected.
+	MovesFromRange(ctx context.Context, arg MovesFromRangeParams) ([]MovesFromRangeRow, error)
+	// Each move out of source_thread_id the source has projected, by its
+	// PostsSplitOut's offset: how many posts it moved and the first of them,
+	// where the source draws its notice.
+	MovesOutOf(ctx context.Context, sourceThreadID int64) ([]MovesOutOfRow, error)
 	// The source ordinals of source_thread_id's move rows whose source
 	// revision is not known yet: the target was projected first.
 	MovesWithoutSourceRevision(ctx context.Context, sourceThreadID int64) ([]int64, error)
@@ -797,6 +806,9 @@ type Querier interface {
 	// suspension's reason never outlives it, and counts the change in
 	// status_version.
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) error
+	// The thread a split opened thread_id from: the source of its post 1, when
+	// that post is the copy a split wrote first.
+	SplitSourceOf(ctx context.Context, targetThreadID int64) (int64, error)
 	// SweepSessions deletes every session LookupSession would refuse: the exact
 	// complement of its liveness test. internal/auth/session binds both cutoffs
 	// from session.ExpiredBefore, so the sweeper deletes nothing a lookup at the

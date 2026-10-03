@@ -60,10 +60,13 @@ func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id thre
 		// fail the page (review 392).
 		return quotesCurrent(d.Quotes, resolver) && handles.current(d.Handles) && handles.err == nil
 	}
+	// Where moved posts went is drawn for this viewer after the posts are
+	// taken or stored, so the cached posts never hold it: whether a viewer
+	// may read another thread is not in the key (drawMoves).
 	if body, ok := s.Responses.Get(key, current); ok {
 		var out []dto.Post
 		if err := json.Unmarshal(body, &out); err == nil && out != nil {
-			return out, nil
+			return out, s.drawMoves(ctx, a, id, out)
 		}
 	}
 	out, deps, err := s.postsDeps(ctx, th, id, snap, authors, q, a)
@@ -73,7 +76,7 @@ func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id thre
 	if body, err := json.Marshal(out); err == nil {
 		s.Responses.Put(key, body, deps)
 	}
-	return out, nil
+	return out, s.drawMoves(ctx, a, id, out)
 }
 
 // authorsDigest hashes the authors' rows as the posts draw them, in user id

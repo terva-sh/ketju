@@ -26,7 +26,8 @@
       "meta",
       "tools"
     ],
-    "created_at": 1757500100000
+    "created_at": 1757500100000,
+    "split_from": null
   },
   "page": {
     "number": 1,
@@ -74,7 +75,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     },
     {
@@ -99,7 +102,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": true
     },
     {
@@ -124,7 +129,9 @@
       "deleted": true,
       "removal": "author",
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     },
     {
@@ -149,7 +156,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     },
     {
@@ -174,7 +183,9 @@
       "deleted": true,
       "removal": "moderator",
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     }
   ]
