@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-301 tickets: 12 epics and 289 children. Every ticket derived from the design
+303 tickets: 12 epics and 291 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
@@ -45,7 +45,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 46 in
-Phase 3, 33 in Phase 4, 1 in Phase 5, 2 filed as later, and 25 carrying no
+Phase 3, 34 in Phase 4, 1 in Phase 5, 2 filed as later, and 26 carrying no
 milestone. Phase 3 grew from 21 on 2026-10-01, when its run (docs/14) pulled
 the settings pair forward from Phase 4, filed the profile screen, the exit
 check and its tracking ticket, and placed ten unplaced drafts. Its grooming
@@ -64,8 +64,8 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-272 done, 4 ready, 2 blocked, 17 draft, 6 archived (counted 2026-10-03 with
-`git ticket list --all --json`).
+280 done, 4 ready, 3 blocked, 10 draft, 6 archived (counted 2026-10-03, at
+the Phase 4 run's close, with `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
 frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
@@ -287,17 +287,16 @@ The Phase 1 tracking ticket stays open until the last three Phase 1 epics
 close: the database epic waits on the ncruces report, the client epic on
 the real-device check and the / shortcut, and operations on Phase 4.
 
-By 2026-10-03 Phase 4 carries 33 tickets, 25 of them done. Its lanes filed
-six: the tags, archive and avatar client tickets, the publishing ticket, the
-unarchive spike and the backlinks client ticket.
-The run placed two CI flakes in it (`TKT-01M3ZE2211`, `TKT-01M3Z50NKE`)
-because the exit check needs reliable green CI. Every server ticket has
-merged. The eight open are split, merge and reply as a new thread, profile
-editing, the upload bound and avatars, which wait their turn on the committed
-client, then the exit check and the tracking ticket. The quote-backlinks and
-served-goldens tickets met the render and API epics' unticked criteria, which
-the run ticked after close; the API epic keeps only form posts unticked, for
-Phase 5.
+By its close on 2026-10-03 Phase 4 carries 34 tickets, and 33 are done. Its
+lanes filed six: the tags, archive and avatar client tickets, the publishing
+ticket, the unarchive spike and the backlinks client ticket. The run placed
+two CI flakes in it (`TKT-01M3ZE2211`, `TKT-01M3Z50NKE`), and the exit check
+filed a contrast bug (`TKT-01M40PCE7P`). The exit check `TKT-01M3YMG0NX`
+merged in #404. The tracking ticket `TKT-01M3YMG0M1` is blocked on the
+maintainer's tag, as `docs/releases/v1.0-checklist.md` part 3 says. The
+quote-backlinks, served-goldens and archive work met the render, API and
+archival tickets' unticked criteria, which the run ticked after close. The
+API epic keeps only form posts unticked, for Phase 5.
 
 ## The critical path
 

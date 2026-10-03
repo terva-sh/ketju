@@ -31,12 +31,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-03T01:59:26Z
+updated_at: 2026-10-03T15:25:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-run-cxjzz
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -56,7 +56,7 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
 - [x] Projections for both threads are correct after replay from logs alone
 - [x] PostsSplitOut and PostsMergedIn bodies match docs/03's fields, with key names pinned by a golden test, and both types stay advisory at 20 and 21
 - [x] A move between forums is refused unless the actor holds moderate in both, by role or through a group, and a refusal writes nothing (TestMoveNeedsModerateInBoth)
-- [ ] A moved post is served under the target forum's rules and by no other path: the TestMovedPost* tests cover the page, post, replies, history, search, notifications, blobs, user posts, quotes, the moderator queue and live events
+- [x] A moved post is served under the target forum's rules and by no other path: the TestMovedPost* tests cover the page, post, replies, history, search, notifications, blobs, user posts, quotes, the moderator queue and live events
 - [x] A move into or out of an archived thread is refused, moderators and admins included (TestMoveRefusesArchived)
 - [x] ketju fsck passes a data directory holding an unfinished move and reports it as a warning; ketju redact refuses while a move is unfinished
 - [x] docs/03's index table and flags.go assign bit 8 (copied), and docs/04 and audit.Actions list posts.moved
@@ -431,6 +431,10 @@ A post replies only to an earlier post, and the service's Edits carry the post's
 docs/03 says this. The tests:
 - `TestFinishAfterATargetPostKeepsReplies`: a cut run, then an ordinary post in the target, then the finish. The second copy still replies to the first copy.
 - `TestCopyDropsAForwardReply`.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T15:25:23Z
+
+Criterion 6 met after close, 2026-10-03. The three paths the merged tests lacked are covered on main: TestMovedPostBlobFollowsTarget, TestMovedPostQueueServesNoBody and TestMovedPostSSEHintOnly (TKT-01M29CYSAM, PR #397), and TestPhase4ExitMovedPostsFollowTheTargetForum through the real serve (TKT-01M3YMG0NX, PR #404): the moved blob and thumbnail answer 404 to a reader of the source alone, the queue and moderator lens carry no moved body, and a source-only live stream gets no hint naming the target.
 
 ## Summary
 
