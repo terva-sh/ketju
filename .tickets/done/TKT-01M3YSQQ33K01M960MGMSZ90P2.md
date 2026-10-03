@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T07:02:12Z
+updated_at: 2026-10-03T07:13:53Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -167,6 +167,20 @@ Terva review 2051 (run fb1380d2, Actions #2673), on head 03c8749a and base 5469a
 - **Test.** ThreadScreen.test, "an archived thread offers its author no Rename inside the window". Reverting the fix fails it.
 
 The reader bundle is now 83347 B, which is +317 B over main's 83030 B.
+
+**agent:claude-code/phase4-run-SQQ33** at 2026-10-03T07:13:53Z
+
+Terva review 2053 (run 75f2b13c, Actions #2675), on head 16a7506a and base 5469a729, raised one medium finding. Fixed. The same review marked 2051's finding resolved.
+
+- **Finding.** A flag dialog opened before the thread was archived stayed open, and its Send still posted, after the archived header arrived.
+- **Fix.** The dialog renders only while the thread is not archived, so it goes with the flag buttons.
+- **The other open controls.** I checked them, and they already handle the archive:
+  - An open post editor or delete confirmation says the offer was withdrawn (OwnControls reads the offer, which `readOnlyViewer` empties).
+  - The composer and the phone sheet go with `can_reply`.
+  - A moderation panel already open shows Close, because `offered` follows `mayModerate`.
+- **Test.** ThreadScreen.test, "withdraws an open flag dialog when the thread is archived". Reverting the fix fails it.
+
+The reader bundle is now 83350 B, which is +320 B over main's 83030 B.
 
 ## Summary
 
