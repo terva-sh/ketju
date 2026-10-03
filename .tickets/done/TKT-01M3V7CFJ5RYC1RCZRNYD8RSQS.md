@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V7CFJ5RYC1RCZRNYD8RSQS
 title: Move focus into layout effects in the admin and apply screens
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -19,17 +19,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-7CFJ5
-  branch: run/7cfj5-layout-focus
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
-  commit: 74105a52c1f7a62b9832ad83ab1134b8615b1e57
-  session: null
-  claimed_at: 2026-10-02T23:47:17Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:55:39Z
-updated_at: 2026-10-03T00:13:30Z
+updated_at: 2026-10-03T03:44:49Z
 created_by:
   id: agent:claude-code/phase3-groom-polish
   name: ""
@@ -60,10 +53,10 @@ For each one, check whether a key pressed before the frame can act on the wrong 
 
 ## Acceptance criteria
 
-- [ ] Each listed component is checked, and every one where a key pressed before the frame acts on the wrong control moves its focus into a useLayoutEffect, with a Vitest case that fails before the change
-- [ ] The PR lists each of the eight components with its Vitest case and whether the case failed on main, and a ticket note says why each component left on useEffect is safe
-- [ ] The admin-agents, admin-suspension, admin-applications, admin-forms, admin-rename and apply e2e specs pass at 390 px and 1440 px, with one axe scan per test
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the change to the counted chunks
+- [x] Each listed component is checked, and every one where a key pressed before the frame acts on the wrong control moves its focus into a useLayoutEffect, with a Vitest case that fails before the change
+- [x] The PR lists each of the eight components with its Vitest case and whether the case failed on main, and a ticket note says why each component left on useEffect is safe
+- [x] The admin-agents, admin-suspension, admin-applications, admin-forms, admin-rename and apply e2e specs pass at 390 px and 1440 px, with one axe scan per test
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the change to the counted chunks
 
 ## Implementation plan
 
@@ -169,3 +162,16 @@ Reverting `FormEditor`'s version-heading effect alone to useEffect fails its cas
 The admin-agents, admin-suspension, admin-applications, admin-forms, admin-rename and apply specs pass at 390 and 1440 px (62 tests). Five serial tests in admin-agents and admin-forms had no axe scan of their own and now scan their state.
 
 Reader bundle 79983 B to 79979 B gzip (−4 B; ApplyRoot −11 B).
+
+## Summary
+
+Built on run/7cfj5-layout-focus, rebased onto main at 88b12b35.
+
+Seven of the eight components move their focus into useLayoutEffect, each with a Vitest case that fails on main: ConfirmButton, SuspensionPanel, NewAgentForm, UsersScreen (all three of its focus effects), ApplicationDetail, FormEditor and FormView. AgentPanel's TokenPanel stays on useEffect. Its case passes on main, because the re-render in the same task flushes the pending effect. The per-component note says what each case showed on main.
+
+The cases use `testing.tsx`'s new `pressRaw` and `raceSettle`, which press a key one microtask after the action, outside act. Each admin-agents and admin-forms e2e test gains an axe scan, so all six specs run one per test.
+
+Results:
+- The six specs pass at 390 and 1440 px.
+- Vitest passes (2632 tests), and so does `go test -race -p 4 ./...`.
+- The reader bundle goes from 81492 B to 81483 B. Of the counted chunks, index.js grows 63704 B → 63707 B and ApplyRoot.js shrinks 5209 B → 5197 B.
