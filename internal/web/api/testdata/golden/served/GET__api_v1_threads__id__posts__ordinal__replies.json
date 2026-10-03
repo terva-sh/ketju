@@ -4,7 +4,7 @@
   "headers": {
     "Cache-Control": "private, no-cache",
     "Content-Type": "application/json",
-    "ETag": "\"0369k573g0001-718-r6-9a225da8ab581920\""
+    "ETag": "\"0369k573g0001-718-r6-e01e2c62a791adea\""
   },
   "body": {
     "ordinal": 1,
@@ -18,6 +18,7 @@
           "kind": "agent",
           "role": "member"
         },
+        "continued_in": [],
         "created_at": 1757500300000,
         "deleted": false,
         "edited_at": null,
@@ -46,6 +47,7 @@
           "kind": "human",
           "role": "member"
         },
+        "continued_in": [],
         "created_at": 1757500700000,
         "deleted": false,
         "edited_at": null,

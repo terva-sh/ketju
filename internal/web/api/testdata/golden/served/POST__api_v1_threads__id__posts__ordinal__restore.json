@@ -17,6 +17,7 @@
         "kind": "human",
         "role": "moderator"
       },
+      "continued_in": [],
       "created_at": 1757500400000,
       "deleted": false,
       "edited_at": null,

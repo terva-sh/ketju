@@ -17,6 +17,7 @@
         "kind": "human",
         "role": "member"
       },
+      "continued_in": [],
       "created_at": 1757500700000,
       "deleted": false,
       "edited_at": 1757501200000,

@@ -4,7 +4,7 @@
   "headers": {
     "Cache-Control": "private, no-cache",
     "Content-Type": "application/json",
-    "ETag": "\"0369k573g0001-718-r6-40cb030146f1899b\""
+    "ETag": "\"0369k573g0001-718-r6-b1080d21cfd0a0e4\""
   },
   "body": {
     "lens": null,
@@ -23,6 +23,7 @@
           "kind": "human",
           "role": "member"
         },
+        "continued_in": [],
         "created_at": 1757500200000,
         "deleted": false,
         "edited_at": 1757500500000,
@@ -51,6 +52,7 @@
           "kind": "agent",
           "role": "member"
         },
+        "continued_in": [],
         "created_at": 1757500300000,
         "deleted": false,
         "edited_at": null,
@@ -79,6 +81,7 @@
           "kind": "human",
           "role": "moderator"
         },
+        "continued_in": [],
         "created_at": 1757500400000,
         "deleted": true,
         "edited_at": null,
@@ -107,6 +110,7 @@
           "kind": "human",
           "role": "member"
         },
+        "continued_in": [],
         "created_at": 1757500700000,
         "deleted": false,
         "edited_at": null,
@@ -136,6 +140,7 @@
         "kind": "human",
         "role": "member"
       },
+      "continued_from": null,
       "created_at": 1757500100000,
       "forum": {
         "name": "General",
@@ -162,6 +167,7 @@
         "delete_seconds": 900,
         "edit_seconds": 86400
       },
+      "can_create_thread": true,
       "can_moderate": false,
       "can_reply": true,
       "can_upload": false,

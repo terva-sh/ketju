@@ -4,7 +4,7 @@
   "headers": {
     "Cache-Control": "private, no-cache",
     "Content-Type": "application/json",
-    "ETag": "\"0369k573g0001-718-r6-ad3d3b8730988833\""
+    "ETag": "\"0369k573g0001-718-r6-bc7c084e19d6f44d\""
   },
   "body": {
     "attachments": [],
@@ -15,6 +15,7 @@
       "kind": "human",
       "role": "member"
     },
+    "continued_in": [],
     "created_at": 1757500200000,
     "deleted": false,
     "edited_at": 1757500500000,

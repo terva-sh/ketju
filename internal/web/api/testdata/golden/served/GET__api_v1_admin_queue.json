@@ -36,6 +36,7 @@
               "kind": "human",
               "role": "member"
             },
+            "continued_in": [],
             "created_at": 1757500200000,
             "deleted": false,
             "edited_at": 1757500500000,

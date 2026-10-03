@@ -15,6 +15,7 @@
         "kind": "human",
         "role": "member"
       },
+      "continued_from": null,
       "created_at": 1757500100000,
       "forum": {
         "name": "General",
@@ -45,6 +46,7 @@
         "kind": "human",
         "role": "moderator"
       },
+      "continued_from": null,
       "created_at": 1757501200000,
       "forum": {
         "name": "General",
