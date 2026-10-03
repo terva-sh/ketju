@@ -20,9 +20,10 @@ import { stateFile } from './session';
 // Writes go only into threads each test starts in site-feedback, through
 // the API, titled with the project and the time, and into the threads a
 // split makes from them. The reveal-rule test splits into the seeded
-// restricted moderators forum, which alice cannot read and mona can; no
-// other spec reads that forum's row or list as mona or ada, so the seed is
-// unchanged.
+// restricted moderators forum, which alice cannot read and mona can: the
+// seed gives the moderators group read there, with mona in it
+// (cmd/ketju/e2e.go). No other spec reads that forum's row or list as mona
+// or ada.
 
 test.use({ storageState: stateFile('alice') });
 
