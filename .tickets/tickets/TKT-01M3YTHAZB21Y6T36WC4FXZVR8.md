@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YTHAZB21Y6T36WC4FXZVR8
 title: Show who quoted a post on the thread page
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-thazb
+  branch: run/thazb-quoted-by
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae0919645aa3f5e55
+  commit: bb6faf740f9d86ddce3e467d62fea3ec387c6ec4
+  session: null
+  claimed_at: 2026-10-03T00:58:41Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T17:28:04Z
-updated_at: 2026-10-02T17:29:05Z
+updated_at: 2026-10-03T00:58:41Z
 created_by:
   id: agent:claude-code/phase4-groom-correctness
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-thazb
   name: ""
 extensions: {}
 ---
