@@ -1303,6 +1303,20 @@ describe('moderating from the thread screen', () => {
     expect(own(root)).toEqual(['unread']);
   });
 
+  // Terva review 2051: an author inside their rename window is offered no
+  // Rename once the header says archived, though the page's viewer block
+  // still carries the window from before the archive.
+  it("an archived thread offers its author no Rename inside the window", async () => {
+    as('member');
+    const window = { can_moderate: false, rename_until: Date.now() + 60_000 };
+    pages = [at({ viewer: window })];
+    let root = await renderAt(`/t/${id}/a`);
+    expect(toolbar(root)).toContain('rename');
+    pages = [at({ thread: { archived: true }, viewer: window })];
+    root = await renderAt(`/t/${id}/a`);
+    expect(toolbar(root)).not.toContain('rename');
+  });
+
   it('a locked and archived thread shows only the archived notice', async () => {
     pages = [at({ thread: { archived: true, locked: true } })];
     const root = await renderAt(`/t/${id}/a`);

@@ -190,7 +190,9 @@ export function ThreadScreen() {
   // (delayUntil). A rename-window-closed answer withdraws it for this thread
   // at once (closedOn), whatever this clock says.
   const renameUntil = history ? null : (shown?.viewer.rename_until ?? null);
-  const windowOpen = renameUntil !== null && Date.now() < renameUntil;
+  // An archived thread takes no rename, whatever window the page's viewer
+  // block still carries from before the archive (Terva review 2051).
+  const windowOpen = !archived && renameUntil !== null && Date.now() < renameUntil;
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!windowOpen) return;
