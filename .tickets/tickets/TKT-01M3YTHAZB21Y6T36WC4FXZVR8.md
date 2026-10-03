@@ -20,6 +20,8 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
+  - ref: pr:394
+    path: null
 claim:
   actor: agent:claude-code/phase4-run-thazb
   branch: run/thazb-quoted-by
@@ -30,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:28:04Z
-updated_at: 2026-10-03T06:13:59Z
+updated_at: 2026-10-03T06:14:27Z
 created_by:
   id: agent:claude-code/phase4-groom-correctness
   name: ""
@@ -51,7 +53,7 @@ Filed 2026-10-02 by the Phase 4 correctness grooming lane, because the client ha
 - [x] A post with a non-empty quoted_by shows 'Quoted by' and one #N link per ordinal, at most ten, then 'and N more'; nothing shows for an empty list or a tombstone; the Post.test.tsx cases pass
 - [x] A backlink scrolls to a quoting post on the page and opens PostPopover for one off it, with focus back on the link after Escape, through the existing a[data-reply-to] delegate; the ThreadScreen.test.tsx cases pass
 - [x] Playwright at 390 px and 1440 px shows the line and opens the popover for an off-page quoting post, with one axe scan per test and no violations
-- [ ] The committed dist is regenerated with go generate ./internal/web/spa and the reader bundle stays within the 120000 B gzip budget, its growth recorded in the PR
+- [x] The committed dist is regenerated with go generate ./internal/web/spa and the reader bundle stays within the 120000 B gzip budget, its growth recorded in the PR
 
 ## Implementation plan
 
