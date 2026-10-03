@@ -29,7 +29,7 @@ for the tag, and on the GitHub mirror's
 and the sums, check them, and install:
 
 ```sh
-VERSION=v1.0
+VERSION=v1.0.0
 ARCH=amd64   # or arm64
 BASE="https://github.com/terva-sh/ketju/releases/download/$VERSION"
 curl -fsSLO "$BASE/ketju_${VERSION}_linux_${ARCH}"
@@ -63,7 +63,7 @@ mkdir data
 cp config.toml data/
 podman unshare chown -R 65532:65532 data
 podman run -d --name ketju -p 8080:8080 -v "$PWD/data:/data" \
-  container.local.sothr.com/terva-sh/ketju:v1.0
+  container.local.sothr.com/terva-sh/ketju:v1.0.0
 ```
 
 Under Docker or rootful Podman, container uids are host uids, so
@@ -71,13 +71,13 @@ Under Docker or rootful Podman, container uids are host uids, so
 line, and the `run` line is the same.
 
 The other commands run the same way, with the command after the image name:
-`podman run --rm container.local.sothr.com/terva-sh/ketju:v1.0 version`.
+`podman run --rm container.local.sothr.com/terva-sh/ketju:v1.0.0 version`.
 
 ### Publishing a release
 
 This is the maintainer's: pushing a tag publishes, and an agent never does it
-(docs/15, stop class 3). Pushing a `v*` tag, such as `v1.0` or the
-pre-release `v0.99.0-rc1`, runs `.forgejo/workflows/release.yml`. It:
+(docs/15, stop class 3). Pushing a `v*` tag, such as `v1.0.0` or the
+pre-release `v1.0.0-rc.1`, runs `.forgejo/workflows/release.yml`. It:
 
 1. refuses a tag that is not on `main`, or not `vMAJOR.MINOR[.PATCH][-PRE]`;
 2. builds and checks the binaries with `go run ./tools/release`, as CI's dry
@@ -116,7 +116,7 @@ To release:
    `docs/releases/v1.0-checklist.md`, and finish its release notes.
 2. Push `main` and the tag to the GitHub mirror. The GitHub job waits up to
    30 minutes for the tag there, and refuses it if it names another commit.
-3. Push the tag here: `git push origin v1.0`.
+3. Push the tag here: `git push origin v1.0.0`.
 
 Try it first with a pre-release tag, and check its downloads on a clean
 machine with the commands at the top of this section.
