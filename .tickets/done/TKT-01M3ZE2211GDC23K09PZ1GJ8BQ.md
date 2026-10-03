@@ -16,11 +16,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:386
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T23:09:15Z
-updated_at: 2026-10-03T01:17:57Z
+updated_at: 2026-10-03T01:18:18Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
