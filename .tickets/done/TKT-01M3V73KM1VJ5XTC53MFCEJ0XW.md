@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V73KM1VJ5XTC53MFCEJ0XW
 title: Bound how much one member may upload
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-v73km1
-  branch: run/v73km1-upload-bound
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
-  commit: 2f2f914df101afe6e7a2f4dd9e4c9004319130c5
-  session: null
-  claimed_at: 2026-10-03T04:07:17Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:50:48Z
-updated_at: 2026-10-03T04:18:22Z
+updated_at: 2026-10-03T11:33:46Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -55,7 +48,7 @@ Found while grooming TKT-01M29CXK0K (Build the content-addressed blob store and 
 - [x] limits.unattached_upload_mb defaults to 100, reads KETJU_LIMITS_UNATTACHED_UPLOAD_MB, and ketju config check refuses a value below limits.attachment_mb (validate tests; docs/02 and docs/07 rows)
 - [x] The query uses a partial index on blobs (uploaded_by) where refcount = 0, in a migration with the next free number, and a test reads its plan
 - [x] The composer shows the upload_budget words (Composer.test.tsx), and e2e/attachments.spec.ts passes at 390 px and 1440 px with one axe scan per test
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 - [x] Through the HTTP handler, an account at the bound is refused new bytes and gets 201 for bytes the server already holds (TestUploadBudgetOverHTTP)
 
 ## Implementation plan
@@ -156,3 +149,16 @@ The plan says the key defaults to 100. It defaults to max(100, limits.attachment
 
 ### Bundle
 go generate ./internal/web/spa then npm run budget: reader 81492 B before, 81554 B after (+62 B gzip), within 120000 B. The generated dist was restored, not committed.
+
+**agent:claude-code/phase4-run-v73km1** at 2026-10-03T11:33:46Z
+
+Phase B on run/v73km1-upload-bound, rebased onto origin/main b4b70d6d.
+
+- Migration renumbered to 0028_blobs_uploader_unreferenced: 0027 went to thread_continuations (#397) while this ticket waited. docs/07 names 0028. Rechecked at push: 0027 is still main's newest.
+- GET /api/v1/admin/settings served golden (#390) gains limits.unattached_upload_mb, since that response lists every restart-only key. Rewritten with -update; no route was added, so no new served case.
+- Dist regenerated and committed. npm run budget: reader 91435 B on main, 91501 B here (+66 B gzip), within 120000 B.
+- Tests: go vet; go test -race -p 4 ./internal/... ./tools/... and ./cmd/ketju green; tsc; vitest 100 files, 2812 tests; e2e/attachments.spec.ts at 390 px and 1440 px, 10 passed.
+
+## Summary
+
+Each account's stored-but-unposted bytes are now bounded by limits.unattached_upload_mb (KETJU_LIMITS_UNATTACHED_UPLOAD_MB). When the key is absent it defaults to max(100, limits.attachment_mb), and ketju config check refuses an explicit value below attachment_mb or above 1<<20. blobs.Service.Upload checks the bound once, inside the write that stores new bytes, after hashing. Going over it is validation-failed {file, upload_budget}, and the staged file is removed. Re-uploading stored bytes is never refused. The sum is read through the partial index blobs_uploader_unreferenced (migration 0028), and a test reads that plan. The composer shows the refusal in plain words. docs/02 and docs/07 carry the rows and the decision, including the default departure and the alternatives that lost. Reader +66 B gzip (91501 B).
