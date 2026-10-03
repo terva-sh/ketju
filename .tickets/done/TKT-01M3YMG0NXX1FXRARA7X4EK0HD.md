@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YMG0NXX1FXRARA7X4EK0HD
 title: Check Phase 4's exit criterion and prepare the v1.0 release
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -51,17 +51,10 @@ references:
     path: null
   - ref: pr:404
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-mg0nx
-  branch: run/mg0nx-phase4-exit
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a09ced2aaf4c2bc25
-  commit: 502e87826ec5e486a454e267db5fdce45866285b
-  session: null
-  claimed_at: 2026-10-03T13:08:12Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T14:18:47Z
+updated_at: 2026-10-03T14:52:02Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -92,14 +85,14 @@ Each browser test runs at 390 and 1440 px with one axe scan. The server invarian
 
 ## Acceptance criteria
 
-- [ ] e2e/phase4-exit.spec.ts holds the plan's seven named tests (split, merge, the reveal rule, reply as a new thread, tags, archive, quote backlinks), each passing in the phone (390 px) and desktop (1440 px) projects with one axe scan per test, and no spec added here calls /auth/* (e2e/session.ts unchanged)
-- [ ] cmd/ketju/phase4_exit_test.go holds the plan's eight TestPhase4Exit tests, a Build and Test step 'Phase 4 exit tests, by name' runs go test -race ./cmd/ketju/ -run '^TestPhase4Exit' -count=1 -v, and the PR quotes from the merged head's step logs every TestPhase4Exit line, every phase4-exit.spec.ts line in both projects, and the npm run budget line within 120000 B gzip
-- [ ] Through the real serve, TestPhase4ExitMovesNeedModerateInBoth, TestPhase4ExitMovedPostsFollowTheTargetForum and TestPhase4ExitNoticesNameOnlyWhatTheViewerMayRead prove docs/15's move rule: an admin and a moderator by group grant in both forums may move; a moderator of only the source or only the target is refused with both logs byte-identical; a viewer of only the source, only the target, or neither is served exactly what the target forum's rules allow by every path the plan lists
-- [ ] TestPhase4ExitArchivedThreadIsReadOnlyToEveryone proves every write from the author, a member, moderators by role and by group, an admin and an agent is refused on an archived thread and its log does not grow, also after a restart; TestPhase4ExitBackupRestoresAndPassesFsck proves a ketju backup taken while serve takes posts, of a data directory holding every Phase 4 record, restores, passes ketju fsck with exit 0, and serves the same pages before and after a reindex
-- [ ] A ticket note records TestPhase4Exit*'s time and cmd/ketju's package time under -race locally, and the PR quotes cmd/ketju's time from the merged head's race step; if it is over 900 s the ticket is blocked for the maintainer instead of the step or the package being changed
-- [ ] Every other phase-4 ticket except the tracking ticket TKT-01M3YMG0M1 and TKT-01M3YSVEDJ is done or archived before this one closes, and TKT-01M3YSVEDJ's release.yml has merged, its tag-dependent criteria named in the checklist's maintainer steps
-- [ ] docs/releases/v1.0-checklist.md, linked from docs/releases/v1.0.md, holds the evidence with its run links; every Phase 4 run decision pending maintainer review, recorded disagreement, carried requirement and unticked criterion, each with its document or ticket and the command that finds them; the advisory move records on rollback; and the maintainer's steps (secrets, a pre-release tag and its verification, then the v1.0 tag)
-- [ ] The release dry run step is green on the merged head and the PR quotes its lines naming both binaries and the verified SHA256SUMS; the run pushes no tag, creates no secret and runs no publishing job
+- [x] e2e/phase4-exit.spec.ts holds the plan's seven named tests (split, merge, the reveal rule, reply as a new thread, tags, archive, quote backlinks), each passing in the phone (390 px) and desktop (1440 px) projects with one axe scan per test, and no spec added here calls /auth/* (e2e/session.ts unchanged)
+- [x] cmd/ketju/phase4_exit_test.go holds the plan's eight TestPhase4Exit tests, a Build and Test step 'Phase 4 exit tests, by name' runs go test -race ./cmd/ketju/ -run '^TestPhase4Exit' -count=1 -v, and the PR quotes from the merged head's step logs every TestPhase4Exit line, every phase4-exit.spec.ts line in both projects, and the npm run budget line within 120000 B gzip
+- [x] Through the real serve, TestPhase4ExitMovesNeedModerateInBoth, TestPhase4ExitMovedPostsFollowTheTargetForum and TestPhase4ExitNoticesNameOnlyWhatTheViewerMayRead prove docs/15's move rule: an admin and a moderator by group grant in both forums may move; a moderator of only the source or only the target is refused with both logs byte-identical; a viewer of only the source, only the target, or neither is served exactly what the target forum's rules allow by every path the plan lists
+- [x] TestPhase4ExitArchivedThreadIsReadOnlyToEveryone proves every write from the author, a member, moderators by role and by group, an admin and an agent is refused on an archived thread and its log does not grow, also after a restart; TestPhase4ExitBackupRestoresAndPassesFsck proves a ketju backup taken while serve takes posts, of a data directory holding every Phase 4 record, restores, passes ketju fsck with exit 0, and serves the same pages before and after a reindex
+- [x] A ticket note records TestPhase4Exit*'s time and cmd/ketju's package time under -race locally, and the PR quotes cmd/ketju's time from the merged head's race step; if it is over 900 s the ticket is blocked for the maintainer instead of the step or the package being changed
+- [x] Every other phase-4 ticket except the tracking ticket TKT-01M3YMG0M1 and TKT-01M3YSVEDJ is done or archived before this one closes, and TKT-01M3YSVEDJ's release.yml has merged, its tag-dependent criteria named in the checklist's maintainer steps
+- [x] docs/releases/v1.0-checklist.md, linked from docs/releases/v1.0.md, holds the evidence with its run links; every Phase 4 run decision pending maintainer review, recorded disagreement, carried requirement and unticked criterion, each with its document or ticket and the command that finds them; the advisory move records on rollback; and the maintainer's steps (secrets, a pre-release tag and its verification, then the v1.0 tag)
+- [x] The release dry run step is green on the merged head and the PR quotes its lines naming both binaries and the verified SHA256SUMS; the run pushes no tag, creates no secret and runs no publishing job
 
 ## Implementation plan
 
@@ -356,3 +349,63 @@ Terva review 2064 (PR #404, head 78dbef2b, base c7fec0e8): one medium, 'Keep the
 **agent:claude-code/phase4-run-mg0nx** at 2026-10-03T14:18:47Z
 
 CI run 2739 (head fa764e2e) failed in the race step: TestPhase4ExitMovedPostsFollowTheTargetForum read #3's quoted_by as [] before the move, want [4]. quoted_by is the projection's and follows the event bus; the test waited only for gail's mention, which #2 raises, and #4 is written after it. A flake in the test, not the product. Fixed by waiting (eventually, 20 s) for both quoted_by values before the move, and for #1's to empty for gail and kim after it. 15 repeated -race runs of TestPhase4Exit pass locally (235.6 s). In that failed run cmd/ketju took 465.3 s under -race against 257.4 s in run 2737 on 78dbef2b; the runner varies, and both are under 900 s.
+
+## Summary
+
+Phase 4's exit check is in place, and the v1.0 checklist is written. PR #404 holds both.
+
+### Tests
+
+- `cmd/ketju/phase4_exit_test.go` holds the plan's eight TestPhase4Exit tests.
+  - They drive the real serve.
+  - Each actor uses its own loopback address, so the per-address write limit stays out of the way.
+- The Build and Test step "Phase 4 exit tests, by name" runs them.
+- `web/client/e2e/phase4-exit.spec.ts` holds the seven named browser tests.
+  - Each makes one axe scan and runs at 390 px and 1440 px.
+  - None calls /auth/*.
+- e2e.go's seed now gives mona read on the moderators forum.
+
+### Mutations caught
+
+Each of these mutations was caught:
+
+- a move that skips the target forum's moderate check;
+- moved_to filled without the read check;
+- a moved post's blob served;
+- the actor seal lapsing on reopen;
+- an online backup copying logs whole;
+- /metrics served on the main listener;
+- the avatar member check removed.
+
+### Deviations, with reasons in the notes
+
+- gail is refused a split into annex with not-found, because she cannot read annex.
+- The notices test merges both ways.
+- quoted_by is read with `eventually`, because it follows the event bus (CI run 2739).
+
+### Times
+
+- CI run 2741, on e36d8918, the last code change:
+  - cmd/ketju took 362.2 s under -race, under the 900 s limit;
+  - the exit step took 26 s.
+- Locally, all eight tests take about 20 s, and cmd/ketju took 243 s.
+
+### Also in the PR
+
+- TKT-01M40PCE7P's contrast fix.
+- The regenerated dist. The reader bundle is 92266 B gzip of 120000 in CI.
+
+### Checklist and review
+
+- `docs/releases/v1.0-checklist.md` holds:
+  - the evidence;
+  - the open items, each with the command that finds it;
+  - the maintainer's steps.
+- Terva review 2064 had one medium finding, a gap in the backup test. Commit fa764e2e fixed it.
+- The PR quotes the step-log lines from its merged head.
+
+### Left to the maintainer
+
+- The tag.
+- The four release secrets.
+- TKT-01M3YSVEDJ's criteria 1, 2 and 5.
