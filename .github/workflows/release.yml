@@ -1,0 +1,326 @@
+# Publish the public release when a v* tag reaches the GitHub mirror
+# (TKT-01M41WY0FE).
+#
+# The twin of .forgejo/workflows/release.yml, in the terva-sh organization's
+# pattern (git-ticket, lampi): both fire on the same tag, one on each forge,
+# and neither reaches into the other. This one publishes the GitHub release
+# and the image on ghcr.io, the one registry. The maintainer starts it by
+# pushing main and the tag to the mirror (README "Publishing a release"). It
+# is the same maintainer grant beyond docs/12 "Changing CI" as its twin, for
+# these two files only (docs/15 "Decided by the maintainer").
+#
+# Two jobs:
+#   release  builds the binaries with tools/release, as CI's dry run and the
+#            Forgejo twin do, publishes them with SHA256SUMS as a GitHub
+#            release, and downloads them anonymously to check them.
+#   image    builds the scratch image from the published files for linux/amd64
+#            and linux/arm64, pushes it to ghcr.io/terva-sh/ketju, and pulls
+#            each platform back to check its version and uid.
+#
+# It needs no secret of its own: both jobs use the GITHUB_TOKEN Actions
+# provides, with the permissions each job names.
+#
+# Every job carries `if: github.server_url == 'https://github.com'`. Forgejo
+# Actions runs .github/workflows too and reports the same owner and name, so
+# only the server tells them apart. Without the guard the Forgejo runner would
+# fail resolving these actions and race its twin to publish the same tag.
+#
+# Every value reaches a script through `env:`, never as an expression pasted
+# into it, and no step runs with `set -x`; the Forgejo twin says why. gh reads
+# its token from GH_TOKEN in the environment, never from a command line.
+#
+# A rerun is safe. A release that already exists is reused, an asset already
+# uploaded is kept if its bytes are the ones just built, and the run fails if
+# they are not. An image already pushed for the version is kept, and nothing
+# is pushed over it.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, check and publish to GitHub
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@v4
+        with:
+          # Every branch, so the tag can be checked against main.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Check the tag
+        id: tag
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          TAG="${REF#refs/tags/}"
+          # The same rule as the Forgejo twin.
+          if ! printf '%s\n' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::tag ${TAG} is not vMAJOR.MINOR[.PATCH][-PRERELEASE]"
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "${SHA}" ]; then
+            echo "::error::the checkout is $(git rev-parse HEAD), not the tagged ${SHA}"
+            exit 1
+          fi
+          # A release is cut from main. The mirror's main is pushed with the
+          # tag, so a tag ahead of it means main was not pushed first.
+          if ! git merge-base --is-ancestor "${SHA}" origin/main; then
+            echo "::error::${TAG} (${SHA}) is not on the mirror's main; push main first"
+            exit 1
+          fi
+          case "${TAG}" in
+            *-*) PRERELEASE=true ;;
+            *) PRERELEASE=false ;;
+          esac
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}" >> "${GITHUB_OUTPUT}"
+          echo "Releasing ${TAG} from ${SHA} (pre-release: ${PRERELEASE})"
+
+      - name: Build and check the binaries
+        # The same command as CI's "release dry run" step, with the tag as the
+        # version. It refuses a dirty tree, so its output goes outside the
+        # checkout.
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -eu
+          go run ./tools/release --version "${TAG}" --out "${RUNNER_TEMP}/ketju-release"
+          cd "${RUNNER_TEMP}/ketju-release"
+          sha256sum -c SHA256SUMS
+
+      - name: Publish the GitHub release
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          DIST="${RUNNER_TEMP}/ketju-release"
+          if [ -f "docs/releases/${TAG}.md" ]; then
+            BODY_FILE="docs/releases/${TAG}.md"
+          else
+            BODY_FILE="${RUNNER_TEMP}/ketju-release-body.md"
+            printf 'ketju %s. Release notes are in docs/releases/ at this tag.\n' "${TAG}" > "${BODY_FILE}"
+          fi
+
+          if gh release view "${TAG}" --json tagName >/dev/null 2>"${RUNNER_TEMP}/view.err"; then
+            echo "The release for ${TAG} exists; reusing it."
+          elif grep -qi 'release not found' "${RUNNER_TEMP}/view.err"; then
+            if [ "${PRERELEASE}" = true ]; then PRE=--prerelease; else PRE=--latest; fi
+            gh release create "${TAG}" --verify-tag --title "${TAG}" --notes-file "${BODY_FILE}" "${PRE}"
+          else
+            echo "::error::reading the release for ${TAG} failed"
+            cat "${RUNNER_TEMP}/view.err"
+            exit 1
+          fi
+          HAVE=$(gh release view "${TAG}" --json assets --jq '.assets[].name')
+
+          # Each file SHA256SUMS lists, then SHA256SUMS itself. An asset that
+          # is already there is kept only if its bytes are the ones just built.
+          for name in $(cut -d' ' -f3 "${DIST}/SHA256SUMS") SHA256SUMS; do
+            if printf '%s\n' "${HAVE}" | grep -qxF "${name}"; then
+              EXISTING=$(mktemp -d)
+              gh release download "${TAG}" --pattern "${name}" --dir "${EXISTING}"
+              if ! cmp -s "${EXISTING}/${name}" "${DIST}/${name}"; then
+                echo "::error::${name} is already published on ${TAG} with other bytes; a version is published once"
+                exit 1
+              fi
+              echo "${name} is already published, with the same bytes."
+              continue
+            fi
+            gh release upload "${TAG}" "${DIST}/${name}"
+            echo "Uploaded ${name}."
+          done
+
+      - name: Check the GitHub release as a downloader would
+        # Anonymously, into an empty directory: what someone installing the
+        # release does (README "Installing a release").
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          DIR=$(mktemp -d)
+          cd "${DIR}"
+          BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
+          curl -fsSL -o SHA256SUMS "${BASE}/SHA256SUMS"
+          for name in $(cut -d' ' -f3 SHA256SUMS); do
+            curl -fsSL -o "${name}" "${BASE}/${name}"
+          done
+          sha256sum -c SHA256SUMS
+
+  image:
+    name: Build, push and check the image
+    if: github.server_url == 'https://github.com'
+    # A tag whose binaries failed publishes no image either.
+    needs: release
+    runs-on: ubuntu-latest
+    # Replaces the workflow's contents: write for this job alone. Pushing to
+    # ghcr.io needs packages: write; nothing here writes to the repository.
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout the tag
+        # Only the Dockerfile is wanted.
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download and check the GitHub release
+        # The image is built from the published binaries, not from a rebuild.
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          mkdir -p "${RUNNER_TEMP}/ketju-image"
+          cd "${RUNNER_TEMP}/ketju-image"
+          BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
+          curl -fsSL -o SHA256SUMS "${BASE}/SHA256SUMS"
+          for name in $(cut -d' ' -f3 SHA256SUMS); do
+            curl -fsSL -o "${name}" "${BASE}/${name}"
+          done
+          sha256sum -c SHA256SUMS
+          chmod 0755 ketju_*
+
+      - name: Work out the image tags
+        id: tags
+        # As the organization's other images: v1.0.0 publishes 1.0.0, 1.0 and
+        # latest. A pre-release publishes its own version and nothing else, so
+        # no floating tag ever names a release candidate.
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+          PRERELEASE: ${{ needs.release.outputs.prerelease }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          VERSION="${TAG#v}"
+          IMAGE="ghcr.io/${REPOSITORY}"
+          TAGS="${IMAGE}:${VERSION}"
+          if [ "${PRERELEASE}" = false ]; then
+            TAGS="${TAGS},${IMAGE}:${VERSION%.*},${IMAGE}:latest"
+          fi
+          echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tags=${TAGS}" >> "${GITHUB_OUTPUT}"
+          echo "tags: ${TAGS}"
+
+      # The build only copies files for the target platform and needs no
+      # emulator. QEMU is for the check at the end, which runs the arm64 image.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check whether the version is already published
+        # A version's image is published once. A rebuild is not byte-identical
+        # to the image already pushed (timestamps, and the CA bundle of the
+        # day), so if the version is already there a rerun keeps it, pushes
+        # nothing, and does not move the floating tags. Only "not found" counts
+        # as absent, or "denied", which ghcr.io answers for a package that does
+        # not exist yet; a package that exists but this token may not read
+        # would refuse the push too. Any other failure stops the job rather
+        # than risk pushing over a published version.
+        id: published
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+          VERSION: ${{ steps.tags.outputs.version }}
+        run: |
+          set -eu
+          if out=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" 2>&1); then
+            echo "${IMAGE}:${VERSION} is already published and is kept; nothing is pushed."
+            echo "::warning::a rerun does not move the floating tags. If an earlier run stopped"
+            echo "before pushing them, point them at ${VERSION} with docker buildx imagetools create."
+            echo "present=true" >> "${GITHUB_OUTPUT}"
+          elif printf '%s\n' "${out}" | grep -Eqi 'not found|manifest unknown|name unknown|denied'; then
+            echo "present=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::error::could not tell whether ${IMAGE}:${VERSION} is already published:"
+            printf '%s\n' "${out}"
+            exit 1
+          fi
+
+      - name: Build and push
+        if: steps.published.outputs.present == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/ketju-image
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            VERSION=${{ needs.release.outputs.tag }}
+          # image.source is what makes ghcr.io show the package against this
+          # repository and inherit its visibility.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Check each platform as published
+        # A green push is not evidence that what landed in the registry is
+        # what the tag names, so this pulls each platform back and asks it.
+        # Each platform's own manifest is run, because docker run --platform
+        # against the index digest fails in the classic image store.
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+          IMAGE: ${{ steps.tags.outputs.image }}
+          VERSION: ${{ steps.tags.outputs.version }}
+        run: |
+          set -eu
+          INDEX=$(docker buildx imagetools inspect --raw "${IMAGE}:${VERSION}")
+          for platform in linux/amd64 linux/arm64; do
+            MANIFEST=$(printf '%s' "${INDEX}" | jq -r --arg os "${platform%/*}" --arg arch "${platform#*/}" \
+              '.manifests[] | select(.platform.os == $os and .platform.architecture == $arch) | .digest')
+            if [ -z "${MANIFEST}" ]; then
+              echo "::error::${IMAGE}:${VERSION} has no ${platform} manifest"
+              exit 1
+            fi
+            REF="${IMAGE}@${MANIFEST}"
+            docker pull --quiet --platform "${platform}" "${REF}" >/dev/null
+            USER=$(docker image inspect --format '{{.Config.User}}' "${REF}")
+            if [ "${USER}" != "65532:65532" ]; then
+              echo "::error::${platform} runs as '${USER}', want 65532:65532"
+              exit 1
+            fi
+            LINE=$(docker run --rm --platform "${platform}" "${REF}" version)
+            echo "${platform}: ${LINE}"
+            case "${LINE}" in
+              *" ${TAG} (commit "*) ;;
+              *) echo "::error::${platform}'s ketju version does not name ${TAG}"; exit 1 ;;
+            esac
+          done

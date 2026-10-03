@@ -1,16 +1,17 @@
 # The ketju release image (TKT-01M3YSVEDJ): the release binary on scratch,
 # with CA certificates, running as uid 65532, serving from /data.
 #
-# It is built from published release binaries, not from source. The release
-# workflow (.forgejo/workflows/release.yml) downloads a release, checks it
-# against SHA256SUMS, and builds each platform with that directory as the
-# context:
+# It is built from published release binaries, not from source. Each release
+# workflow downloads its forge's release, checks it against SHA256SUMS, and
+# builds with that directory as the context. .github/workflows/release.yml
+# pushes the result to ghcr.io/terva-sh/ketju; .forgejo/workflows/release.yml
+# builds and checks it and pushes nothing (TKT-01M41WY0FE). By hand:
 #
-#   buildah build --platform linux/amd64 --build-arg VERSION=v1.0 \
-#     --file Dockerfile DIR-HOLDING-THE-RELEASE
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     --build-arg VERSION=v1.0.0 --file Dockerfile DIR-HOLDING-THE-RELEASE
 #
-# docker build takes the same arguments. Outside this forge, set
-# CERTS_IMAGE to any Alpine image, such as docker.io/library/alpine:3.22.
+# CERTS_IMAGE is any Alpine image. The Forgejo workflow sets it to the
+# instance's own registry copy, because its runners pull from there.
 #
 # What serve needs from the image (docs/02):
 #   - CA certificates, because OIDC discovery calls the provider over HTTPS;
@@ -19,7 +20,7 @@
 #     as, with config.toml in it (KETJU_CONFIG);
 #   - nothing else: the binary is static, with no C library to load.
 
-ARG CERTS_IMAGE=container.local.sothr.com/library/golang:1.27-alpine
+ARG CERTS_IMAGE=docker.io/library/alpine:3.22
 
 # Runs on the build platform, so building the other platform needs no
 # emulator. It only lays out files.

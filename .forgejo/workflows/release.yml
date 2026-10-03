@@ -1,36 +1,35 @@
-# Publish a release when the maintainer pushes a v* tag (TKT-01M3YSVEDJ).
+# Publish the Forgejo release when the maintainer pushes a v* tag
+# (TKT-01M3YSVEDJ, TKT-01M41WY0FE).
 #
 # This file is a maintainer grant beyond docs/12 "Changing CI", for this file
-# only (docs/15 "Decided by the maintainer", 2026-10-02): a new workflow, a
-# tag trigger, and the write permission an upload needs. It is not a required
+# and its GitHub twin only (docs/15 "Decided by the maintainer"): a tag
+# trigger, and the write permission an upload needs. It is not a required
 # check. Nothing in the repository triggers it, and no agent pushes a tag or
-# creates, reads or tests the secrets it uses (docs/15, stop class 3).
+# creates, reads or tests the secret it uses (docs/15, stop class 3).
 #
-# Three jobs:
+# The release follows the terva-sh organization's pattern (git-ticket, lampi):
+# two twin workflows fire on the same tag, one on each forge, and neither
+# reaches into the other. This one publishes here; .github/workflows/release.yml
+# publishes on the public mirror and pushes the image to ghcr.io. The
+# maintainer pushes main and the tag to the mirror, then the tag here (README
+# "Publishing a release"). Each forge builds for itself, so their SHA256SUMS
+# may differ; each is checked against its own binaries.
+#
+# Two jobs:
 #   forgejo  builds the binaries with tools/release, which makes the same
 #            assertions as the CI dry run (static, CGO_ENABLED=0, no tags, no
 #            cgo dependency, the version and commit stamped), and publishes
 #            them with SHA256SUMS as a release on this Forgejo. It then
 #            downloads the release anonymously and checks it with sha256sum -c.
-#   github   publishes the same files, downloaded from the Forgejo release and
-#            checked, as a release on the public mirror github.com/terva-sh/ketju.
-#   image    builds a scratch image from the same files for linux/amd64 and
-#            linux/arm64, and pushes it to container.local.sothr.com/terva-sh/ketju
-#            as the version, and as `latest` unless the tag is a pre-release.
+#   image    builds the scratch image from the published files for linux/amd64
+#            and linux/arm64, checks each, and runs the native one. It pushes
+#            nothing: ghcr.io is the one registry, and the GitHub twin pushes.
 # v1.0 is not signed (the maintainer's decision).
 #
-# The secrets, which the maintainer creates; the README's "Publishing a
-# release" names them too, and a test keeps the two lists equal:
-#   RELEASE_FORGEJO_TOKEN         a Forgejo token that can create releases on
-#                                 terva-sh/ketju (repository: read and write)
-#   RELEASE_GITHUB_TOKEN          a GitHub fine-grained token for
-#                                 terva-sh/ketju with contents: read and write
-#   CONTAINER_PUSH_REPO_USER      the registry account (a secret, or an Actions
-#                                 variable of the same name)
-#   CONTAINER_PUSH_REPO_PASSWORD  its password, with push access to the
-#                                 terva-sh project on container.local.sothr.com
-# The last two are the names every repository on this instance uses for the
-# registry (terva-action-code-review's container.yml).
+# The one secret, which the README's "Publishing a release" names too, and a
+# test keeps the two lists equal:
+#   BOT_TOKEN  a Forgejo token with write access to this repository; the
+#              organization secret terva-review.yml already uses
 #
 # Every value reaches a script through `env:`, never as an expression pasted
 # into it: an expression is substituted as source before the shell parses it,
@@ -42,9 +41,8 @@
 # "<digest>  <name>", two spaces, and names hold no space.
 #
 # A rerun is safe. A release that already exists is reused, an asset already
-# uploaded is kept if its digest is the one SHA256SUMS lists, and the run fails
-# if it is not: a version is published once, with one set of bytes. An image
-# already pushed for the version is kept, and nothing is pushed over it.
+# uploaded is kept if its bytes are the ones just built, and the run fails if
+# they are not: a version is published once, with one set of bytes.
 name: release
 
 on:
@@ -58,10 +56,6 @@ permissions:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  MIRROR_REPOSITORY: terva-sh/ketju
-  IMAGE: container.local.sothr.com/terva-sh/ketju
 
 jobs:
   forgejo:
@@ -132,13 +126,13 @@ jobs:
           PRERELEASE: ${{ steps.tag.outputs.prerelease }}
           SERVER: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
-          FORGEJO_TOKEN: ${{ secrets.RELEASE_FORGEJO_TOKEN }}
+          FORGEJO_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
           set -eu
           if [ -z "${FORGEJO_TOKEN:-}" ]; then
-            echo "::error::RELEASE_FORGEJO_TOKEN is not available to this repository"
-            echo "It is a Forgejo token that can create releases on ${REPOSITORY}. The README's"
-            echo "\"Publishing a release\" section says what each release secret is."
+            echo "::error::BOT_TOKEN is not available to this repository"
+            echo "It is a Forgejo token with write access to ${REPOSITORY}, the organization"
+            echo "secret terva-review.yml uses. README \"Publishing a release\" says more."
             exit 1
           fi
           API="${SERVER}/api/v1/repos/${REPOSITORY}"
@@ -218,143 +212,8 @@ jobs:
           done
           sha256sum -c SHA256SUMS
 
-  github:
-    name: Publish to the GitHub mirror
-    needs: forgejo
-    runs-on: docker
-    container:
-      image: container.local.sothr.com/library/golang:1.27-alpine
-    steps:
-      - name: Install dependencies
-        run: apk add --no-cache curl jq
-
-      - name: Download and check the Forgejo release
-        env:
-          TAG: ${{ needs.forgejo.outputs.tag }}
-          SERVER: ${{ github.server_url }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -eu
-          mkdir -p /tmp/ketju-release
-          cd /tmp/ketju-release
-          BASE="${SERVER}/${REPOSITORY}/releases/download/${TAG}"
-          curl -fsSL -o SHA256SUMS "${BASE}/SHA256SUMS"
-          for name in $(cut -d' ' -f3 SHA256SUMS); do
-            curl -fsSL -o "${name}" "${BASE}/${name}"
-          done
-          sha256sum -c SHA256SUMS
-          curl -fsSL -o /tmp/forgejo-release.json "${SERVER}/api/v1/repos/${REPOSITORY}/releases/tags/${TAG}"
-
-      - name: Publish the GitHub release
-        env:
-          TAG: ${{ needs.forgejo.outputs.tag }}
-          PRERELEASE: ${{ needs.forgejo.outputs.prerelease }}
-          SHA: ${{ github.sha }}
-          GITHUB_RELEASE_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
-        run: |
-          set -eu
-          if [ -z "${GITHUB_RELEASE_TOKEN:-}" ]; then
-            echo "::error::RELEASE_GITHUB_TOKEN is not available to this repository"
-            echo "It is a GitHub fine-grained token for ${MIRROR_REPOSITORY} with contents: read"
-            echo "and write. The README's \"Publishing a release\" section says what each"
-            echo "release secret is."
-            exit 1
-          fi
-          API="https://api.github.com/repos/${MIRROR_REPOSITORY}"
-          DIST=/tmp/ketju-release
-          gh() {
-            printf 'header = "Authorization: Bearer %s"\n' "${GITHUB_RELEASE_TOKEN}" | curl -sS -K - \
-              -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "$@"
-          }
-
-          # The mirror receives the release commit and the tag by the
-          # maintainer's push (README "The name, and where this lives"), which
-          # may come after this run starts. Wait up to 30 minutes for the tag,
-          # and refuse one that names another commit.
-          found=""
-          for i in $(seq 1 30); do
-            code=$(gh -o /tmp/ref.json -w '%{http_code}' "${API}/git/ref/tags/${TAG}")
-            if [ "${code}" = 200 ]; then found=yes; break; fi
-            echo "The mirror has no tag ${TAG} yet (${code}); waiting a minute (${i}/30)."
-            sleep 60
-          done
-          if [ -z "${found}" ]; then
-            echo "::error::github.com/${MIRROR_REPOSITORY} has no tag ${TAG}"
-            echo "Push main and ${TAG} to the mirror, then rerun this job."
-            exit 1
-          fi
-          OBJ=$(jq -r .object.sha /tmp/ref.json)
-          if [ "$(jq -r .object.type /tmp/ref.json)" = tag ]; then
-            gh -f -o /tmp/tagobj.json "${API}/git/tags/${OBJ}"
-            OBJ=$(jq -r .object.sha /tmp/tagobj.json)
-          fi
-          if [ "${OBJ}" != "${SHA}" ]; then
-            echo "::error::${TAG} on the mirror is ${OBJ}, not ${SHA} as on this forge"
-            exit 1
-          fi
-
-          code=$(gh -o /tmp/release.json -w '%{http_code}' "${API}/releases/tags/${TAG}")
-          case "${code}" in
-            200)
-              echo "The mirror's release for ${TAG} exists; reusing it."
-              ;;
-            404)
-              jq --arg tag "${TAG}" --argjson pre "${PRERELEASE}" \
-                '{tag_name: $tag, name: $tag, body: .body, draft: false, prerelease: $pre}' \
-                /tmp/forgejo-release.json > /tmp/create.json
-              code=$(gh -o /tmp/release.json -w '%{http_code}' -X POST --data @/tmp/create.json "${API}/releases")
-              if [ "${code}" != 201 ]; then
-                echo "::error::creating the mirror's release answered ${code}"
-                cat /tmp/release.json
-                exit 1
-              fi
-              ;;
-            *)
-              echo "::error::reading the mirror's release for ${TAG} answered ${code}"
-              cat /tmp/release.json
-              exit 1
-              ;;
-          esac
-          ID=$(jq -r .id /tmp/release.json)
-
-          for name in $(cut -d' ' -f3 "${DIST}/SHA256SUMS") SHA256SUMS; do
-            url=$(jq -r --arg n "${name}" '.assets[] | select(.name == $n) | .browser_download_url' /tmp/release.json)
-            if [ -n "${url}" ]; then
-              curl -fsSL -o /tmp/existing "${url}"
-              if ! cmp -s /tmp/existing "${DIST}/${name}"; then
-                echo "::error::${name} is already on the mirror's ${TAG} with other bytes; a version is published once"
-                exit 1
-              fi
-              echo "${name} is already on the mirror, with the same bytes."
-              continue
-            fi
-            code=$(gh -o /tmp/asset.json -w '%{http_code}' -X POST -H 'Content-Type: application/octet-stream' \
-              --data-binary "@${DIST}/${name}" \
-              "https://uploads.github.com/repos/${MIRROR_REPOSITORY}/releases/${ID}/assets?name=${name}")
-            if [ "${code}" != 201 ]; then
-              echo "::error::uploading ${name} to the mirror answered ${code}"
-              cat /tmp/asset.json
-              exit 1
-            fi
-            echo "Uploaded ${name} to the mirror."
-          done
-
-      - name: Check the GitHub release as a downloader would
-        env:
-          TAG: ${{ needs.forgejo.outputs.tag }}
-        run: |
-          set -eu
-          DIR=$(mktemp -d)
-          cd "${DIR}"
-          BASE="https://github.com/${MIRROR_REPOSITORY}/releases/download/${TAG}"
-          curl -fsSL -o SHA256SUMS "${BASE}/SHA256SUMS"
-          for name in $(cut -d' ' -f3 SHA256SUMS); do
-            curl -fsSL -o "${name}" "${BASE}/${name}"
-          done
-          sha256sum -c SHA256SUMS
-
   image:
-    name: Build and push the image
+    name: Build and check the image
     needs: forgejo
     runs-on: docker
     container:
@@ -403,6 +262,7 @@ jobs:
             buildah build \
               --platform "linux/${arch}" \
               --build-arg "VERSION=${TAG}" \
+              --build-arg "CERTS_IMAGE=container.local.sothr.com/library/golang:1.27-alpine" \
               --tag "localhost/ketju-release:${TAG}-${arch}" \
               --file Dockerfile \
               /tmp/ketju-image
@@ -433,66 +293,3 @@ jobs:
             *" ${TAG} (commit "*) ;;
             *) echo "::error::the image's ketju version does not name ${TAG}"; exit 1 ;;
           esac
-
-      - name: Log in to the registry
-        env:
-          REGISTRY_USER: ${{ secrets.CONTAINER_PUSH_REPO_USER }}
-          REGISTRY_USER_VAR: ${{ vars.CONTAINER_PUSH_REPO_USER }}
-          REGISTRY_PASSWORD: ${{ secrets.CONTAINER_PUSH_REPO_PASSWORD }}
-        run: |
-          set -eu
-          REGISTRY_USER="${REGISTRY_USER:-${REGISTRY_USER_VAR:-}}"
-          MISSING=""
-          [ -n "${REGISTRY_USER:-}" ] || MISSING="CONTAINER_PUSH_REPO_USER"
-          [ -n "${REGISTRY_PASSWORD:-}" ] || MISSING="${MISSING:+${MISSING} and }CONTAINER_PUSH_REPO_PASSWORD"
-          if [ -n "${MISSING}" ]; then
-            echo "::error::${MISSING} not available to this repository"
-            echo "They are the registry account with push access to the terva-sh project on"
-            echo "container.local.sothr.com. The README's \"Publishing a release\" section says"
-            echo "what each release secret is."
-            exit 1
-          fi
-          printf '%s' "${REGISTRY_PASSWORD}" | \
-            buildah login container.local.sothr.com --username "${REGISTRY_USER}" --password-stdin
-
-      - name: Push the image
-        # One manifest list for both platforms, as the version, and as
-        # `latest` unless the tag is a pre-release.
-        #
-        # A version's image is published once. A rebuild is not byte-identical
-        # to the image already pushed (timestamps, and the CA bundle of the day),
-        # so there are no bytes to compare as the release assets are compared:
-        # if the version is already in the registry, a rerun keeps it, pushes
-        # nothing, and does not move `latest`. Only "manifest unknown" or "not
-        # found" counts as absent; any other failure to read the registry fails
-        # the job rather than risk pushing over a published version.
-        env:
-          TAG: ${{ needs.forgejo.outputs.tag }}
-          PRERELEASE: ${{ needs.forgejo.outputs.prerelease }}
-        run: |
-          set -eu
-          if out=$(buildah manifest inspect "docker://${IMAGE}:${TAG}" 2>&1); then
-            echo "${IMAGE}:${TAG} is already in the registry and is kept; nothing is pushed."
-            if [ "${PRERELEASE}" = false ]; then
-              echo "::warning::a rerun does not move latest. If an earlier run stopped before"
-              echo "pushing it, point it at ${TAG} by hand with"
-              echo "skopeo copy --all docker://${IMAGE}:${TAG} docker://${IMAGE}:latest"
-            fi
-            exit 0
-          fi
-          if ! printf '%s\n' "${out}" | grep -Eqi 'manifest unknown|name unknown|not found'; then
-            echo "::error::could not tell whether ${IMAGE}:${TAG} is already published:"
-            printf '%s\n' "${out}"
-            exit 1
-          fi
-          LIST="localhost/ketju-release:${TAG}"
-          buildah manifest create "${LIST}"
-          for arch in amd64 arm64; do
-            buildah manifest add "${LIST}" "containers-storage:localhost/ketju-release:${TAG}-${arch}"
-          done
-          buildah manifest push --all "${LIST}" "docker://${IMAGE}:${TAG}"
-          echo "Pushed ${IMAGE}:${TAG}."
-          if [ "${PRERELEASE}" = false ]; then
-            buildah manifest push --all "${LIST}" "docker://${IMAGE}:latest"
-            echo "Pushed ${IMAGE}:latest."
-          fi

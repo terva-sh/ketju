@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-303 tickets: 12 epics and 291 children. Every ticket derived from the design
+306 tickets: 12 epics and 294 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
@@ -45,7 +45,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 46 in
-Phase 3, 34 in Phase 4, 1 in Phase 5, 2 filed as later, and 26 carrying no
+Phase 3, 36 in Phase 4, 1 in Phase 5, 2 filed as later, and 27 carrying no
 milestone. Phase 3 grew from 21 on 2026-10-01, when its run (docs/14) pulled
 the settings pair forward from Phase 4, filed the profile screen, the exit
 check and its tracking ticket, and placed ten unplaced drafts. Its grooming
@@ -297,6 +297,15 @@ maintainer's tag, as `docs/releases/v1.0-checklist.md` part 3 says. The
 quote-backlinks, served-goldens and archive work met the render, API and
 archival tickets' unticked criteria, which the run ticked after close. The
 API epic keeps only form posts unticked, for Phase 5.
+
+Three more were filed after close, on 2026-10-03. The
+backlinks review filed `TKT-01M41MTXWH` (Keep truncation detection on the
+first start after migration 0025), which was placed in Phase 4 and fixed in
+#408. The maintainer's review filed `TKT-01M41MKE81` (the avatar hash), a
+draft with no milestone. The maintainer's choice of the organization's
+release pattern filed `TKT-01M41WY0FE` (Release through the organization's
+twin Forgejo and GitHub workflows), in Phase 4. Phase 4 now carries 36
+tickets, and 35 are done; the tracking ticket is the one left.
 
 ## The critical path
 

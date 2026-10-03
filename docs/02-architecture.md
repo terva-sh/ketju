@@ -107,8 +107,19 @@ pushed `v*` tag publishes the release through `.forgejo/workflows/release.yml`,
 to a release on this forge and one on the GitHub mirror, and as a `scratch`
 image on `container.local.sothr.com`. Nothing is signed. As built, the image
 is made from the published binaries rather than a rebuild, and carries the CA
-certificates OIDC discovery needs, uid 65532 and a `/data` volume; the
-README's "Publishing a release" names the four secrets it reads.
+certificates OIDC discovery needs, uid 65532 and a `/data` volume.
+
+**Decided by the maintainer (2026-10-03)** (TKT-01M41WY0FE): the release
+follows the `terva-sh` organization's pattern instead, replacing the
+publishing half of the decision above. Two twin workflows fire on the same
+tag, one on each forge, and neither reaches into the other.
+`.github/workflows/release.yml` publishes the GitHub release and pushes the
+image to `ghcr.io/terva-sh/ketju`, the one registry, with the token GitHub
+Actions provides. `.forgejo/workflows/release.yml` publishes this forge's
+release with the organization's `BOT_TOKEN`, and builds the image without
+pushing it. The release-only secrets and the image on
+`container.local.sothr.com` are gone. README "Publishing a release" is the
+procedure.
 
 ## Go module layout
 

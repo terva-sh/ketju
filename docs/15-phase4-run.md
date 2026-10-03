@@ -92,6 +92,17 @@ recorded only in ticket plans. One stands for v1.0 only: the avatar hash
 signed-out readers still receive, which TKT-01M41MKE81 removes. The
 checklist's part 2 records the rest of what they settled.
 
+**The release process, 2026-10-03** (TKT-01M41WY0FE). "Match our release
+mirroring and deployment process to the other repositories in our terva-sh
+org." The release now runs as two twin workflows, as git-ticket's and
+lampi's do. `.forgejo/workflows/release.yml` publishes here with the
+organization's `BOT_TOKEN`. `.github/workflows/release.yml` runs only on
+the mirror, publishes the GitHub release and pushes the image to
+`ghcr.io/terva-sh/ketju` with the token Actions provides. That replaces the
+image on `container.local.sothr.com` and the release-only secrets below. It
+extends the grant beyond docs/12 "Changing CI" to the GitHub twin, for that
+file only.
+
 **Metrics and the release, 2026-10-02.**
 - `/metrics` is served only on a separate `metrics_listen` address, and is
   off by default (docs/02).

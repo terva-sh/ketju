@@ -23,10 +23,11 @@ planned; put a reverse proxy in front for TLS. The reasoning is in
 ## Installing a release
 
 Each release is a static binary for `linux/amd64` and `linux/arm64`, with a
-`SHA256SUMS` file beside them. It is published on this forge's release page
-for the tag, and on the GitHub mirror's
-(`github.com/terva-sh/ketju/releases`). Download the binary for your machine
-and the sums, check them, and install:
+`SHA256SUMS` file beside them. It is published on the GitHub mirror's
+release page (`github.com/terva-sh/ketju/releases`), and on this forge's.
+Each forge builds its own, so the two `SHA256SUMS` files may differ; check a
+binary against the sums from the same page. Download the binary for your
+machine and the sums, check them, and install:
 
 ```sh
 VERSION=v1.0.0
@@ -46,9 +47,10 @@ Then write `config.toml` as "First run" says.
 
 ### The container image
 
-The same binaries are published as an image on this forge's registry,
-`container.local.sothr.com/terva-sh/ketju`, tagged with the version and, for
-a release that is not a pre-release, `latest`. The image holds the binary, CA
+The GitHub release's binaries are published as an image,
+`ghcr.io/terva-sh/ketju`. It is tagged with the version without its `v`, such
+as `1.0.0`; a release that is not a pre-release also moves `1.0` and
+`latest`. The image holds the binary, CA
 certificates and nothing else. It runs `ketju serve` as uid 65532, reads
 `/data/config.toml`, and keeps its data in the `/data` volume, so
 `config.toml` sets `data_dir = "/data"` and a `listen` address such as
@@ -63,7 +65,7 @@ mkdir data
 cp config.toml data/
 podman unshare chown -R 65532:65532 data
 podman run -d --name ketju -p 8080:8080 -v "$PWD/data:/data" \
-  container.local.sothr.com/terva-sh/ketju:v1.0.0
+  ghcr.io/terva-sh/ketju:1.0.0
 ```
 
 Under Docker or rootful Podman, container uids are host uids, so
@@ -71,55 +73,71 @@ Under Docker or rootful Podman, container uids are host uids, so
 line, and the `run` line is the same.
 
 The other commands run the same way, with the command after the image name:
-`podman run --rm container.local.sothr.com/terva-sh/ketju:v1.0.0 version`.
+`podman run --rm ghcr.io/terva-sh/ketju:1.0.0 version`.
 
 ### Publishing a release
 
 This is the maintainer's: pushing a tag publishes, and an agent never does it
-(docs/15, stop class 3). Pushing a `v*` tag, such as `v1.0.0` or the
-pre-release `v1.0.0-rc.1`, runs `.forgejo/workflows/release.yml`. It:
+(docs/15, stop class 3). Like the other repositories in the `terva-sh`
+organization, ketju has two release workflows, one on each forge, and a `v*`
+tag such as `v1.0.0` or the pre-release `v1.0.0-rc.1` starts each one when it
+reaches that forge. Neither reaches into the other.
 
-1. refuses a tag that is not on `main`, or not `vMAJOR.MINOR[.PATCH][-PRE]`;
+`.github/workflows/release.yml` runs on the public mirror, `github.com/terva-sh/ketju`:
+
+1. refuses a tag that is not on the mirror's `main`, or not
+   `vMAJOR.MINOR[.PATCH][-PRE]`;
 2. builds and checks the binaries with `go run ./tools/release`, as CI's dry
    run does, and writes `SHA256SUMS`;
-3. publishes them as a release on this forge, then downloads them anonymously
-   and checks them with `sha256sum -c`;
-4. publishes the same files as a release on the GitHub mirror, once the tag
-   is there and names the same commit, and checks those downloads too;
-5. builds the image for both platforms from the published binaries, starts
-   it once, and pushes it.
+3. publishes them as a GitHub release, with `docs/releases/<tag>.md` as its
+   description, then downloads them anonymously and checks them with
+   `sha256sum -c`;
+4. builds the image for both platforms from the published binaries, pushes
+   it to `ghcr.io/terva-sh/ketju`, and pulls each platform back to check its
+   version and its uid.
 
-A tag with a hyphen is published as a pre-release, and its image does not
-move `latest`. Rerunning the workflow is safe: a binary already published is
-kept if its bytes match, and the run fails if they do not. An image already
-pushed for the version is kept and nothing is pushed over it, so a rerun does
-not move `latest` either; if an earlier run stopped before pushing `latest`,
-the job's warning gives the `skopeo copy` that points it at the version.
+`.forgejo/workflows/release.yml` runs here. It makes the same checks, builds
+the binaries, publishes them as a release on this forge, and checks the
+download. It builds and runs the image too, and pushes it nowhere: `ghcr.io`
+is the one registry.
 
-Before the first tag, create these, as secrets of `terva-sh/ketju` or of the
-`terva-sh` organization. The workflow reads each by name and fails, naming
-it, when one is missing:
+A tag with a hyphen is published as a pre-release, and its image moves no
+floating tag. Rerunning either workflow is safe: a binary already published
+is kept if its bytes match, and the run fails if they do not. An image
+already pushed for the version is kept and nothing is pushed over it, so a
+rerun does not move `latest` either; if an earlier run stopped before
+pushing the floating tags, the job's warning says how to point them at the
+version.
+
+The GitHub workflow needs no secret: it uses the `GITHUB_TOKEN` Actions
+provides. The Forgejo workflow needs one, which the organization already
+holds. It reads it by name and fails, naming it, when it is missing:
 
 | Name | What it is |
 |------|------------|
-| `RELEASE_FORGEJO_TOKEN` | A token on this forge that can create releases on `terva-sh/ketju` (repository: read and write) |
-| `RELEASE_GITHUB_TOKEN` | A GitHub fine-grained token for `terva-sh/ketju` with contents: read and write |
-| `CONTAINER_PUSH_REPO_USER` | The registry account on `container.local.sothr.com`; a secret, or an Actions variable of the same name |
-| `CONTAINER_PUSH_REPO_PASSWORD` | Its password, with push access to the `terva-sh` project |
+| `BOT_TOKEN` | A Forgejo token with write access to `terva-sh/ketju`; the organization secret `terva-review.yml` also uses |
 
-The last two are the names every repository on this forge uses for the
-registry, so the organization may hold them already.
-
-To release:
+To release, with a remote named `github` for the mirror:
 
 1. Work through the release checklist for the version, such as
    `docs/releases/v1.0-checklist.md`, and finish its release notes.
-2. Push `main` and the tag to the GitHub mirror. The GitHub job waits up to
-   30 minutes for the tag there, and refuses it if it names another commit.
+2. Tag `main` after its pull request merges, then push `main` and the tag
+   to the mirror. The tag must be annotated, because `--follow-tags` pushes
+   only annotated tags:
+
+   ```sh
+   git checkout main && git pull --ff-only
+   git tag -a v1.0.0 -m "ketju v1.0.0"
+   git push github main --follow-tags
+   ```
+
+   The mirror is a plain push of the same history, and `main` goes there
+   only at release time.
 3. Push the tag here: `git push origin v1.0.0`.
 
 Try it first with a pre-release tag, and check its downloads on a clean
-machine with the commands at the top of this section.
+machine with the commands at the top of this section. A new package on
+`ghcr.io` may start private; make it public in the package's settings once.
 
 ## First run
 

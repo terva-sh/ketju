@@ -10,10 +10,15 @@ import (
 	"testing"
 )
 
-// The release workflow, its image and the README's "Publishing a release"
-// are three files that describe one pipeline (TKT-01M3YSVEDJ). These tests
-// keep them in step with this tool and with each other; none of them runs
-// the workflow, which only the maintainer's tag does.
+// The two release workflows, one per forge, the image and the README's
+// "Publishing a release" describe one pipeline (TKT-01M3YSVEDJ,
+// TKT-01M41WY0FE). These tests keep them in step with this tool and with each
+// other; none of them runs a workflow, which only the maintainer's tag does.
+
+const (
+	forgejoWorkflow = ".forgejo/workflows/release.yml"
+	githubWorkflow  = ".github/workflows/release.yml"
+)
 
 func readRoot(t *testing.T, rel string) string {
 	t.Helper()
@@ -24,12 +29,12 @@ func readRoot(t *testing.T, rel string) string {
 	return string(b)
 }
 
-// TestReleaseWorkflowNamesItsSecrets: every secret and variable the release
-// workflow reads is in the README's table for the maintainer to create, and
-// the table names nothing the workflow does not read. No name takes a prefix
-// Forgejo reserves.
+// TestReleaseWorkflowNamesItsSecrets: every secret and variable the Forgejo
+// release workflow reads is in the README's table, and the table names
+// nothing the workflow does not read. No name takes a prefix Forgejo
+// reserves. The GitHub twin reads only the GITHUB_TOKEN Actions provides.
 func TestReleaseWorkflowNamesItsSecrets(t *testing.T) {
-	wf := readRoot(t, ".forgejo/workflows/release.yml")
+	wf := readRoot(t, forgejoWorkflow)
 	var used []string
 	for _, m := range regexp.MustCompile(`\b(?:secrets|vars)\.([A-Z0-9_]+)`).FindAllStringSubmatch(wf, -1) {
 		if !slices.Contains(used, m[1]) {
@@ -70,13 +75,15 @@ func TestReleaseWorkflowNamesItsSecrets(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowUsesThisTool: the workflow builds with this tool, and
+// TestReleaseWorkflowUsesThisTool: both workflows build with this tool, and
 // the image copies the file name this tool writes for each platform.
 func TestReleaseWorkflowUsesThisTool(t *testing.T) {
-	wf := readRoot(t, ".forgejo/workflows/release.yml")
-	if !strings.Contains(wf, `go run ./tools/release --version "${TAG}"`) {
-		t.Error("the release workflow does not build with go run ./tools/release")
+	for _, f := range []string{forgejoWorkflow, githubWorkflow} {
+		if !strings.Contains(readRoot(t, f), `go run ./tools/release --version "${TAG}"`) {
+			t.Errorf("%s does not build with go run ./tools/release", f)
+		}
 	}
+	wf := readRoot(t, forgejoWorkflow) + readRoot(t, githubWorkflow)
 	dockerfile := readRoot(t, "Dockerfile")
 	// The name run writes, with the Dockerfile's build arguments in place of
 	// the version and architecture.
@@ -100,10 +107,18 @@ func TestReleaseWorkflowUsesThisTool(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowPassesValuesThroughEnv: no run block holds an
-// expression, so a ref or a secret is data to the shell and never source.
+// TestReleaseWorkflowPassesValuesThroughEnv: no run block in either
+// workflow holds an expression, so a ref or a secret is data to the shell
+// and never source.
 func TestReleaseWorkflowPassesValuesThroughEnv(t *testing.T) {
-	lines := strings.Split(readRoot(t, ".forgejo/workflows/release.yml"), "\n")
+	for _, f := range []string{forgejoWorkflow, githubWorkflow} {
+		t.Run(f, func(t *testing.T) { checkRunBlocks(t, readRoot(t, f)) })
+	}
+}
+
+func checkRunBlocks(t *testing.T, wf string) {
+	t.Helper()
+	lines := strings.Split(wf, "\n")
 	runAt := regexp.MustCompile(`^(\s*)(?:- )?run: (.*)$`)
 	for i := 0; i < len(lines); i++ {
 		m := runAt.FindStringSubmatch(lines[i])
@@ -128,6 +143,47 @@ func TestReleaseWorkflowPassesValuesThroughEnv(t *testing.T) {
 			if regexp.MustCompile(`^\s*set -[a-z]*x`).MatchString(l) {
 				t.Errorf("line %d: set -x in a job that holds tokens", j+1)
 			}
+		}
+	}
+}
+
+// TestReleaseWorkflowsSplitByForge: the organization's pattern. Every job in
+// the GitHub twin runs only on github.com and reads no secret but
+// GITHUB_TOKEN, and the twin alone pushes the image, to ghcr.io. The Forgejo
+// workflow logs in to no registry and publishes nothing outside this forge.
+func TestReleaseWorkflowsSplitByForge(t *testing.T) {
+	gh := readRoot(t, githubWorkflow)
+	_, jobs, ok := strings.Cut(gh, "\njobs:\n")
+	if !ok {
+		t.Fatalf("%s has no jobs", githubWorkflow)
+	}
+	jobAt := regexp.MustCompile(`(?m)^  ([a-z][a-z0-9-]*):\n`)
+	starts := jobAt.FindAllStringSubmatchIndex(jobs, -1)
+	if len(starts) == 0 {
+		t.Fatalf("%s has no jobs", githubWorkflow)
+	}
+	for i, m := range starts {
+		end := len(jobs)
+		if i+1 < len(starts) {
+			end = starts[i+1][0]
+		}
+		if !strings.Contains(jobs[m[0]:end], "\n    if: github.server_url == 'https://github.com'\n") {
+			t.Errorf("%s: job %s is not guarded to github.com", githubWorkflow, jobs[m[2]:m[3]])
+		}
+	}
+	for _, m := range regexp.MustCompile(`\b(?:secrets|vars)\.([A-Z0-9_]+)`).FindAllStringSubmatch(gh, -1) {
+		if m[1] != "GITHUB_TOKEN" {
+			t.Errorf("%s reads %s; it needs only GITHUB_TOKEN", githubWorkflow, m[1])
+		}
+	}
+	if !strings.Contains(gh, "IMAGE=\"ghcr.io/${REPOSITORY}\"") {
+		t.Errorf("%s does not push to ghcr.io", githubWorkflow)
+	}
+
+	fj := readRoot(t, forgejoWorkflow)
+	for _, s := range []string{"buildah login", "buildah push", "manifest push", "api.github.com", "uploads.github.com"} {
+		if strings.Contains(fj, s) {
+			t.Errorf("%s holds %q; it publishes only its own release", forgejoWorkflow, s)
 		}
 	}
 }
