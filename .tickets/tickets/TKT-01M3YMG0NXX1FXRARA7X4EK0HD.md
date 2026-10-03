@@ -49,6 +49,8 @@ blocks_on: none
 references:
   - ref: pr:375
     path: null
+  - ref: pr:404
+    path: null
 claim:
   actor: agent:claude-code/phase4-run-mg0nx
   branch: run/mg0nx-phase4-exit
@@ -59,7 +61,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T13:08:15Z
+updated_at: 2026-10-03T13:16:11Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
