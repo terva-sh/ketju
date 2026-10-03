@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQQ33K01M960MGMSZ90P2
 title: Show archived threads and offer archiving in the client
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: pr:361
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-SQQ33
-  branch: run/sqq33-thread-archive
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
-  commit: efca9c6d0f15c237a56c8e9f7d40065a6d30a7ed
-  session: null
-  claimed_at: 2026-10-03T00:53:48Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T01:30:40Z
+updated_at: 2026-10-03T06:50:09Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -50,11 +43,11 @@ What it covers:
 
 ## Acceptance criteria
 
-- [ ] An archived thread shows "This thread is archived." and offers no composer, reply, edit, delete, restore, flag or moderation control to a member, a moderator or an admin, while watch and Mark unread stay (ThreadScreen.test.tsx, threadActions.test.ts)
-- [ ] An archived row in any thread list carries an "Archived" flag with that accessible name (ThreadListScreen.test.tsx)
-- [ ] An admin, and nobody else, is offered Archive on a live thread; the confirmation says it cannot be undone, sends the reason, and the page then shows the archived state (threadActions.test.ts, thread-moderation.spec.ts)
-- [ ] The archived thread page and the archive panel pass axe at 390 and 1440 px, one scan per test
-- [ ] The committed dist is regenerated with go generate ./internal/web/spa and the reader is within the 120000 B gzip budget (npm run budget), its growth stated in the PR
+- [x] An archived thread shows "This thread is archived." and offers no composer, reply, edit, delete, restore, flag or moderation control to a member, a moderator or an admin, while watch and Mark unread stay (ThreadScreen.test.tsx, threadActions.test.ts)
+- [x] An archived row in any thread list carries an "Archived" flag with that accessible name (ThreadListScreen.test.tsx)
+- [x] An admin, and nobody else, is offered Archive on a live thread; the confirmation says it cannot be undone, sends the reason, and the page then shows the archived state (threadActions.test.ts, thread-moderation.spec.ts)
+- [x] The archived thread page and the archive panel pass axe at 390 and 1440 px, one scan per test
+- [x] The committed dist is regenerated with go generate ./internal/web/spa and the reader is within the 120000 B gzip budget (npm run budget), its growth stated in the PR
 
 ## Implementation plan
 
@@ -162,3 +155,28 @@ Phase A is built on run/sqq33-thread-archive. The branch is stacked on run/sqpzx
   - carol reads a thread ada archived and is offered nothing that writes. The whole page is scanned.
 - `go test -race -p 4 ./...` passes. The first run failed only on `internal/web/api`'s page and lock goldens, which each lacked the new `"archived": false` line. They are regenerated with `-update` in their own commit, and the package then passes under race.
 - The full e2e suite at both widths passed 300 of 301. The one failure was the Unread surface test, with the "1 new" symptom that TKT-01M3ZE2211 (Stop the Phase 3 exit Unread surface test failing under CI load) records. That spec passes on its own rerun.
+
+## Summary
+
+Built on run/sqq33-thread-archive, rebased onto main at 5469a729.
+
+### Server
+- `archived` is added to `dto.ThreadHeader` and `dto.ThreadRow`.
+  - The header reads it from the projection row.
+  - The rows read `t.archived` through `views.rowColumns`, which covers a forum's list and every cross-forum list.
+- The field is added in one change to `dto.ts`, the dto goldens (a new one for an archived thread) and the api and served goldens.
+- docs/07 "Archiving threads" names the field.
+- `TestArchiveThread` and `TestArchivedThreadStaysReadable` check it on the answer, the page header, and the rows of an archived thread and of a live thread beside it.
+- This is the rest of TKT-01M29CRJ64's criteria 1 and 7.
+
+### Client
+- An archived thread says "This thread is archived." in place of the lock notice. It offers nobody a reply, the composer, a post edit, delete or restore, a flag, or a moderation control. Edit tags is included, which meets TKT-01M3YSQPZX's criterion 3.
+- The page reads the newest header, so all of this applies as soon as an archive answers (`readOnlyViewer`).
+- Watch, First unread, Mark unread, and "unread from here" on a post stay.
+- Rows carry an Archived flag in place of the lock.
+- An admin by role is offered "Archive…". The panel says the archive cannot be undone, takes an optional reason, and sends `POST …/archive`. A conflict says "This thread is already archived."
+
+### Results
+- The reader bundle grows from 83030 B to 83345 B, +315 B. index.js goes from 65031 B to 65345 B, and ApplyRoot.js from 5254 B to 5255 B.
+- Vitest passes (2684 tests), and so does `go test -race -p 4 ./...`.
+- The thread-moderation, thread-list, thread, targets, a11y and unread-lists e2e specs pass at 390 and 1440 px.

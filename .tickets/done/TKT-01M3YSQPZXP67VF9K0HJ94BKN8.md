@@ -27,12 +27,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T05:26:23Z
+updated_at: 2026-10-03T06:44:48Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-run-SQPZX
+  id: agent:claude-code/phase4-run-SQQ33
   name: ""
 extensions: {}
 ---
@@ -52,7 +52,7 @@ What it covers:
 
 - [x] Tags render as chips in every thread list and on the thread head, each a link to its forum list filtered to the tag, and the filtered list shows "Tagged TAG", a way back, and keeps the tag across pages (TagChips.test.tsx, ThreadListScreen.test.tsx, thread-list.spec.ts)
 - [x] The new thread screen sends tags from one optional field and names each refused tag under it with aria-invalid; a moderator can Edit tags from the moderation menu and the head updates (NewThreadScreen.test.tsx, new-thread.spec.ts, thread-moderation.spec.ts)
-- [ ] Edit tags is offered only with viewer.can_moderate and never on an archived thread (threadActions.test.ts)
+- [x] Edit tags is offered only with viewer.can_moderate and never on an archived thread (threadActions.test.ts)
 - [x] Tag chips have a hit area at least 44 px tall at 390 px without growing visually (thread-list.spec.ts, by targets.spec.ts method)
 - [x] The thread list, thread page and new thread screen pass axe at 390 and 1440 px with tags shown, one scan per test
 - [x] The committed dist is regenerated with go generate ./internal/web/spa and the reader is within the 120000 B gzip budget (npm run budget), its growth stated in the PR
@@ -203,6 +203,10 @@ Terva review 2049 (run cb3ae8fd, Actions #2653), on head 66fbb93f and base f5696
   - tagErrors.test, a `foldTag` case.
 
 The reader bundle is now 82880 B, which is +1397 B over main's 81483 B.
+
+**agent:claude-code/phase4-run-SQQ33** at 2026-10-03T06:44:48Z
+
+Criterion 3, the archived half, is met in TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client). On an archived thread mayModerate is false, so Edit tags is not offered to a member, a moderator or an admin. ThreadScreen.test's 'an archived thread says so and offers no write to a member, a moderator or an admin' checks that the tags action is absent. Ticked in that ticket's PR.
 
 ## Summary
 
