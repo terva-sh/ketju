@@ -416,7 +416,6 @@ func (s *Service) finishInto(ctx context.Context, src *threadcache.Thread, srcLe
 			next++
 		}
 	}
-	renumber := func(r uint32) uint32 { return copies[r] }
 
 	var run []threadlog.Append
 	if !merged {
@@ -443,12 +442,28 @@ func (s *Service) finishInto(ctx context.Context, src *threadcache.Thread, srcLe
 			}
 			have = uint32(e.Revision)
 		}
+		// reply_to is renumbered only when it names a post moved with this
+		// one and ahead of it, whose copy is written earlier in the run and
+		// so has its ordinal fixed before this record names it. A copy
+		// still to be written may land at another ordinal than the one
+		// predicted, if a crash cuts the run and a post arrives in the
+		// target before the finish, and a record already written could not
+		// be corrected (Terva review 2024). A post replies only to an
+		// earlier post, so this drops only what a log written some other
+		// way holds.
+		//
 		// An Edit's reply_to of zero keeps the post's, so an Edit cannot
-		// drop one. When the post's last reply_to names a post left behind,
-		// the copy replies to nothing at every revision, rather than keep
-		// a renumbered earlier one (Terva review 2020).
-		replyOf := renumber
-		if last := lastReplyTo(chain); last != 0 && !slices.Contains(ords, last) {
+		// drop one. When the post's last reply_to is not renumbered, the
+		// copy replies to nothing at every revision, rather than keep a
+		// renumbered earlier one (Terva review 2020).
+		ahead := func(r uint32) bool { return r != 0 && r < o && slices.Contains(ords, r) }
+		replyOf := func(r uint32) uint32 {
+			if ahead(r) {
+				return copies[r]
+			}
+			return 0
+		}
+		if last := lastReplyTo(chain); last != 0 && !ahead(last) {
 			replyOf = func(uint32) uint32 { return 0 }
 		}
 		for _, c := range chain {

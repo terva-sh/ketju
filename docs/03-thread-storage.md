@@ -559,10 +559,14 @@ body field as it stands. The choices are:
     time from the frame, so they show the original author and time without
     opening another log.
   - `reply_to`, in the `Post` and in every `Edit`, is renumbered to the
-    copy's ordinal when it names a post moved with it, and left out
-    otherwise. An `Edit` without `reply_to` keeps the post's, so when the
-    post's last `reply_to` names a post left behind, every record of the
-    copy leaves it out, and the copy replies to nothing. The text is copied
+    copy's ordinal when it names a post moved with it and ahead of it, and
+    left out otherwise. Such a copy is written earlier in the run, so its
+    ordinal is fixed before anything names it, even when a crash cuts the
+    run and a post arrives in the target before the finish. A post replies
+    only to an earlier post, so only a log written some other way loses a
+    reply this way. An `Edit` without `reply_to` keeps the post's, so when
+    the post's last `reply_to` is not renumbered, every record of the copy
+    leaves it out, and the copy replies to nothing. The text is copied
     byte for byte.
   - Only posts shown as themselves move, so no `Delete` or `Restore` is
     copied.

@@ -830,3 +830,39 @@ func TestCopyDropsAReplyEditedOutside(t *testing.T) {
 		t.Errorf("the copy replies to %d, want nothing: its post now answers one left behind", e.ReplyTo)
 	}
 }
+
+// TestFinishAfterATargetPostKeepsReplies (Terva review 2024): a run cut
+// after the first copy, then an ordinary post in the target, then the
+// finish. The second copy lands after the ordinary post, and still replies
+// to the first copy, whose ordinal was fixed when it was written.
+func TestFinishAfterATargetPostKeepsReplies(t *testing.T) {
+	w, _ := crashed(t, 3)
+	between := w.postIn(w.otherID, "rep2", "meanwhile", 0)
+	w.finish(1)
+	n := uint32(w.lenOf(w.otherID))
+	if n != between+1 {
+		t.Fatalf("the target holds %d posts, want the ordinary post at %d and the last copy after it", n, between)
+	}
+	cp := w.entryOf(w.otherID, n)
+	if !cp.Flags.Has(threadlog.EntryCopied) || cp.ReplyTo != 2 {
+		t.Errorf("the last copy is %+v: want a copy replying to 2, the first copy", cp)
+	}
+}
+
+// TestCopyDropsAForwardReply: a reply_to naming a later post of the move,
+// which only a log written past the service holds, is dropped rather than
+// renumbered to an ordinal not yet written.
+func TestCopyDropsAForwardReply(t *testing.T) {
+	w := newMoveWorld(t)
+	p2 := w.postIn(w.id, "author", "first", 0)
+	p3 := w.postIn(w.id, "rep1", "second", 0)
+	w.appendTo(w.id, threadlog.Append{Type: threadlog.TypeEdit, Ordinal: p2, Author: uint64(w.users["author"]),
+		Body: &threadlog.EditBody{Source: "first, now answering the second", ReplyTo: p3}})
+	res, err := w.merge("mod", w.id, w.otherID, p2, p3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := w.entryOf(w.otherID, res.Copies[0]); e.ReplyTo != 0 {
+		t.Errorf("the copy replies to %d, want nothing", e.ReplyTo)
+	}
+}
