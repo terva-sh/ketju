@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { bodyText, continueQuote, insertBlock, quoteMarkdown, selectionIn } from './quote';
+import { bodyText, continueQuote, escapeText, insertBlock, quoteMarkdown, selectionIn } from './quote';
 
 // AC2's markdown: the form internal/render/quote.go reads.
 describe('quoteMarkdown', () => {
@@ -131,5 +131,35 @@ describe('continueQuote', () => {
     const q = continueQuote('carol', html);
     expect(q).toBe('@carol wrote:\n\n> mine');
     expect(q).not.toContain('[quote=');
+  });
+
+  // Terva review 2060: a code block that shows "[quote=#99]" is quoted as
+  // that text, escaped, so the new thread's post names no post of its own,
+  // and "*", "_", a leading ">" or "#" stay characters. This is the source
+  // internal/render's TestEscapedQuoteMarkerStaysText renders as text.
+  it('escapes what the post showed, so a literal quote marker stays text', () => {
+    const html = '<pre><code>[quote=#99]\na*b* _c_\n\n&gt; [quote=#98]\n\n# not a heading\n</code></pre>';
+    expect(continueQuote('bob', html)).toBe(
+      '@bob wrote:\n\n> \\[quote=#99\\]\n> a\\*b\\* \\_c\\_\n>\n> \\> \\[quote=#98\\]\n>\n> \\# not a heading',
+    );
+  });
+});
+
+describe('escapeText', () => {
+  it.each([
+    ['plain words, a full stop and an apostrophe', "It's 3.5 hours.", "It's 3.5 hours."],
+    ['inline marks', 'a `b` *c* _d_ [e](f) <g> &amp; ~h~ |i|', 'a \\`b\\` \\*c\\* \\_d\\_ \\[e\\](f) \\<g> \\&amp; \\~h\\~ \\|i\\|'],
+    ['a backslash', 'C:\\dir', 'C:\\\\dir'],
+    ['a heading', '## Title', '\\## Title'],
+    ['a list item', '- item', '\\- item'],
+    ['a plus item', '+ item', '\\+ item'],
+    ['an ordered item', '12. item', '12\\. item'],
+    ['an ordered item with a paren', '3) item', '3\\) item'],
+    ['a setext underline', '===', '\\==='],
+    ['a quotation', '> said', '\\> said'],
+    ['code indentation, kept short of a code block', '        x = 1', '   x = 1'],
+    ['a tab', '\tx', '   x'],
+  ])('%s', (_, line, want) => {
+    expect(escapeText(line)).toBe(want);
   });
 });

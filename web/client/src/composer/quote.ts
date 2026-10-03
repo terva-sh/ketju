@@ -29,9 +29,35 @@ function quotedLines(text: string): string[] {
 // carries no [quote=#N], which would name a post of the new thread; it is
 // the member's own text from here on, to edit as they like. The html is
 // parsed into a document of its own, so nothing in it loads.
+//
+// The text is what the post showed, so each line is escaped (escapeText)
+// before it is quoted. A literal "[quote=#99]", which a code block may
+// show, then stays text rather than becoming an attribution to a post the
+// new thread does not have, and "*", "_" or a "#" at the start of a line
+// stay the characters they were (Terva review 2060).
 export function continueQuote(handle: string, html: string): string {
   const body = new DOMParser().parseFromString(html, 'text/html').body;
-  return [`@${handle} wrote:`, '', ...quotedLines(bodyText(body))].join('\n');
+  const text = bodyText(body)
+    .split('\n')
+    .map((l) => (l.trim() === '' ? '' : escapeText(l)))
+    .join('\n');
+  return [`@${handle} wrote:`, '', ...quotedLines(text)].join('\n');
+}
+
+// escapeText is one line of plain text as markdown that reads as that text.
+// A backslash goes before every character that formats inline, and before
+// what would open a block at the start of the line: a heading, a quotation,
+// a list item, a setext underline or a break. Indentation stops short of
+// the four spaces that make a code block, in which an escape would show.
+// internal/render's TestEscapedQuoteMarkerStaysText holds the server to
+// reading the escaped attribution as text.
+export function escapeText(line: string): string {
+  return line
+    .replace(/\t/g, '    ')
+    .replace(/^ {4,}/, '   ')
+    .replace(/[\\`*_[\]<&~|]/g, '\\$&')
+    .replace(/^( *)([#>+=-])/, '$1\\$2')
+    .replace(/^( *\d+)([.)])/, '$1\\$2');
 }
 
 // selectionIn is the text selected inside body, or null when nothing is, or

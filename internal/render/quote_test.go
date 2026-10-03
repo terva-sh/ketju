@@ -96,6 +96,35 @@ func TestTheAttributionLineDoesNotSurviveIntoTheText(t *testing.T) {
 	}
 }
 
+// TestEscapedQuoteMarkerStaysText holds the renderer to what the client's
+// "reply as new thread" pre-fill relies on (web/client/src/composer/quote.ts
+// escapeText, TKT-01M29CYSC0, Terva review 2060): a post's text quoted with
+// a backslash before every "[" and "*", and before a ">" or "#" opening a
+// line, reads as that text. An escaped "[quote=#99]", at the top of the
+// quotation or where a nested one would start, is no attribution and quotes
+// nothing, and what the escapes guard shows as the characters it was.
+func TestEscapedQuoteMarkerStaysText(t *testing.T) {
+	source := "@bob wrote:\n\n> \\[quote=#99\\]\n> a\\*b\\* \\_c\\_\n>\n> \\> \\[quote=#98\\]\n>\n> \\# not a heading\n"
+	got, err := RenderWith(source, Context{Posts: resolver([]uint32{98, 99})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Quotes) != 0 || strings.Contains(got.HTML, "details") {
+		t.Errorf("an escaped marker became a quotation (%v):\n%s", got.Quotes, got.HTML)
+	}
+	for _, want := range []string{"[quote=#99]", "a*b* _c_", "&gt; [quote=#98]", "# not a heading"} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("the html does not show %q as text:\n%s", want, got.HTML)
+		}
+	}
+	if strings.Contains(got.HTML, "<em>") || strings.Contains(got.HTML, "<h1>") {
+		t.Errorf("escaped text was formatted:\n%s", got.HTML)
+	}
+	if q := QuotedOrdinals(source, 1); len(q) != 0 {
+		t.Errorf("QuotedOrdinals = %v, want none", q)
+	}
+}
+
 func TestAPlainBlockquoteIsUntouched(t *testing.T) {
 	// The extension replaces goldmark's blockquote handling for attributed
 	// quotes only. Every ordinary blockquote in every existing post has to keep
