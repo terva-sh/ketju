@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T00:17:48Z
+updated_at: 2026-10-03T00:52:53Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -136,3 +136,53 @@ run decision: pending maintainer review. Phase 4 grooming (tags and archive lane
 - Tags follow the "started by" line on the thread head. They are set in one optional text field on the new thread screen and in a moderator's "Edit tags" panel ("The thread head").
 
 This ticket also depends on TKT-01M29CRJ64 (Implement thread archival), so the header's `archived` field exists when "Edit tags" must be withheld on an archived thread.
+
+**agent:claude-code/phase4-run-SQPZX** at 2026-10-03T00:52:53Z
+
+Phase A is built on run/sqpzx-thread-tags, from main at 4936e55c. The dist is not committed yet: it waits its turn in the dist queue (docs/15 "Order").
+
+### What was built, and the decisions made on the way
+
+- **Chips.** `components/TagChips.tsx` is used by `ThreadRow` and the thread head. It renders `<li><a class="hit" href="/f/{slug}?tag=TAG">`. `ThreadRow` takes a `listForum` prop, because a forum's own list sends `forum: null` on each row; a cross-forum row uses its own forum.
+- **The 44 px target on a phone.** Each `li` is `min-height: var(--target)` and centres its chip, with a 6 px top margin and a 10 px bottom margin. So each line of chips is one target tall, and the chip keeps its drawn size of about 20 px.
+  - Why: `.hit`'s `::after` reaches 12 px past a chip on each side. With the old 4 px gaps, a chip's press 21 px below its centre landed on the next line's chip, and the title's press landed on the first line.
+  - Alternatives that lost:
+    - Padding the chip itself makes it grow visually, which criterion 4 forbids.
+    - Ordering the `::after`s with z-index only moves the loss to the other neighbour.
+  - The cost: on a phone the six-tag row's two lines of chips take about 88 px instead of about 46 px (screenshots refreshed).
+  - Mutation check: removing the phone rule fails both `targets.spec.ts` "the thread list" and the new chip test in `thread-list.spec.ts`.
+- **The filtered list.**
+  - It shows "Tagged TAG" with a "Show all threads" link back, which keeps the sort.
+  - Newest, Older threads and both sort links keep the tag.
+  - The empty list says "No threads tagged TAG.".
+  - A tag the server will not read is its bad-request, shown in the list's ErrorPanel.
+- **The Tags field** is `#new-thread-tags`, labelled "Tags (optional)", with the hint "Separate tags with spaces or commas". It is split on `/[\s,]+/`, and the tags are sent as typed. It is not autosaved, because `ForumDraft` has no tags; this is the plan's out-of-scope item. `NewThread.tagsSent` keeps the list a refusal's `tags.N` indexes.
+- **Error words** live in `state/tagErrors.ts`, in the reader chunk. They name each tag:
+  - "“X” is not a tag: use letters, digits and single hyphens between them."
+  - "“X” is longer than 24 characters."
+  - "“X” is reserved for moderators and agent accounts."
+  - "A thread can have at most 8 tags."
+  - An empty tag: "A tag cannot be empty."
+
+  Two choices behind those words:
+  - They say "letters" rather than the plan's "lowercase letters", because the server folds ASCII A–Z, so `Garden` is accepted.
+  - `forms/messages.ts` carries words for `invalid_tag` and `reserved_tag` without the tag's name, for the codes table. It is in the apply chunk, so the reader cannot import it, and the two lists are written twice on purpose.
+- **Edit tags.**
+  - It is the `'tags'` PanelKind, labelled "Edit tags…" with an ellipsis, as Move… and Slow mode… are. It is offered with `moderate`, which means `viewer.can_moderate`.
+  - The panel is titled "Edit tags", its button is "Save", and the field is prefilled with `head.tags.join(' ')`. It sends `PUT /admin/threads/{id}/tags` and stores the returned header.
+  - Save is off while the field folds to the set the thread already has, so the common conflict is not sent.
+  - A conflict says "The thread already has these tags, or it is archived.", because the route refuses an archived thread with conflict too. This follows slow mode's wording.
+  - A refusal keeps the form and what was typed, as rename and move do.
+- **Codes.** `invalid_tag` and `reserved_tag` are now `forms.CodeInvalidTag` and `forms.CodeReservedTag`, in `forms.Codes` and docs/07's form-codes table. The `threads.Code*` constants are removed. docs/07's sentence about the codes outside the table no longer lists them.
+
+### Criterion 3
+
+Edit tags is offered only with `can_moderate` (`threadActions.test.ts`). The criterion's archived half cannot be built yet: `ThreadHeader` has no `archived` until TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client). That ticket hides every moderation control on an archived thread, Edit tags included, and ticks this box in its pull request.
+
+### Measured
+
+- The reader bundle grows from 79983 B on main to 81345 B, which is +1362 B, within the plan's estimate of 1.2 to 1.6 KB.
+- Vitest: 2609 tests pass.
+- Mutation checks: each of the main source changes was reverted alone, and every one failed a test.
+- e2e: the whole suite passes at 390 and 1440 px, 297 tests, with the new ones in thread-list, new-thread and thread-moderation. Each runs one axe scan.
+- `go test -race -p 4 ./...` passes.
