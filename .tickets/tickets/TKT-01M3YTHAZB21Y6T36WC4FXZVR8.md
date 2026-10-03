@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:28:04Z
-updated_at: 2026-10-03T00:58:41Z
+updated_at: 2026-10-03T01:26:32Z
 created_by:
   id: agent:claude-code/phase4-groom-correctness
   name: ""
@@ -84,3 +84,9 @@ Filed and groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82
 
 - Recording and serving `quoted_by`: TKT-01M3YME9AZ.
 - The Digest lens (docs/06, "Later").
+
+## Notes
+
+**agent:claude-code/phase4-run-thazb** at 2026-10-03T01:26:32Z
+
+Phase A done on run/thazb-quoted-by (unpushed, commit f8c62d50 on main 5f50eb27). QuotedBy in Post.tsx after Attachments, before the footer; links carry data-reply-to and .hit, so the existing delegate scrolls or opens PostPopover. Departures from the plan: (1) the ThreadScreen cases live in src/screens/ThreadPage.test.tsx, where the reply-to and quote-source follow tests already are; (2) on a phone the line uses gap 28px 32px, margin-top 24px and padding-bottom 20px, because e2e/targets.spec.ts requires each target to be its own 21 px either side of its centre and a one-digit ordinal is about 14 px wide (a first try at 24px failed that spec on #2); (3) the e2e seed's #44 (page 2) now quotes #1 as #2 does (cmd/ketju e2e.go seedQuotesFirst), so the Playwright spec e2e/quoted-by.spec.ts has an off-page backlink; the full Playwright suite passes with it (292 passed). Reader bundle measured 79983 B before, 80135 B after (+152 B gzip). Dist not committed: waiting for the dist queue.
