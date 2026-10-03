@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YMG0NXX1FXRARA7X4EK0HD
 title: Check Phase 4's exit criterion and prepare the v1.0 release
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -49,10 +49,17 @@ blocks_on: none
 references:
   - ref: pr:375
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-mg0nx
+  branch: run/mg0nx-phase4-exit
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a09ced2aaf4c2bc25
+  commit: 502e87826ec5e486a454e267db5fdce45866285b
+  session: null
+  claimed_at: 2026-10-03T13:08:12Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T11:19:00Z
+updated_at: 2026-10-03T13:08:15Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
