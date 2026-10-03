@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T09:51:48Z
+updated_at: 2026-10-03T10:01:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -171,6 +171,20 @@ Phase A is done on run/cysc0-reply-as-thread. The branch is stacked on run/cysba
 - **e2e:** reply-as-new-thread.spec.ts, on carol's session at 390 and 1440 px, with one axe scan per test.
 
 The thread-view bundle was measured with go generate and not committed: 85230 B gzip of 120000, against 84344 B on the merge branch.
+
+**agent:claude-code/phase4-run-cysc0** at 2026-10-03T10:01:09Z
+
+Terva review 2059 covered head 2e13db04, base 1c0bc8fe, run abffd15b, Actions #2702. It raised two medium findings. Both are fixed in 9433d4c7, and the dist is regenerated in 368aabc5.
+
+1. **A transient failure to load the source dropped the continuation.**
+   - Fix: only an answer that the post is not there drops `from`. That means not-found, gone, forbidden or unauthenticated (`revokesAccess`), or a post not shown as itself.
+   - Any other failure keeps `from` and shows "could not be loaded" with a Retry button. Post still sends `from`, so the server decides.
+   - Tests: NewThreadScreen.test, "keeps the continuation when the post fails to load, and quotes it on a retry" and "sends from even while the post cannot be loaded, so the server decides".
+2. **A reload quoted the post again into the restored draft.**
+   - Fix: the quoted post's key is kept in localStorage, beside the draft's own copy. A draft that already holds the quote, as one from another device would, also counts as quoted. A created thread or a discarded draft clears the mark.
+   - Test: NewThreadScreen.test, "quotes nothing again into a draft a reload brings back". It covers the quote as written and the quote as edited.
+
+Reverting the content check, the mark, or the refusal split each fails its test. The thread view is 90219 B gzip.
 
 ## Summary
 
