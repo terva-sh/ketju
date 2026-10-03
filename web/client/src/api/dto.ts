@@ -89,10 +89,12 @@ export interface MovedPosts {
 }
 
 // MergedPosts is POST /admin/threads/{id}/merge's answer: both threads'
-// headers as their pages now serve them.
+// headers as their pages now serve them, and the ordinal of the first copy
+// in the target, which carries the merge notice.
 export interface MergedPosts {
   source: ThreadHeader;
   target: ThreadHeader;
+  first_copy: number;
 }
 
 export interface ThreadViewer {

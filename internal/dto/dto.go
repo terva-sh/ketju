@@ -379,10 +379,14 @@ type MovedPosts struct {
 
 // MergedPosts answers a merge (POST /admin/threads/{id}/merge): the thread
 // the posts left and the thread they joined, each as its page now serves it
-// to the moderator (TKT-01M29CYSBA).
+// to the moderator (TKT-01M29CYSBA), and the ordinal of the first copy in
+// the target, which carries the merge notice. It is the move's own answer,
+// so a reply landing in the target before the header was read does not
+// move it (Terva review 2058).
 type MergedPosts struct {
-	Source ThreadHeader `json:"source"`
-	Target ThreadHeader `json:"target"`
+	Source    ThreadHeader `json:"source"`
+	Target    ThreadHeader `json:"target"`
+	FirstCopy int          `json:"first_copy"`
 }
 
 // ThreadPage is the response to GET /threads/{id}.

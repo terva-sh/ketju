@@ -203,6 +203,10 @@ type Service struct {
 	// PostsSplitOut is written, before the target's run. A test returns an
 	// error from it to stop the move there, as a crash would.
 	afterSplitOut func(source, target threadid.ID) error
+	// afterMerge, when set, is called by Merge once the posts are moved,
+	// before the headers are read. A test appends to the target there, as
+	// a reply landing at that moment would (Terva review 2058).
+	afterMerge func(target threadid.ID)
 
 	// Logger reports what a request cannot answer with: an audit row owed
 	// after an action that happened (queue.go). Nil is slog.Default().

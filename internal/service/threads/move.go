@@ -249,7 +249,8 @@ func (s *Service) Split(ctx context.Context, v domain.Viewer, source threadid.ID
 // Merge moves posts of source, by ordinal, to the end of the existing
 // thread into names by its base32 id, in their source order (docs/06
 // "Moderator flow for drift", TKT-01M29CYSBA). It answers both threads'
-// headers as their pages now serve them to v. into is checked before
+// headers as their pages now serve them to v, and the ordinal of the first
+// copy in the target. into is checked before
 // anything else: one that is not a thread id is validation-failed, as is
 // the source itself; one that names no thread, or a thread v may not read,
 // is not-found. Every other refusal is movePosts', before anything is
@@ -267,8 +268,16 @@ func (s *Service) Merge(ctx context.Context, v domain.Viewer, source threadid.ID
 	if target == source {
 		return out, problem.Coded(problem.CodeValidationFailed, errors.New("threads: a merge into its own thread"))
 	}
-	if _, err := s.movePosts(ctx, v, MoveRequest{Source: source, Ordinals: ordinals, Target: target}); err != nil {
+	res, err := s.movePosts(ctx, v, MoveRequest{Source: source, Ordinals: ordinals, Target: target})
+	if err != nil {
 		return out, err
+	}
+	// The first copy is the move's own answer, not the header's count: a
+	// reply landing in the target before the header is read would make
+	// that late (Terva review 2058).
+	out.FirstCopy = int(res.Copies[0])
+	if s.afterMerge != nil {
+		s.afterMerge(target)
 	}
 	if out.Source, err = s.threadHeader(ctx, v, source); err != nil {
 		return out, err

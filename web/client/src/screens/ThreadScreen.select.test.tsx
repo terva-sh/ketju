@@ -141,7 +141,7 @@ describe('selecting posts on the thread page', () => {
   // TKT-01M29CYSBA.
   it('merges the selection into another thread and goes to the first copy', async () => {
     const target = { ...threadPage({ id: other, slug: 'b', title: 'Other' }).thread, post_count: 12, log_length: 99999 };
-    const merged: MergedPosts = { source: { ...page(1).thread, log_length: page(1).thread.log_length + 10 }, target };
+    const merged: MergedPosts = { source: { ...page(1).thread, log_length: page(1).thread.log_length + 10 }, target, first_copy: 11 };
     server.routes[`GET /api/v1/threads/${other}?page=1`] = () => ({ status: 200, body: threadPage({ id: other, slug: 'b', title: 'Other' }) });
     server.routes[`POST /api/v1/admin/threads/${id}/merge`] = () => ({ status: 200, body: merged });
     const root = await renderAt(`/t/${id}/a`);

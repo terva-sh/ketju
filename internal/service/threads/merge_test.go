@@ -337,6 +337,31 @@ func TestMergeAppendsAtEndInSourceOrder(t *testing.T) {
 	}
 }
 
+// TestMergeAnswersItsFirstCopy: the answer names the first copy's ordinal
+// from the move itself. A reply landing in the target after the copies and
+// before the header is read moves the header's count on, and not the first
+// copy (Terva review 2058).
+func TestMergeAnswersItsFirstCopy(t *testing.T) {
+	w := newMoveWorld(t)
+	a := w.postIn(w.id, "author", "a", 0)
+	b := w.postIn(w.id, "rep1", "b", 0)
+	w.svc.afterMerge = func(target threadid.ID) {
+		w.svc.afterMerge = nil
+		w.postIn(target, "rep2", "a reply landing as the merge answers", 0)
+	}
+	res := w.mustMerge("mod", w.id, w.otherID, a, b)
+	if res.Target.PostCount != 4 {
+		t.Fatalf("the target holds %d posts, want 4: its own, two copies and the reply", res.Target.PostCount)
+	}
+	if res.FirstCopy != 2 {
+		t.Errorf("the merge answers first copy %d, want 2", res.FirstCopy)
+	}
+	got := w.page("rep1", w.otherID).Body.Posts
+	if p := got[res.FirstCopy-1]; p.MergeNotice == nil || p.MergeNotice.Count != 2 {
+		t.Errorf("post %d of the target carries merge notice %+v, want the notice for 2 posts", p.Ordinal, p.MergeNotice)
+	}
+}
+
 // TestMergeKeepsAuthorsTimesAndOrigin is criterion 1: each copy keeps its
 // original's author, time and text, and its Post record names the original.
 func TestMergeKeepsAuthorsTimesAndOrigin(t *testing.T) {

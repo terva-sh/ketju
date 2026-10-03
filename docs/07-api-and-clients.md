@@ -501,8 +501,11 @@ threads' `ThreadHeader` as their pages now serve them to the moderator,
   and finishes from the logs within a minute.
 
 A merge is bounded and decoded as a split is, and answers 200
-`internal/dto` `MergedPosts` `{source, target}`, both threads'
-`ThreadHeader` as their pages now serve them to the moderator, `no-store`.
+`internal/dto` `MergedPosts` `{source, target, first_copy}`, `no-store`:
+both threads' `ThreadHeader` as their pages now serve them to the
+moderator, and the ordinal of the first copy in the target, the post that
+carries `merge_notice`. `first_copy` is the move's own answer, so a reply
+that lands in the target before the header is read does not shift it.
 Its refusals are the split's, with the target in place of the destination
 forum: `into` that is not a thread id, or is the thread itself, is
 `validation-failed`; a target that does not exist or that the moderator

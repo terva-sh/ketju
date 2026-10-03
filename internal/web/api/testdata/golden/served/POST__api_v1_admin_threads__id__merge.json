@@ -6,6 +6,7 @@
     "Content-Type": "application/json"
   },
   "body": {
+    "first_copy": 2,
     "source": {
       "archived": false,
       "author": {

@@ -3,8 +3,8 @@
     "file": "assets/ApplyRoot-C_SWIqcC.css",
     "src": "_ApplyRoot-C_SWIqcC.css"
   },
-  "_ApplyRoot-DHUIj8VN.js": {
-    "file": "assets/ApplyRoot-DHUIj8VN.js",
+  "_ApplyRoot-D6r_9n_h.js": {
+    "file": "assets/ApplyRoot-D6r_9n_h.js",
     "name": "ApplyRoot",
     "imports": [
       "_Icon-3Osv4awK.js",
@@ -35,7 +35,7 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-DXKTMgu1.js",
+    "file": "assets/index-DaYfCPp7.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -45,7 +45,7 @@
     "dynamicImports": [
       "src/components/thread/MovePosts.tsx",
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-DHUIj8VN.js"
+      "_ApplyRoot-D6r_9n_h.js"
     ],
     "css": [
       "assets/index-BKZCB4ol.css"
@@ -109,7 +109,7 @@
     "src": "src/assets/icon/icon.svg"
   },
   "src/components/thread/MovePosts.tsx": {
-    "file": "assets/MovePosts-C1SUWQGk.js",
+    "file": "assets/MovePosts-DZ7G1GwE.js",
     "name": "MovePosts",
     "src": "src/components/thread/MovePosts.tsx",
     "isDynamicEntry": true,
@@ -122,12 +122,12 @@
     ]
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-Cdwlg0xK.js",
+    "file": "assets/AdminRoot-BScCqIaZ.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-DHUIj8VN.js",
+      "_ApplyRoot-D6r_9n_h.js",
       "_Icon-3Osv4awK.js",
       "index.html"
     ],

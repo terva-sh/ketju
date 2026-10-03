@@ -36,6 +36,7 @@ const onMerge = vi.fn();
 const merged: MergedPosts = {
   source: { ...source, log_length: source.log_length + 100 },
   target: { ...target, post_count: 11, log_length: target.log_length + 200 },
+  first_copy: 10,
 };
 
 beforeEach(() => {
@@ -173,10 +174,22 @@ describe('the merge dialog', () => {
     expect(merges()).toEqual([
       { method: 'POST', url: `/api/v1/admin/threads/${source.id}/merge`, body: { ordinals: [61, 62], into: targetId } },
     ]);
-    // Eleven posts after the merge, the last two of them the copies.
+    // The first copy is the one the answer names.
     expect(onMerge).toHaveBeenCalledWith(merged.target, 10);
     expect(cachedThread(source.id)?.header.log_length).toBe(merged.source.log_length);
     expect(cachedThread(targetId)?.header.post_count).toBe(11);
+  });
+
+  // Terva review 2058: the landing is the answer's first_copy, not counted
+  // back from the header, which a reply landing in the target after the
+  // merge has already moved on.
+  it('lands on the first copy the answer names, whatever the target now counts', async () => {
+    answer = () => ({ status: 200, body: { ...merged, target: { ...merged.target, post_count: 12 } } });
+    const d = await open();
+    await type(d, targetId);
+    await act(async () => mergeButton(d).click());
+    await wait();
+    expect(onMerge).toHaveBeenCalledWith({ ...merged.target, post_count: 12 }, 10);
   });
 
   // Terva review 2057, on the split dialog: a dialog closed while its merge

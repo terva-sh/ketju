@@ -638,7 +638,7 @@ var corpus = map[string]any{
 	"thread-merged." + tMember: mergedThread(tMember),
 	"thread-merged." + tAnon:   mergedThread(tAnon),
 	"merge." + tModerator: MergedPosts{Source: threadPage(tModerator).Thread,
-		Target: mergedThread(tMember).Thread},
+		Target: mergedThread(tMember).Thread, FirstCopy: 2},
 
 	"slow-mode." + tModerator: SlowMode{Seconds: 30},
 
