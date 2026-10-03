@@ -5,6 +5,7 @@ import type { Forum, Me, Post, ThreadHeader, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { resetLists } from '../state/lists';
 import { dwellMs, resetReadTracker } from '../state/readTracker';
+import { storeThreadHeader } from '../state/threads';
 import { viewer } from '../state/viewer';
 import {
   FakeEventSource,
@@ -317,6 +318,20 @@ describe('flagging from the thread screen', () => {
     await act(async () => d.querySelector<HTMLButtonElement>('.flag-send')!.click());
     await act(() => new Promise((r) => setTimeout(r, 5)));
   }
+
+  // Terva review 2053: a flag dialog open when the thread is archived goes
+  // with the flag buttons, and sends nothing.
+  it('withdraws an open flag dialog when the thread is archived', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    await act(async () => root.querySelector<HTMLButtonElement>('#post-62 [data-post-action=flag]')!.click());
+    expect(dialog()).not.toBeNull();
+    const head = threadPage({ id, slug: 'a', title: 'Flagged' }).thread;
+    await act(async () => void storeThreadHeader(id, { ...head, archived: true, log_length: head.log_length + 1 }));
+    expect(root.querySelector('[data-thread-state=archived]')).not.toBeNull();
+    expect(dialog()).toBeNull();
+    expect(root.querySelector('[data-post-action=flag]')).toBeNull();
+    expect(sent.filter((r) => r.method === 'POST')).toEqual([]);
+  });
 
   it('flags a post from the page', async () => {
     const root = await renderAt(`/t/${id}/a`);

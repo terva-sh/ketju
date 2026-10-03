@@ -672,7 +672,9 @@ function ThreadBody({
           <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} slow={slow} canUpload={v.can_upload} />
         ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
-      {flagging && (
+      {/* A dialog opened before the thread was archived goes with the flag
+          buttons, since the server now refuses the flag (Terva review 2053). */}
+      {flagging && !archived && (
         <FlagDialog
           thread={thread.id}
           ordinal={flagging.ordinal}
