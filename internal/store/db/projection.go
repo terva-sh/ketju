@@ -7,23 +7,25 @@ import (
 )
 
 // ProjectionTables are the tables derived from thread logs (docs/04
-// "Projection tables"), in the order migrations 0004, 0007, 0020 and 0025 create them. Every row in
-// them can be rebuilt by `ketju reindex`, and nothing else in the database
-// can: the rest is authoritative and must be backed up.
+// "Projection tables"), in the order migrations 0004, 0007, 0020, 0025 and
+// 0026 create them. Every row in them can be rebuilt by `ketju reindex`,
+// and nothing else in the database can: the rest is authoritative and must
+// be backed up.
 //
 // TestProjectionTablesAreMarked holds this list equal to the tables whose
 // schema carries the PROJECTION marker, so a new projection must add itself
 // here or fail the tests. The search index is not one: it is SearchTables,
 // which ClearProjections leaves alone (search.go, TKT-01M29CRJ3B).
 var ProjectionTables = []string{"threads", "thread_tags", "post_meta", "mentions", "projection_state",
-	"forum_thread_counts", "post_attachments", "post_quotes"}
+	"forum_thread_counts", "post_attachments", "post_quotes", "post_moves"}
 
 // ClearProjections empties every projection table, for reindex to replay the
 // logs into. Run it inside a Write so the tables are never seen half-empty.
 //
 // It empties rather than drops. The tables' DDL lives in migrations 0004,
-// 0007, 0020 and 0025 and nowhere else; dropping them would need a second copy of it to recreate
-// them, because the migration runner does not re-run a recorded migration.
+// 0007, 0020, 0025 and 0026 and nowhere else; dropping them would need a
+// second copy of it to recreate them, because the migration runner does not
+// re-run a recorded migration.
 func ClearProjections(ctx context.Context, q *dbq.Queries) error {
 	for _, clear := range []func(context.Context) error{
 		q.ClearThreads, q.ClearThreadTags, q.ClearPostMeta, q.ClearMentions, q.ClearProjectionState,
@@ -32,6 +34,7 @@ func ClearProjections(ctx context.Context, q *dbq.Queries) error {
 		q.ClearForumThreadCounts,
 		q.ClearPostAttachments,
 		q.ClearPostQuotes,
+		q.ClearPostMoves,
 	} {
 		if err := clear(ctx); err != nil {
 			return err

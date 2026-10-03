@@ -201,6 +201,33 @@ func TestAuditTargetsLink(t *testing.T) {
 	}
 }
 
+// TestPostsMovedRelatesBothThreads (TKT-01M29CXJZZ): a posts.moved row
+// carries the thread the posts left and the one they went to in related,
+// in that order, resolved as a thread target is; one that is gone reads as
+// its id with no link.
+func TestPostsMovedRelatesBothThreads(t *testing.T) {
+	w := newWorld(t)
+	tpath := "/t/" + w.thread.String() + "/the-dinner-bill"
+	gone := threadid.ID(0x9999)
+	id := w.append(audit.System("thread-log"), "posts.moved", audit.Thread(w.thread),
+		map[string]any{"thread": w.thread.String(), "log_offset": 64, "from_thread": w.thread.String(),
+			"to_thread": gone.String(), "count": 2})
+	for _, e := range w.query(Query{}).Entries {
+		if e.ID != id {
+			continue
+		}
+		want := []dto.AuditTarget{
+			{Type: "thread", ID: w.thread.String(), Label: "The dinner bill", Href: tpath},
+			{Type: "thread", ID: gone.String(), Label: gone.String()},
+		}
+		if !slices.Equal(e.Related, want) {
+			t.Errorf("related is %+v, want %+v", e.Related, want)
+		}
+		return
+	}
+	t.Fatal("the posts.moved row is not on the page")
+}
+
 // TestAuditFilters is the first criterion through the service: each
 // parameter reaches the view, the actor by handle, and the answer carries
 // the whole action list whatever the filter.

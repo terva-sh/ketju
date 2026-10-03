@@ -105,6 +105,11 @@ func TestPopulateWritesEveryType(t *testing.T) {
 		// No actor writes a Redacted: only ketju redact, which rewrites the
 		// log offline. TestRedactedCatchUpEqualsReindex reindexes it.
 		threadlog.TypeRedacted: true,
+		// A move names two threads, and a moved post takes no later record,
+		// which random records would name. TestMoveProjectionsRebuildFromLogs
+		// reindexes them (TKT-01M29CXJZZ).
+		threadlog.TypePostsSplitOut: true,
+		threadlog.TypePostsMergedIn: true,
 	}
 	for _, typ := range everyType {
 		covered[typ] = true

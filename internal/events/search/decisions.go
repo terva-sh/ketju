@@ -17,14 +17,19 @@ const (
 
 	// setsTitle: the record sets the thread's title.
 	setsTitle
+
+	// touchesOrdinals: a thread-level record that can change whether the
+	// posts its body names are visible, so each is put or dropped as
+	// touchesOrdinal's one is. A PostsSplitOut marks its posts moved.
+	touchesOrdinals
 )
 
 // decision is what the indexer does with one record type: an effect, and a
 // reason when the effect is none. TestEveryRecordTypeHasAnIndexDecision holds
-// every catalogued and reserved type to having one, and every type that can
-// change a post's index entry to touching its ordinal, so a record added to
-// the catalogue cannot be skipped by the index without somebody writing down
-// why (Terva review 1695).
+// every catalogued type to having one, and every type that can change a
+// post's index entry to touching its ordinal or ordinals, so a record added
+// to the catalogue cannot be skipped by the index without somebody writing
+// down why (Terva review 1695).
 type decision struct {
 	effect effect
 	reason string
@@ -53,12 +58,9 @@ var decisions = map[threadlog.RecordType]decision{
 	threadlog.TypeThreadTagged:   {reason: "tags are not indexed"},
 	threadlog.TypeThreadArchived: {reason: "an archived thread stays readable, and so searchable"},
 
-	// Held for Phase 4 (docs/03 "Reserved record type numbers"). This build
-	// has no body for them, so neither the index nor this indexer can read
-	// one, and the index marks no post moved: a post a split would move is
-	// still Visible on the thread page, and so in search. When split and
-	// merge land (TKT-01M29CXJZZ) the catalogue gains their bodies and the
-	// test then requires a touch decision here.
-	threadlog.TypePostsSplitOut: {reason: "reserved for Phase 4; no body in this build, and the index skips it"},
-	threadlog.TypePostsMergedIn: {reason: "reserved for Phase 4; no body in this build, and the index skips it"},
+	// A move (TKT-01M29CXJZZ). The split marks every post it names moved,
+	// which is not Visible, so their rows go. The posts land in the target
+	// as Posts with an origin, which the Post decision indexes there.
+	threadlog.TypePostsSplitOut: {effect: touchesOrdinals},
+	threadlog.TypePostsMergedIn: {reason: "the copies that follow it are Posts, indexed as any Post is"},
 }

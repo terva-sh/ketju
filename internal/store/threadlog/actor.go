@@ -132,6 +132,12 @@ var ErrArchived = errors.New("threadlog: the thread is archived")
 type request struct {
 	a     Append
 	reply chan answer
+
+	// run, when not nil, is a run of records appended together, and
+	// runReply takes its one answer; a and reply are then unused
+	// (AppendRun).
+	run      []Append
+	runReply chan runAnswer
 }
 
 type answer struct {
@@ -139,11 +145,18 @@ type answer struct {
 	err error
 }
 
-// staged is one request that has been encoded and given its numbers but not
+type runAnswer struct {
+	res []Result
+	err error
+}
+
+// staged is one record that has been encoded and given its numbers but not
 // yet written. Encoding the whole batch before touching the file means a
-// malformed request fails without having changed anything on disk.
+// malformed request fails without having changed anything on disk. app is
+// the record's Append, which for a run is one of req.run.
 type staged struct {
-	req    request
+	req    *request
+	app    Append
 	header FrameHeader
 	body   []byte
 	offset int64
@@ -248,6 +261,44 @@ func (a *Actor) Append(req Append) (Result, error) {
 	}
 
 	ans := <-r.reply
+	return ans.res, ans.err
+}
+
+// AppendRun adds records as one contiguous run and returns once all of them
+// are durable: they are staged in order, each against the index as the ones
+// before it leave it, written with one write and made durable with one
+// fsync, and nothing else lands between them. Either every record is
+// written or none is, and the error says which record refused.
+//
+// AtLength on the first record holds the whole run to that length; on a
+// later record it is ignored, since the run itself decides where that one
+// lands. A move's target run is the caller (docs/03 "How a move is
+// written"): its PostsMergedIn, each copy and the copy's Edits.
+//
+// A crash can still leave a prefix of the run on disk, as it can leave the
+// prefix of any batch. The log is the truth, and the caller that needs the
+// whole run, the move finisher, reads what is there and appends the rest.
+func (a *Actor) AppendRun(reqs []Append) ([]Result, error) {
+	if len(reqs) == 0 {
+		return nil, nil
+	}
+	a.mu.Lock()
+	if a.closed {
+		a.mu.Unlock()
+		return nil, ErrActorClosed
+	}
+	a.inflight.Add(1)
+	a.mu.Unlock()
+	defer a.inflight.Done()
+
+	r := request{run: reqs, runReply: make(chan runAnswer, 1)}
+	select {
+	case a.reqs <- r:
+	case <-a.quit:
+		return nil, ErrActorClosed
+	}
+
+	ans := <-r.runReply
 	return ans.res, ans.err
 }
 
@@ -377,31 +428,46 @@ func (a *Actor) commit(batch []request) {
 	staging := make([]staged, 0, len(batch))
 
 	// 1. Encode and number everything. Nothing is on disk yet, so a bad
-	//    request fails alone rather than poisoning the batch.
-	for _, r := range batch {
-		offset := base + int64(len(buf))
-		if r.a.AtLength != 0 && r.a.AtLength != offset {
-			r.reply <- answer{err: fmt.Errorf("%w: decided at %d, the record would be written at %d",
-				ErrLogMoved, r.a.AtLength, offset)}
-			continue
+	//    request fails alone rather than poisoning the batch, and a run
+	//    that refuses one of its records takes none of them.
+	for i := range batch {
+		r := &batch[i]
+		apps := r.run
+		if apps == nil {
+			apps = []Append{r.a}
 		}
-		h, body, err := a.frameFor(r.a, staging)
+		mark, markBuf := len(staging), len(buf)
+		var err error
+		for k, app := range apps {
+			offset := base + int64(len(buf))
+			if k == 0 && app.AtLength != 0 && app.AtLength != offset {
+				err = fmt.Errorf("%w: decided at %d, the record would be written at %d",
+					ErrLogMoved, app.AtLength, offset)
+				break
+			}
+			h, body, ferr := a.frameFor(app, staging)
+			if ferr == nil {
+				var next []byte
+				if next, ferr = AppendFrame(buf, h, body); ferr == nil {
+					staging = append(staging, staged{
+						req: r, app: app, header: h, body: body, offset: offset, size: len(next) - len(buf),
+						res: Result{Ordinal: h.Ordinal, Revision: h.Revision},
+					})
+					buf = next
+				}
+			}
+			if ferr != nil {
+				err = ferr
+				if r.run != nil {
+					err = fmt.Errorf("record %d of the run, a %s: %w", k, app.Type, ferr)
+				}
+				break
+			}
+		}
 		if err != nil {
-			r.reply <- answer{err: err}
-			continue
+			staging, buf = staging[:mark], buf[:markBuf]
+			a.answer(r, nil, err)
 		}
-
-		next, err := AppendFrame(buf, h, body)
-		if err != nil {
-			r.reply <- answer{err: err}
-			continue
-		}
-
-		staging = append(staging, staged{
-			req: r, header: h, body: body, offset: offset, size: len(next) - len(buf),
-			res: Result{Ordinal: h.Ordinal, Revision: h.Revision},
-		})
-		buf = next
 	}
 	if len(staging) == 0 {
 		return
@@ -458,6 +524,13 @@ func (a *Actor) commit(batch []request) {
 	for i := range staging {
 		if applied[i] {
 			a.writeEntry(staging[i].header.Ordinal)
+			// A split changes the entries of the posts it names, not of
+			// its frame's ordinal 0. Each is written, and made durable
+			// below with the rest, before the header that covers it: a
+			// trusted index that missed one would show a moved post here.
+			for _, o := range splitOrdinals(staging[i].header.Type, staging[i].app.Body) {
+				a.writeEntry(o)
+			}
 		}
 	}
 	// A record that changed an existing entry, such as a Delete or an Edit,
@@ -477,18 +550,52 @@ func (a *Actor) commit(batch []request) {
 	a.flushHeader()
 
 	// 5. Answer.
-	for i := range staging {
-		staging[i].req.reply <- answer{res: staging[i].res}
+	a.answerAll(staging, nil)
+}
+
+// answer replies to one request: a single record's answer, or a run's,
+// whose results are res in order.
+func (a *Actor) answer(r *request, res []Result, err error) {
+	if r.run != nil {
+		r.runReply <- runAnswer{res: res, err: err}
+		return
+	}
+	var one Result
+	if len(res) > 0 {
+		one = res[0]
+	}
+	r.reply <- answer{res: one, err: err}
+}
+
+// answerAll replies to every request with records in staging, once each:
+// with err when it is not nil, or else with each record's result.
+func (a *Actor) answerAll(staging []staged, err error) {
+	for i := 0; i < len(staging); {
+		r := staging[i].req
+		j := i
+		var res []Result
+		for j < len(staging) && staging[j].req == r {
+			res = append(res, staging[j].res)
+			j++
+		}
+		if err != nil {
+			res = nil
+		}
+		a.answer(r, res, err)
+		i = j
 	}
 }
 
 // changesEntry reports whether a record rewrites an existing post's entry,
 // which is every record Apply folds into an entry other than the Post that
-// creates it.
+// creates it. A PostsSplitOut names its posts in its body rather than its
+// frame, and rewrites each.
 func changesEntry(h FrameHeader) bool {
 	switch h.Type {
 	case TypeEdit, TypeDelete, TypeRestore, TypeRedacted:
 		return h.Ordinal != 0
+	case TypePostsSplitOut:
+		return true
 	}
 	return false
 }
@@ -536,15 +643,9 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 			return h, nil, fmt.Errorf("%w: an Edit must name an ordinal", ErrMalformed)
 		}
 		h.Ordinal = req.Ordinal
-		e, err := a.ix.Entry(req.Ordinal)
+		rev, _, err := a.entryAfter(req.Ordinal, staging)
 		if err != nil {
 			return h, nil, err
-		}
-		rev := uint32(e.Revision)
-		for _, s := range staging {
-			if s.header.Type == TypeEdit && s.header.Ordinal == req.Ordinal {
-				rev = s.header.Revision
-			}
 		}
 		h.Revision = rev + 1
 
@@ -554,11 +655,35 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 		// appended here would tombstone a post whose text is still on disk.
 		return h, nil, fmt.Errorf("%w: a Redacted record is written only by ketju redact", ErrMalformed)
 
+	case TypePostsSplitOut, TypePostsMergedIn:
+		// Thread-level, and held to their shape here rather than in the
+		// index fold, which takes what the log says so that a thread
+		// always replays (docs/03 "How a move is written").
+		if req.Ordinal != 0 {
+			return h, nil, fmt.Errorf("%w: a %s is thread-level and names no ordinal", ErrMalformed, req.Type)
+		}
+		h.Revision = 1
+		if err := CheckMove(req.Body, a.ix.Header.ThreadID); err != nil {
+			return h, nil, err
+		}
+		// Only a post shown as itself moves, as it stands after every
+		// record staged ahead of this one, splits included.
+		for _, o := range splitOrdinals(req.Type, req.Body) {
+			f, err := a.flagsAfter(o, staging)
+			if err != nil {
+				return h, nil, err
+			}
+			if !f.Visible() {
+				return h, nil, fmt.Errorf("%w: PostsSplitOut names post %d, which is not shown as itself (flags %#x)",
+					ErrPostState, o, uint16(f))
+			}
+		}
+
 	default:
 		h.Ordinal = req.Ordinal
 		h.Revision = 1
 		if req.Ordinal != 0 {
-			if _, err := a.ix.Entry(req.Ordinal); err != nil {
+			if _, _, err := a.entryAfter(req.Ordinal, staging); err != nil {
 				return h, nil, err
 			}
 		}
@@ -566,10 +691,12 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 
 	// A redacted post takes no further record, whoever asks: an Edit would
 	// give it a source again, and a Delete or Restore would change the
-	// state of a post there is nothing left of (TKT-01M29CXJZ9). A caller's
+	// state of a post there is nothing left of (TKT-01M29CXJZ9). Nor does a
+	// moved post: its revision is the one its copy must reach, and a record
+	// here would show nowhere (docs/03 "How a move is written"). A caller's
 	// own Refuse says so too; this holds for the callers that forget.
 	if req.Type != TypePost && h.Ordinal != 0 {
-		req.Refuse |= EntryRedacted
+		req.Refuse |= EntryRedacted | EntryMoved
 	}
 	if req.Require != 0 || req.Refuse != 0 || req.RequireAny != 0 {
 		if err := a.checkState(req, staging); err != nil {
@@ -584,30 +711,66 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 	return h, body, nil
 }
 
-// checkState holds req to its Require, RequireAny and Refuse preconditions.
-// The flags are the index's, then every record staged ahead of req in this
-// batch folded in order through [postFlagEffect], the table Apply uses, so
-// the check sees the post exactly as it will stand when req is applied.
+// checkState holds req to its Require, RequireAny and Refuse preconditions,
+// against the post as it will stand when req is applied ([Actor.flagsAfter]).
 func (a *Actor) checkState(req Append, staging []staged) error {
 	if req.Ordinal == 0 {
 		return fmt.Errorf("%w: a precondition needs an ordinal", ErrMalformed)
 	}
-	e, err := a.ix.Entry(req.Ordinal)
+	flags, err := a.flagsAfter(req.Ordinal, staging)
 	if err != nil {
 		return err
-	}
-	flags := e.Flags
-	for _, s := range staging {
-		if s.header.Ordinal == req.Ordinal {
-			set, clear := postFlagEffect(s.header.Type, s.req.a.Body)
-			flags = (flags | set) &^ clear
-		}
 	}
 	if !flags.Has(req.Require) || flags&req.Refuse != 0 || (req.RequireAny != 0 && flags&req.RequireAny == 0) {
 		return fmt.Errorf("%w: %s of post %d needs flags %#x set, one of %#x set and %#x clear, and it has %#x",
 			ErrPostState, req.Type, req.Ordinal, uint16(req.Require), uint16(req.RequireAny), uint16(req.Refuse), uint16(flags))
 	}
 	return nil
+}
+
+// flagsAfter is ordinal's flags as they will stand once every record staged
+// ahead in this batch is applied ([Actor.entryAfter]).
+func (a *Actor) flagsAfter(ordinal uint32, staging []staged) (EntryFlags, error) {
+	_, flags, err := a.entryAfter(ordinal, staging)
+	return flags, err
+}
+
+// entryAfter is ordinal's revision and flags as they will stand once every
+// record staged ahead in this batch is applied. It starts from the index's
+// entry, or from the Post staged ahead that creates it, flagged as Apply
+// flags a new post; then each staged record that names the post is folded in
+// order through [postFlagEffect], the table Apply uses, an Edit takes the
+// revision, and each staged split that names the post moves it. So a check,
+// and a revision, see the post exactly as Apply will leave it, which is what
+// lets one batch or run hold a post and the Edits that follow it (a move's
+// copy, docs/03 "How a move is written").
+func (a *Actor) entryAfter(ordinal uint32, staging []staged) (uint32, EntryFlags, error) {
+	var rev uint32
+	var flags EntryFlags
+	e, err := a.ix.Entry(ordinal)
+	found := err == nil
+	if found {
+		rev, flags = uint32(e.Revision), e.Flags
+	}
+	for _, s := range staging {
+		switch {
+		case s.header.Type == TypePost && s.header.Ordinal == ordinal:
+			rev, flags, found = s.header.Revision, newPostFlags(s.header, s.app.Body), true
+		case s.header.Ordinal == ordinal:
+			set, clear := postFlagEffect(s.header.Type, s.app.Body)
+			flags = (flags | set) &^ clear
+			if s.header.Type == TypeEdit {
+				rev = s.header.Revision
+			}
+		}
+		if slices.Contains(splitOrdinals(s.header.Type, s.app.Body), ordinal) {
+			flags |= EntryMoved
+		}
+	}
+	if !found {
+		return 0, 0, err
+	}
+	return rev, flags, nil
 }
 
 // writeEntry writes one index entry, without fsync.
@@ -656,9 +819,7 @@ func (a *Actor) flushHeader() {
 }
 
 func (a *Actor) failAll(staging []staged, err error) {
-	for i := range staging {
-		staging[i].req.reply <- answer{err: err}
-	}
+	a.answerAll(staging, err)
 }
 
 func (a *Actor) noteErr(err error) {

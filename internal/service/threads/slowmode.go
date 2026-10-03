@@ -158,15 +158,21 @@ func slowModeWait(ix *threadlog.Index, author int64, seconds int, now time.Time)
 	if seconds <= 0 {
 		return 0, nil
 	}
-	mine := ix.ByAuthor(uint64(author))
-	if len(mine) == 0 {
+	// The author's newest post by time, not their last ordinal: a post a
+	// move copied in keeps its original time and may sit at a later
+	// ordinal than a newer reply (TKT-01M29CXJZZ).
+	var newest int64
+	for _, o := range ix.ByAuthor(uint64(author)) {
+		e, err := ix.Entry(o)
+		if err != nil {
+			return 0, err
+		}
+		newest = max(newest, e.CreatedMS)
+	}
+	if newest == 0 {
 		return 0, nil
 	}
-	last, err := ix.Entry(mine[len(mine)-1])
-	if err != nil {
-		return 0, err
-	}
-	return max(0, time.UnixMilli(last.CreatedMS).Add(secondsDuration(seconds)).Sub(now)), nil
+	return max(0, time.UnixMilli(newest).Add(secondsDuration(seconds)).Sub(now)), nil
 }
 
 // nextPostAt is the viewer block's next_post_at: when slow mode next lets

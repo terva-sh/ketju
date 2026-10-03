@@ -594,6 +594,8 @@ type item struct {
 	actor    int64
 	at       int64
 	edit     bool
+	revision int64 // an Edit's, for telling a move's carried Edit from a new one
+
 	replyTo  uint32
 	mentions []uint64
 	quotes   []uint32
@@ -635,14 +637,16 @@ func (g *Generator) scan(id threadid.ID, from, upTo, since, horizon int64) ([]it
 		switch b := body.(type) {
 		case *threadlog.PostBody:
 			if b.Origin != nil {
-				return true // a split or merge copy: Phase 4's (TKT-01M29CXJZZ)
+				return true // a move's copy notifies nobody (TKT-01M29CXJZZ)
 			}
 			it.replyTo, it.mentions = b.ReplyTo, b.Mentions
 		case *threadlog.EditBody:
 			if b.Mentions == nil {
 				return true
 			}
-			it.edit, it.mentions = true, *b.Mentions
+			// A move's carried Edit is passed over in generate, which can
+			// read post_moves (IsCarriedEdit).
+			it.edit, it.mentions, it.revision = true, *b.Mentions, int64(max(h.Revision, 1))
 		default:
 			return true
 		}
@@ -796,6 +800,17 @@ func (g *Generator) generate(ctx context.Context, q *dbq.Queries, id threadid.ID
 			p, ok := posts[it.ordinal]
 			if !ok {
 				continue // an edit of a post the projection does not have
+			}
+			// A move notifies nobody, its copied Edits included. The
+			// projection has reached this range, so the copy's post_moves
+			// row is there; an unknown source revision counts as carried.
+			carried, err := q.IsCarriedEdit(ctx, dbq.IsCarriedEditParams{
+				TargetThreadID: int64(id), TargetOrdinal: int64(it.ordinal), Revision: it.revision})
+			if err != nil {
+				return err
+			}
+			if carried {
+				continue
 			}
 			c.author = p.AuthorID
 		} else {

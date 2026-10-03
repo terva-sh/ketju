@@ -31,13 +31,12 @@ const (
 	TypeThreadUnpinned RecordType = 15
 	TypeThreadTagged   RecordType = 16
 
-	// TypePostsSplitOut and TypePostsMergedIn are RESERVED and carry no body
-	// in this build. Split and merge are Phase 4 (docs/03, "Split and merge
-	// are the hardest events").
-	//
-	// They are declared now, and deliberately left out of the catalogue, so
-	// that the numbers cannot be handed to some other record in the meantime.
-	// A constant is cheaper to hold than a format version bump.
+	// TypePostsSplitOut and TypePostsMergedIn move posts between threads
+	// (docs/03 "Split and merge are the hardest events", "How a move is
+	// written"). They were held from the format freeze and landed in Phase 4
+	// (TKT-01M29CXJZZ). Both are thread-level, frame ordinal 0, and both are
+	// advisory: a build that skips them shows the moved posts where they
+	// were, which is stale rather than a disclosure.
 	TypePostsSplitOut RecordType = 20
 	TypePostsMergedIn RecordType = 21
 
@@ -122,9 +121,9 @@ type (
 	//
 	// Origin names the post this one was copied from by a split or merge
 	// (docs/03 "Split and merge are the hardest events"), and is nil for a
-	// post written here. This build writes none: split and merge are
-	// TKT-01M29CXJZZ's. It is read now because hard redaction follows it,
-	// so that a copy's text goes with its source's (TKT-01M29CXJZ9).
+	// post written here. A move writes it on each copy (TKT-01M29CXJZZ),
+	// the index marks the copy's entry copied, and hard redaction follows
+	// it, so that a copy's text goes with its source's (TKT-01M29CXJZ9).
 	PostBody struct {
 		Source      string      `cbor:"source,omitempty" json:"source,omitempty"`
 		ReplyTo     uint32      `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
@@ -257,6 +256,25 @@ type (
 		Tags []string `cbor:"tags,omitempty" json:"tags,omitempty"`
 	}
 
+	// PostsSplitOutBody is written to the source thread of a move. It
+	// commits the move: every ordinal it names is moved from then on, shown
+	// as a pointer, and takes no further record. TargetThreadID is the
+	// thread the posts are copied into. The writer sorts Ordinals ascending;
+	// a reader accepts any order (docs/03 "How a move is written").
+	PostsSplitOutBody struct {
+		Ordinals       []uint32 `cbor:"ordinals,omitempty" json:"ordinals,omitempty"`
+		TargetThreadID uint64   `cbor:"target_thread_id,omitempty" json:"target_thread_id,omitempty"`
+	}
+
+	// PostsMergedInBody is written to the target thread of a move, a split's
+	// new thread included, ahead of the copies. It names the source and the
+	// same source ordinals its PostsSplitOut does, so a target always says
+	// where its posts came from.
+	PostsMergedInBody struct {
+		SourceThreadID uint64   `cbor:"source_thread_id,omitempty" json:"source_thread_id,omitempty"`
+		Ordinals       []uint32 `cbor:"ordinals,omitempty" json:"ordinals,omitempty"`
+	}
+
 	// ThreadArchivedBody makes a thread read-only. Its index may be dropped
 	// from memory permanently.
 	ThreadArchivedBody struct {
@@ -286,8 +304,8 @@ type (
 //
 // Membership here is the definition of "known". A type absent from this map is
 // one a walker skips by frame length, which is exactly what an older binary
-// does when it meets a record a newer one wrote — so the reserved split and
-// merge numbers are absent on purpose, not by oversight.
+// does when it meets a record a newer one wrote, as builds before Phase 4 do
+// with the split and merge records.
 var catalogue = map[RecordType]func() any{
 	TypeThreadCreated:  func() any { return new(ThreadCreatedBody) },
 	TypePost:           func() any { return new(PostBody) },
@@ -301,13 +319,13 @@ var catalogue = map[RecordType]func() any{
 	TypeThreadPinned:   func() any { return new(ThreadPinnedBody) },
 	TypeThreadUnpinned: func() any { return new(ThreadUnpinnedBody) },
 	TypeThreadTagged:   func() any { return new(ThreadTaggedBody) },
+	TypePostsSplitOut:  func() any { return new(PostsSplitOutBody) },
+	TypePostsMergedIn:  func() any { return new(PostsMergedInBody) },
 	TypeThreadArchived: func() any { return new(ThreadArchivedBody) },
 	TypeRedacted:       func() any { return new(RedactedBody) },
 }
 
-// typeNames is for errors and `ketju dump`. Reserved types are named here
-// although they have no body, so a log containing one reports what it met
-// rather than a bare number.
+// typeNames is for errors and `ketju dump`.
 var typeNames = map[RecordType]string{
 	TypeThreadCreated:  "ThreadCreated",
 	TypePost:           "Post",
@@ -339,17 +357,65 @@ func (t RecordType) String() string {
 // Known reports whether this build has a body for t.
 //
 // A walker uses this to decide between decoding a record and stepping over it
-// by frame length. Reserved types report false: the number is spoken for, but
-// there is nothing here that can read one.
+// by frame length.
 func (t RecordType) Known() bool {
 	_, ok := catalogue[t]
 	return ok
 }
 
-// Reserved reports whether t is a number held for a record this build does not
-// implement yet.
-func (t RecordType) Reserved() bool {
-	return t == TypePostsSplitOut || t == TypePostsMergedIn
+// MaxMoveOrdinals is the most posts one move names, so one PostsSplitOut and
+// one PostsMergedIn carry it, far inside MaxFrameSize (docs/03 "How a move
+// is written", "MaxFrameSize at 1 MiB").
+const MaxMoveOrdinals = 10000
+
+// CheckMove holds a move record's body to its shape: between 1 and
+// MaxMoveOrdinals ordinals, none 0 and none twice, and a thread id that is
+// neither 0 nor self, the thread whose log holds the record. A body of any
+// other type is ErrMalformed. The actor checks it before it writes a move
+// record, and ketju fsck when it reads one; the index fold does not, so a log
+// holding a bad one still replays.
+func CheckMove(body any, self uint64) error {
+	var ords []uint32
+	var other uint64
+	switch b := body.(type) {
+	case *PostsSplitOutBody:
+		if b == nil {
+			return fmt.Errorf("%w: a nil move body", ErrMalformed)
+		}
+		ords, other = b.Ordinals, b.TargetThreadID
+	case PostsSplitOutBody:
+		ords, other = b.Ordinals, b.TargetThreadID
+	case *PostsMergedInBody:
+		if b == nil {
+			return fmt.Errorf("%w: a nil move body", ErrMalformed)
+		}
+		ords, other = b.Ordinals, b.SourceThreadID
+	case PostsMergedInBody:
+		ords, other = b.Ordinals, b.SourceThreadID
+	default:
+		return fmt.Errorf("%w: %T is not a move record's body", ErrMalformed, body)
+	}
+	switch {
+	case len(ords) == 0:
+		return fmt.Errorf("%w: a move names no post", ErrMalformed)
+	case len(ords) > MaxMoveOrdinals:
+		return fmt.Errorf("%w: a move names %d posts, at most %d", ErrMalformed, len(ords), MaxMoveOrdinals)
+	case other == 0:
+		return fmt.Errorf("%w: a move names thread 0", ErrMalformed)
+	case other == self:
+		return fmt.Errorf("%w: a move names its own thread", ErrMalformed)
+	}
+	seen := make(map[uint32]struct{}, len(ords))
+	for _, o := range ords {
+		if o == 0 {
+			return fmt.Errorf("%w: a move names ordinal 0", ErrMalformed)
+		}
+		if _, dup := seen[o]; dup {
+			return fmt.Errorf("%w: a move names ordinal %d twice", ErrMalformed, o)
+		}
+		seen[o] = struct{}{}
+	}
+	return nil
 }
 
 // decMode bounds what a body decoder will do with a length it read off disk.
@@ -444,7 +510,7 @@ func NewBody(t RecordType) (any, bool) {
 // the body still decodes, which is the forward-compatibility property the
 // self-describing map exists to provide.
 //
-// An unknown or reserved type returns [ErrUnknownRecordType] without touching
+// An unknown type returns [ErrUnknownRecordType] without touching
 // raw. That error is a signal to skip the frame, not a reason to abandon a
 // replay — see [SkipUnknown].
 func DecodeBody(t RecordType, enc BodyEncoding, raw []byte) (any, error) {
@@ -454,8 +520,6 @@ func DecodeBody(t RecordType, enc BodyEncoding, raw []byte) (any, error) {
 		case t.Critical():
 			return nil, fmt.Errorf("%w: type %d (%#02x) is in the critical range, "+
 				"so this thread cannot be read by this build", ErrCriticalRecordType, uint8(t), uint8(t))
-		case t.Reserved():
-			return nil, fmt.Errorf("%w: %s is reserved for a later phase", ErrUnknownRecordType, t)
 		case t == 0:
 			// Never assigned, so this is damage rather than a newer writer.
 			return nil, fmt.Errorf("%w: record type 0 is never assigned", ErrMalformed)

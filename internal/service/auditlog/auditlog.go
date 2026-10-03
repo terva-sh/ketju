@@ -223,6 +223,30 @@ type moved struct {
 	To   *int64 `json:"to_forum"`
 }
 
+// actionPostsMoved is the action whose details name two threads, the one
+// the posts left and the one they were copied into, which the entry carries
+// as related (internal/events/projection, TKT-01M29CXJZZ).
+const actionPostsMoved = "posts.moved"
+
+// postsMoved is what a posts.moved row's details say about the threads, by
+// their base32 ids.
+type postsMoved struct {
+	From string `json:"from_thread"`
+	To   string `json:"to_thread"`
+}
+
+// threads is the ids a posts.moved row's details name, in order, each one
+// that parses as a thread id.
+func (m postsMoved) threads() []threadid.ID {
+	var out []threadid.ID
+	for _, s := range []string{m.From, m.To} {
+		if id, err := threadid.Parse(s); err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // resolver holds what one page's rows name, by kind, and what the database
 // says about each.
 type resolver struct {
@@ -273,13 +297,21 @@ func (r *resolver) collect(rows []dbq.AuditLog) {
 				r.threadIDs = append(r.threadIDs, int64(id))
 			}
 		}
-		if row.Action == actionThreadMoved {
+		switch row.Action {
+		case actionThreadMoved:
 			var m moved
 			if json.Unmarshal([]byte(row.DetailsJson), &m) == nil {
 				for _, f := range []*int64{m.From, m.To} {
 					if f != nil {
 						r.forumIDs = append(r.forumIDs, *f)
 					}
+				}
+			}
+		case actionPostsMoved:
+			var m postsMoved
+			if json.Unmarshal([]byte(row.DetailsJson), &m) == nil {
+				for _, id := range m.threads() {
+					r.threadIDs = append(r.threadIDs, int64(id))
 				}
 			}
 		}
@@ -427,9 +459,20 @@ func (r *resolver) target(typ, id string) dto.AuditTarget {
 }
 
 // related is the other things row names: a thread.moved row's forums, the
-// one it left and the one it went to. Empty for every other row.
+// one it left and the one it went to, and a posts.moved row's threads, the
+// same way round. Empty for every other row.
 func (r *resolver) related(row dbq.AuditLog) []dto.AuditTarget {
 	out := []dto.AuditTarget{}
+	if row.Action == actionPostsMoved {
+		var m postsMoved
+		if json.Unmarshal([]byte(row.DetailsJson), &m) != nil {
+			return out
+		}
+		for _, id := range m.threads() {
+			out = append(out, r.target(audit.TypeThread, id.String()))
+		}
+		return out
+	}
 	if row.Action != actionThreadMoved {
 		return out
 	}

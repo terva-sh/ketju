@@ -1,6 +1,7 @@
 package threadlog
 
 import (
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"testing"
@@ -35,6 +36,8 @@ var everyType = []struct {
 	{14, "ThreadPinned", TypeThreadPinned, &ThreadPinnedBody{Scope: "forum", Until: 1789431429000}},
 	{15, "ThreadUnpinned", TypeThreadUnpinned, &ThreadUnpinnedBody{Scope: "global"}},
 	{16, "ThreadTagged", TypeThreadTagged, &ThreadTaggedBody{Tags: []string{"a", "b", "c"}}},
+	{20, "PostsSplitOut", TypePostsSplitOut, &PostsSplitOutBody{Ordinals: []uint32{3, 70000}, TargetThreadID: 1 << 41}},
+	{21, "PostsMergedIn", TypePostsMergedIn, &PostsMergedInBody{SourceThreadID: 1 << 40, Ordinals: []uint32{3, 70000}}},
 	{30, "ThreadArchived", TypeThreadArchived, &ThreadArchivedBody{Reason: "dormant"}},
 	{0x80, "Redacted", TypeRedacted, &RedactedBody{
 		Ordinal: 4, Revisions: []uint32{1, 2}, Reason: "court order 12", Operator: 3,
@@ -87,33 +90,127 @@ func TestTypeNumbersMatchTheDocsTable(t *testing.T) {
 	}
 }
 
-// Criterion: reserved numbers for split and merge stay unused.
-func TestSplitAndMergeNumbersStayReserved(t *testing.T) {
+// Criterion (TKT-01M29CXJZZ): the split and merge records landed at the
+// numbers held for them since the freeze, 20 and 21, and stay advisory, so
+// a build from before Phase 4 skips them rather than refusing the thread.
+func TestSplitAndMergeKeepTheirNumbers(t *testing.T) {
 	for _, tc := range []struct {
 		num uint8
 		typ RecordType
 	}{{20, TypePostsSplitOut}, {21, TypePostsMergedIn}} {
 		if uint8(tc.typ) != tc.num {
-			t.Errorf("reserved type is %d, docs/03 says %d", uint8(tc.typ), tc.num)
+			t.Errorf("%s is %d, docs/03 says %d", tc.typ, uint8(tc.typ), tc.num)
 		}
-		if !tc.typ.Reserved() {
-			t.Errorf("RecordType(%d) should report Reserved", tc.num)
+		if !tc.typ.Known() {
+			t.Errorf("%s has no body in this build", tc.typ)
 		}
-		if tc.typ.Known() {
-			t.Errorf("RecordType(%d) is reserved and must have no body in this build", tc.num)
+		if !tc.typ.Advisory() {
+			t.Errorf("%s is %#02x, out of the advisory range", tc.typ, uint8(tc.typ))
 		}
-		if _, ok := NewBody(tc.typ); ok {
-			t.Errorf("NewBody(%d) returned a body for a reserved type", tc.num)
-		}
+	}
+}
 
-		// A reserved type decodes as unknown, so a Phase 4 log replays on a
-		// Phase 0 binary by skipping rather than failing.
-		_, err := DecodeBody(tc.typ, EncodingCBOR, []byte{0xa0})
-		if !errors.Is(err, ErrUnknownRecordType) {
-			t.Errorf("DecodeBody(%d) error = %v, want ErrUnknownRecordType", tc.num, err)
+// Criterion (TKT-01M29CXJZZ): the move bodies' key names are pinned, in CBOR
+// and in JSON, by a golden: docs/03's fields, snake_case, thread ids as
+// uint64 and ordinals as uint32. A renamed key is a format change, and fails
+// here before it reaches a log.
+func TestMoveBodiesRoundTrip(t *testing.T) {
+	split := &PostsSplitOutBody{Ordinals: []uint32{2, 5, 70000}, TargetThreadID: 1<<40 | 7}
+	merged := &PostsMergedInBody{SourceThreadID: 1<<40 | 3, Ordinals: []uint32{2, 5, 70000}}
+	for _, c := range []struct {
+		typ  RecordType
+		body any
+		json string
+		cbor string
+	}{
+		{TypePostsSplitOut, split, `{"ordinals":[2,5,70000],"target_thread_id":1099511627783}`,
+			"a2686f7264696e616c738302051a00011170707461726765745f7468726561645f69641b0000010000000007"},
+		{TypePostsMergedIn, merged, `{"source_thread_id":1099511627779,"ordinals":[2,5,70000]}`,
+			"a270736f757263655f7468726561645f69641b0000010000000003686f7264696e616c738302051a00011170"},
+	} {
+		for _, enc := range []BodyEncoding{EncodingCBOR, EncodingJSON} {
+			raw, err := EncodeBody(enc, c.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := c.json
+			got := string(raw)
+			if enc == EncodingCBOR {
+				want, got = c.cbor, hex.EncodeToString(raw)
+			}
+			if got != want {
+				t.Errorf("%s %s body is %s, the golden is %s", c.typ, encName(enc), got, want)
+			}
+			back, err := DecodeBody(c.typ, enc, raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(back, c.body) {
+				t.Errorf("%s %s round trip gave %#v", c.typ, encName(enc), back)
+			}
 		}
-		if !SkipUnknown(err) {
-			t.Errorf("a reserved type should be skippable, got %v", err)
+	}
+}
+
+// TestMoveBodyMalformed: CheckMove refuses an empty move, ordinal 0, an
+// ordinal named twice, a move over the cap, thread 0 and the record's own
+// thread, for both records, and takes a body as a pointer or a value.
+func TestMoveBodyMalformed(t *testing.T) {
+	const self = 9
+	many := make([]uint32, MaxMoveOrdinals+1)
+	for i := range many {
+		many[i] = uint32(i + 1)
+	}
+	for _, c := range []struct {
+		name string
+		ords []uint32
+		id   uint64
+		ok   bool
+	}{
+		{"a move", []uint32{3, 1, 2}, 4, true},
+		{"the cap", many[:MaxMoveOrdinals], 4, true},
+		{"no post", nil, 4, false},
+		{"ordinal 0", []uint32{1, 0}, 4, false},
+		{"a repeat", []uint32{2, 3, 2}, 4, false},
+		{"over the cap", many, 4, false},
+		{"thread 0", []uint32{1}, 0, false},
+		{"its own thread", []uint32{1}, self, false},
+	} {
+		for _, body := range []any{
+			&PostsSplitOutBody{Ordinals: c.ords, TargetThreadID: c.id},
+			PostsSplitOutBody{Ordinals: c.ords, TargetThreadID: c.id},
+			&PostsMergedInBody{SourceThreadID: c.id, Ordinals: c.ords},
+			PostsMergedInBody{SourceThreadID: c.id, Ordinals: c.ords},
+		} {
+			err := CheckMove(body, self)
+			if (err == nil) != c.ok || (err != nil && !errors.Is(err, ErrMalformed)) {
+				t.Errorf("%s, %T: %v, want ok=%v", c.name, body, err, c.ok)
+			}
+		}
+	}
+	if err := CheckMove(&PostBody{}, self); !errors.Is(err, ErrMalformed) {
+		t.Errorf("a Post body: %v, want ErrMalformed", err)
+	}
+}
+
+// TestMoveRecordFitsAtCap: a move of MaxMoveOrdinals posts, every ordinal
+// above 65536, encodes far inside MaxFrameSize; and a split of 209000 such
+// ordinals, docs/03's ceiling for one record, still fits.
+func TestMoveRecordFitsAtCap(t *testing.T) {
+	for _, n := range []int{MaxMoveOrdinals, 209000} {
+		ords := make([]uint32, n)
+		for i := range ords {
+			ords[i] = uint32(70000 + i)
+		}
+		body, err := EncodeBody(EncodingCBOR, &PostsSplitOutBody{Ordinals: ords, TargetThreadID: 1 << 60})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := AppendFrame(nil, FrameHeader{Type: TypePostsSplitOut, Encoding: EncodingCBOR, Revision: 1}, body); err != nil {
+			t.Errorf("a split of %d ordinals: %v", n, err)
+		}
+		if n == MaxMoveOrdinals && len(body)*4 > MaxFrameSize {
+			t.Errorf("a split at the cap is %d bytes, more than a quarter of MaxFrameSize", len(body))
 		}
 	}
 }
@@ -210,7 +307,7 @@ func TestUnknownRecordTypeIsSkippedMidReplay(t *testing.T) {
 		{TypePost, EncodingCBOR, post("first")},
 		{RecordType(99), EncodingCBOR, future},
 		{TypePost, EncodingCBOR, post("second")},
-		{TypePostsSplitOut, EncodingCBOR, future}, // reserved, also skipped
+		{RecordType(22), EncodingCBOR, future}, // unassigned and advisory, also skipped
 		{TypePost, EncodingJSON, mustEncodeJSON(t, &PostBody{Source: "third"})},
 	}
 
@@ -251,7 +348,7 @@ func TestUnknownRecordTypeIsSkippedMidReplay(t *testing.T) {
 	if got := []string{"first", "second", "third"}; !reflect.DeepEqual(sources, got) {
 		t.Errorf("replay lost or reordered posts: got %q, want %q", sources, got)
 	}
-	if wantSkipped := []RecordType{RecordType(99), TypePostsSplitOut}; !reflect.DeepEqual(skipped, wantSkipped) {
+	if wantSkipped := []RecordType{RecordType(99), RecordType(22)}; !reflect.DeepEqual(skipped, wantSkipped) {
 		t.Errorf("skipped %v, want %v", skipped, wantSkipped)
 	}
 }

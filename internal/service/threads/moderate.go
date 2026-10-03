@@ -154,7 +154,8 @@ func (s *Service) Retag(ctx context.Context, v domain.Viewer, id threadid.ID, ta
 // "Primitives"); the route's gate says so and this says it again, so no
 // caller relies on the route alone. Refusals come in this order, all before
 // the append: forbidden to anyone but an admin, conflict on a thread
-// already archived, then validation-failed for a reason over MaxReason.
+// already archived, validation-failed for a reason over MaxReason, then
+// conflict while a move of posts into or out of the thread is finishing.
 //
 // The actor seals itself as it writes the record, so nothing lands after
 // it, however close behind. MarkArchived then moves the thread to the front
@@ -163,6 +164,11 @@ func (s *Service) Archive(ctx context.Context, v domain.Viewer, id threadid.ID, 
 	if err := s.MayWrite(v); err != nil {
 		return dto.ThreadHeader{}, err
 	}
+	// No move of posts into or out of the thread is decided or written while
+	// it is archived, and one still finishing refuses the archive, so the
+	// finisher never finds its target sealed (TKT-01M29CXJZZ).
+	s.moveMu.Lock()
+	defer s.moveMu.Unlock()
 	h, err := s.appendDecided(ctx, v, id, func(a access, th *threadcache.Thread, _ time.Time) (threadlog.Append, error) {
 		if v.Role != domain.RoleAdmin {
 			return threadlog.Append{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: only an admin may archive %s", id))
@@ -171,6 +177,9 @@ func (s *Service) Archive(ctx context.Context, v domain.Viewer, id threadid.ID, 
 			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is already archived", id))
 		}
 		if err := checkReason(reason); err != nil {
+			return threadlog.Append{}, err
+		}
+		if err := s.moveUnfinished(ctx, id); err != nil {
 			return threadlog.Append{}, err
 		}
 		return threadlog.Append{Type: threadlog.TypeThreadArchived, Body: &threadlog.ThreadArchivedBody{Reason: reason}}, nil
@@ -305,6 +314,10 @@ func (s *Service) Move(ctx context.Context, v domain.Viewer, id threadid.ID, for
 	if err := s.MayWrite(v); err != nil {
 		return dto.ThreadHeader{}, err
 	}
+	// A move of posts judges both threads' forums; none changes while one
+	// is decided (TKT-01M29CXJZZ).
+	s.moveMu.Lock()
+	defer s.moveMu.Unlock()
 	return s.appendDecided(ctx, v, id, func(a access, th *threadcache.Thread, _ time.Time) (threadlog.Append, error) {
 		if !a.canModerate {
 			return threadlog.Append{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
@@ -542,6 +555,15 @@ func (s *Service) appendEvent(ctx context.Context, id threadid.ID,
 		rec, err := build(th)
 		if err != nil {
 			return err
+		}
+		if rec.Type == threadlog.TypeEdit {
+			e, err := th.Index.Entry(rec.Ordinal)
+			if err != nil {
+				return err
+			}
+			if err := s.copyPending(ctx, th, rec.Ordinal, e); err != nil {
+				return err
+			}
 		}
 		res, err = s.Writer.Append(th, rec)
 		return err

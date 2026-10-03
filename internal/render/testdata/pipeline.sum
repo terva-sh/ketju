@@ -1,7 +1,7 @@
 # Per-case sha256 of the rendered output, with the renderer version that
 # produced it. A case whose hash changes here without the version changing
 # is stale HTML in every cache in the system. See render.go.
-version 5
+version 6
 blockquote 5cb8bf5c0055afc5c3a03a100a89dae1aaa611d494e005f803e8912ca4eb7a66
 breaks 5a97bc46acb9eef9271a47e7468086444734cd81b0dbb5be6319cc6a415f0e46
 code f93838719546e17e7de186c745d23b88e6bd4fe255847ae2944a96e2a5564781

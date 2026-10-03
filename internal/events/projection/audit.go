@@ -8,6 +8,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
@@ -26,6 +27,7 @@ const (
 	ActionThreadRenamed  = "thread.renamed"
 	ActionThreadRetagged = "thread.retagged"
 	ActionThreadArchived = "thread.archived"
+	ActionPostsMoved     = "posts.moved"
 	ActionPostEdited     = "post.edited"
 	ActionPostDeleted    = "post.deleted"
 	ActionPostHidden     = "post.hidden"
@@ -68,20 +70,24 @@ func readPrior(ctx context.Context, q *dbq.Queries, f frame) (prior, error) {
 // own action cannot produce a row:
 //   - always: a lock, unlock, pin, unpin, move, retag (ThreadTagged,
 //     which only a moderator writes; TKT-01M29CYSCP) or archive
-//     (TKT-01M29CRJ64);
+//     (TKT-01M29CRJ64), and a PostsSplitOut, which is posts.moved against
+//     the source thread (TKT-01M29CXJZZ);
 //   - when the actor is not the thread's author: a rename;
 //   - when the actor is not the post's author: an Edit, Delete or Restore,
 //     a Delete with by_moderator being post.hidden and one with auto,
 //     whose actor is 0, the system, post.auto_hidden (TKT-01M29CP2PJ);
-//   - never: ThreadCreated, whose tags are the author's own, and Post.
+//   - never: ThreadCreated, whose tags are the author's own, Post, a
+//     move's PostsMergedIn, and an Edit a move carried onto a copy
+//     (IsCarriedEdit), which repeats a revision the source already had,
+//     whoever wrote it there.
 //
 // A rename's row carries no title, old or new, and a retag's no tags: only
 // the thread and the record's offset, which writeAudit adds. The log is the
 // record of what the title and the tags were, and audit_log is append-only,
 // so member-written text copied into it could never be removed by a hard
 // redaction (docs/03 "Hard redaction", maintainer decision 2026-09-29 on
-// TKT-01M3NS147C). A move's row names both forums by id, which are not user
-// text.
+// TKT-01M3NS147C). A move's row names both forums by id, and a posts.moved
+// row both threads by id and how many posts moved, none of it user text.
 func auditFor(ctx context.Context, q *dbq.Queries, f frame, p prior) (action string, target audit.Target, details map[string]any, ok bool, err error) {
 	thread := audit.Thread(f.thread)
 	switch b := f.body.(type) {
@@ -105,7 +111,18 @@ func auditFor(ctx context.Context, q *dbq.Queries, f frame, p prior) (action str
 		return ActionThreadRetagged, thread, map[string]any{}, true, nil
 	case *threadlog.ThreadArchivedBody:
 		return ActionThreadArchived, thread, map[string]any{"reason": b.Reason}, true, nil
+	case *threadlog.PostsSplitOutBody:
+		return ActionPostsMoved, thread, map[string]any{
+			"from_thread": f.thread.String(), "to_thread": threadid.ID(b.TargetThreadID).String(),
+			"count": len(b.Ordinals),
+		}, true, nil
 	case *threadlog.EditBody:
+		carried, err := q.IsCarriedEdit(ctx, dbq.IsCarriedEditParams{
+			TargetThreadID: int64(f.thread), TargetOrdinal: int64(f.h.Ordinal), Revision: revision(f.h),
+		})
+		if err != nil || carried {
+			return "", target, nil, false, err
+		}
 		return postAction(ctx, q, f, ActionPostEdited, map[string]any{"reason": b.Reason, "revision": revision(f.h)})
 	case *threadlog.DeleteBody:
 		// A moderator's Delete hides the post rather than deleting it

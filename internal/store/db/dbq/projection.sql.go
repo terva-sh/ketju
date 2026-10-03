@@ -38,6 +38,15 @@ func (q *Queries) ClearPostMeta(ctx context.Context) error {
 	return err
 }
 
+const clearPostMoves = `-- name: ClearPostMoves :exec
+DELETE FROM post_moves
+`
+
+func (q *Queries) ClearPostMoves(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearPostMoves)
+	return err
+}
+
 const clearPostQuotes = `-- name: ClearPostQuotes :exec
 DELETE FROM post_quotes
 `
@@ -112,6 +121,31 @@ DELETE FROM thread_tags WHERE thread_id = ?
 func (q *Queries) DeleteThreadTags(ctx context.Context, threadID int64) error {
 	_, err := q.db.ExecContext(ctx, deleteThreadTags, threadID)
 	return err
+}
+
+const getPostMove = `-- name: GetPostMove :one
+SELECT source_thread_id, source_ordinal, source_revision, target_thread_id, target_ordinal, split_offset, merged_offset, opens_thread FROM post_moves WHERE source_thread_id = ? AND source_ordinal = ?
+`
+
+type GetPostMoveParams struct {
+	SourceThreadID int64
+	SourceOrdinal  int64
+}
+
+func (q *Queries) GetPostMove(ctx context.Context, arg GetPostMoveParams) (PostMove, error) {
+	row := q.db.QueryRowContext(ctx, getPostMove, arg.SourceThreadID, arg.SourceOrdinal)
+	var i PostMove
+	err := row.Scan(
+		&i.SourceThreadID,
+		&i.SourceOrdinal,
+		&i.SourceRevision,
+		&i.TargetThreadID,
+		&i.TargetOrdinal,
+		&i.SplitOffset,
+		&i.MergedOffset,
+		&i.OpensThread,
+	)
+	return i, err
 }
 
 const getProjectionState = `-- name: GetProjectionState :one
@@ -197,6 +231,33 @@ func (q *Queries) InsertThreadTag(ctx context.Context, arg InsertThreadTagParams
 	return err
 }
 
+const isCarriedEdit = `-- name: IsCarriedEdit :one
+SELECT EXISTS (
+	SELECT 1 FROM post_moves
+	WHERE target_thread_id = ?1
+	  AND target_ordinal = CAST(?2 AS INTEGER)
+	  AND (source_revision IS NULL OR CAST(?3 AS INTEGER) <= source_revision)
+)
+`
+
+type IsCarriedEditParams struct {
+	TargetThreadID int64
+	TargetOrdinal  int64
+	Revision       int64
+}
+
+// Whether an Edit at revision of the post at (target_thread_id,
+// target_ordinal) is one a move carried rather than a new one: the post is
+// a copy, and the revision is at most the source post's, or the source's
+// PostsSplitOut is not projected yet so its revision is unknown. A carried
+// Edit writes no audit row and notifies nobody, as a copied Post does.
+func (q *Queries) IsCarriedEdit(ctx context.Context, arg IsCarriedEditParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isCarriedEdit, arg.TargetThreadID, arg.TargetOrdinal, arg.Revision)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listProjectionLengths = `-- name: ListProjectionLengths :many
 SELECT thread_id, log_length FROM projection_state
 `
@@ -229,6 +290,89 @@ func (q *Queries) ListProjectionLengths(ctx context.Context) ([]ListProjectionLe
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveOfCopy = `-- name: MoveOfCopy :one
+SELECT source_thread_id, source_ordinal, source_revision FROM post_moves
+WHERE target_thread_id = ? AND target_ordinal = ?
+`
+
+type MoveOfCopyParams struct {
+	TargetThreadID int64
+	TargetOrdinal  sql.NullInt64
+}
+
+type MoveOfCopyRow struct {
+	SourceThreadID int64
+	SourceOrdinal  int64
+	SourceRevision sql.NullInt64
+}
+
+// The move row of a copy, by where it landed.
+func (q *Queries) MoveOfCopy(ctx context.Context, arg MoveOfCopyParams) (MoveOfCopyRow, error) {
+	row := q.db.QueryRowContext(ctx, moveOfCopy, arg.TargetThreadID, arg.TargetOrdinal)
+	var i MoveOfCopyRow
+	err := row.Scan(&i.SourceThreadID, &i.SourceOrdinal, &i.SourceRevision)
+	return i, err
+}
+
+const movesWithoutSourceRevision = `-- name: MovesWithoutSourceRevision :many
+SELECT source_ordinal FROM post_moves
+WHERE source_thread_id = ? AND source_revision IS NULL ORDER BY source_ordinal
+`
+
+// The source ordinals of source_thread_id's move rows whose source
+// revision is not known yet: the target was projected first.
+func (q *Queries) MovesWithoutSourceRevision(ctx context.Context, sourceThreadID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, movesWithoutSourceRevision, sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var source_ordinal int64
+		if err := rows.Scan(&source_ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, source_ordinal)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const newestListedPost = `-- name: NewestListedPost :one
+SELECT p.ordinal, p.author_id, p.created_at FROM post_meta AS p
+WHERE p.thread_id = ?1 AND p.moved = 0
+  AND NOT EXISTS (SELECT 1 FROM post_moves AS m
+                  WHERE m.target_thread_id = p.thread_id AND m.target_ordinal = p.ordinal
+                    AND m.opens_thread = 0)
+ORDER BY p.created_at DESC, p.ordinal DESC LIMIT 1
+`
+
+type NewestListedPostRow struct {
+	Ordinal   int64
+	AuthorID  int64
+	CreatedAt int64
+}
+
+// The thread's newest post that is shown in its lists' "last post": not
+// moved out, and not a copy merged into a thread that already had posts.
+// Deleted posts count, as applyPost counts them when they are written. A
+// PostsSplitOut recomputes last_post_* from it (TKT-01M29CXJZZ). Newest by
+// time, then by ordinal: a copy keeps its original's time, so a thread a
+// move opened holds copies whose times do not rise with their ordinals,
+// and applyCopy picks its last post by time (Terva review 2014).
+func (q *Queries) NewestListedPost(ctx context.Context, threadID int64) (NewestListedPostRow, error) {
+	row := q.db.QueryRowContext(ctx, newestListedPost, threadID)
+	var i NewestListedPostRow
+	err := row.Scan(&i.Ordinal, &i.AuthorID, &i.CreatedAt)
+	return i, err
 }
 
 const postAuthor = `-- name: PostAuthor :one
@@ -341,6 +485,61 @@ func (q *Queries) RepliesTo(ctx context.Context, arg RepliesToParams) ([]int64, 
 	return items, nil
 }
 
+const setCopyMove = `-- name: SetCopyMove :execrows
+UPDATE post_moves SET target_ordinal = CAST(?1 AS INTEGER)
+WHERE source_thread_id = ?2 AND source_ordinal = ?3
+  AND target_thread_id = ?4
+  AND merged_offset IS NOT NULL AND merged_offset < CAST(?5 AS INTEGER)
+  AND (target_ordinal IS NULL OR target_ordinal >= CAST(?1 AS INTEGER))
+`
+
+type SetCopyMoveParams struct {
+	TargetOrdinal  int64
+	SourceThreadID int64
+	SourceOrdinal  int64
+	TargetThreadID int64
+	CopyOffset     int64
+}
+
+// The target's copied Post, a Post whose origin names the source post. It
+// is the move's copy only when the row's PostsMergedIn is in this thread,
+// ahead of it in the log, and it is the first such Post: a move writes its
+// copies right after its PostsMergedIn. Any other Post with an origin, such
+// as one written by hand, is no move's and touches no row (Terva review
+// 2011). Updates only; the PostsMergedIn wrote the row.
+func (q *Queries) SetCopyMove(ctx context.Context, arg SetCopyMoveParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setCopyMove,
+		arg.TargetOrdinal,
+		arg.SourceThreadID,
+		arg.SourceOrdinal,
+		arg.TargetThreadID,
+		arg.CopyOffset,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setMoveSourceRevision = `-- name: SetMoveSourceRevision :exec
+UPDATE post_moves SET source_revision = ?
+WHERE source_thread_id = ? AND source_ordinal = ? AND source_revision IS NULL
+`
+
+type SetMoveSourceRevisionParams struct {
+	SourceRevision sql.NullInt64
+	SourceThreadID int64
+	SourceOrdinal  int64
+}
+
+// Sets a row's source revision, read from the source's log, when the
+// target is projected ahead of the source's PostsSplitOut. It is the value
+// that split would write: a moved post accepts no later record.
+func (q *Queries) SetMoveSourceRevision(ctx context.Context, arg SetMoveSourceRevisionParams) error {
+	_, err := q.db.ExecContext(ctx, setMoveSourceRevision, arg.SourceRevision, arg.SourceThreadID, arg.SourceOrdinal)
+	return err
+}
+
 const setPostDeleted = `-- name: SetPostDeleted :execrows
 UPDATE post_meta SET deleted = ? WHERE thread_id = ? AND ordinal = ?
 `
@@ -355,6 +554,23 @@ type SetPostDeletedParams struct {
 // is, so a Delete or Restore (which is not a revision) leaves it alone.
 func (q *Queries) SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setPostDeleted, arg.Deleted, arg.ThreadID, arg.Ordinal)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setPostMoved = `-- name: SetPostMoved :execrows
+UPDATE post_meta SET moved = 1 WHERE thread_id = ? AND ordinal = ?
+`
+
+type SetPostMovedParams struct {
+	ThreadID int64
+	Ordinal  int64
+}
+
+func (q *Queries) SetPostMoved(ctx context.Context, arg SetPostMovedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setPostMoved, arg.ThreadID, arg.Ordinal)
 	if err != nil {
 		return 0, err
 	}
@@ -535,6 +751,25 @@ func (q *Queries) SetThreadPinned(ctx context.Context, arg SetThreadPinnedParams
 	return result.RowsAffected()
 }
 
+const setThreadPostCount = `-- name: SetThreadPostCount :execrows
+UPDATE threads SET post_count = ? WHERE id = ?
+`
+
+type SetThreadPostCountParams struct {
+	PostCount int64
+	ID        int64
+}
+
+// A copy merged into a thread that already held posts raises post_count, the
+// latest ordinal, and leaves last_post_* where they were (TKT-01M29CXJZZ).
+func (q *Queries) SetThreadPostCount(ctx context.Context, arg SetThreadPostCountParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setThreadPostCount, arg.PostCount, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setThreadProjected = `-- name: SetThreadProjected :execrows
 UPDATE threads SET log_length_projected = ? WHERE id = ?
 `
@@ -635,6 +870,122 @@ func (q *Queries) ThreadTags(ctx context.Context, threadID int64) ([]string, err
 	return items, nil
 }
 
+const unfinishedMoves = `-- name: UnfinishedMoves :many
+SELECT m.source_thread_id, m.source_ordinal, m.source_revision, m.target_thread_id, m.target_ordinal,
+       m.split_offset, m.merged_offset, m.opens_thread, c.current_revision AS copy_revision
+FROM post_moves AS m
+LEFT JOIN post_meta AS c ON c.thread_id = m.target_thread_id AND c.ordinal = m.target_ordinal
+WHERE m.target_ordinal IS NULL OR m.source_revision IS NULL OR c.current_revision IS NULL
+   OR c.current_revision < m.source_revision
+ORDER BY m.source_thread_id, m.source_ordinal
+`
+
+type UnfinishedMovesRow struct {
+	SourceThreadID int64
+	SourceOrdinal  int64
+	SourceRevision sql.NullInt64
+	TargetThreadID int64
+	TargetOrdinal  sql.NullInt64
+	SplitOffset    sql.NullInt64
+	MergedOffset   sql.NullInt64
+	OpensThread    int64
+	CopyRevision   sql.NullInt64
+}
+
+// Every move row that is not finished: its copy is not written, the
+// source's PostsSplitOut is not projected, or the copy has not reached the
+// source post's revision. copy_revision is null when the copy's post_meta
+// row is missing. In source order, which is the order the finisher writes.
+func (q *Queries) UnfinishedMoves(ctx context.Context) ([]UnfinishedMovesRow, error) {
+	rows, err := q.db.QueryContext(ctx, unfinishedMoves)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnfinishedMovesRow
+	for rows.Next() {
+		var i UnfinishedMovesRow
+		if err := rows.Scan(
+			&i.SourceThreadID,
+			&i.SourceOrdinal,
+			&i.SourceRevision,
+			&i.TargetThreadID,
+			&i.TargetOrdinal,
+			&i.SplitOffset,
+			&i.MergedOffset,
+			&i.OpensThread,
+			&i.CopyRevision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unfinishedMovesForThread = `-- name: UnfinishedMovesForThread :many
+SELECT m.source_thread_id, m.source_ordinal, m.source_revision, m.target_thread_id, m.target_ordinal,
+       m.split_offset, m.merged_offset, m.opens_thread, c.current_revision AS copy_revision
+FROM post_moves AS m
+LEFT JOIN post_meta AS c ON c.thread_id = m.target_thread_id AND c.ordinal = m.target_ordinal
+WHERE (m.source_thread_id = ?1 OR m.target_thread_id = ?1)
+  AND (m.target_ordinal IS NULL OR m.source_revision IS NULL OR c.current_revision IS NULL
+       OR c.current_revision < m.source_revision)
+ORDER BY m.source_thread_id, m.source_ordinal
+`
+
+type UnfinishedMovesForThreadRow struct {
+	SourceThreadID int64
+	SourceOrdinal  int64
+	SourceRevision sql.NullInt64
+	TargetThreadID int64
+	TargetOrdinal  sql.NullInt64
+	SplitOffset    sql.NullInt64
+	MergedOffset   sql.NullInt64
+	OpensThread    int64
+	CopyRevision   sql.NullInt64
+}
+
+// UnfinishedMoves for the moves into or out of one thread.
+func (q *Queries) UnfinishedMovesForThread(ctx context.Context, threadID int64) ([]UnfinishedMovesForThreadRow, error) {
+	rows, err := q.db.QueryContext(ctx, unfinishedMovesForThread, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnfinishedMovesForThreadRow
+	for rows.Next() {
+		var i UnfinishedMovesForThreadRow
+		if err := rows.Scan(
+			&i.SourceThreadID,
+			&i.SourceOrdinal,
+			&i.SourceRevision,
+			&i.TargetThreadID,
+			&i.TargetOrdinal,
+			&i.SplitOffset,
+			&i.MergedOffset,
+			&i.OpensThread,
+			&i.CopyRevision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unpinThread = `-- name: UnpinThread :execrows
 UPDATE threads SET
 	pinned_until = CASE WHEN pinned_scope = ?1 THEN NULL ELSE pinned_until END,
@@ -656,6 +1007,35 @@ func (q *Queries) UnpinThread(ctx context.Context, arg UnpinThreadParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const upsertMergedMove = `-- name: UpsertMergedMove :exec
+INSERT INTO post_moves (source_thread_id, source_ordinal, target_thread_id, merged_offset, opens_thread)
+VALUES (?1, ?2, ?3,
+        CAST(?4 AS INTEGER), ?5)
+ON CONFLICT (source_thread_id, source_ordinal) DO UPDATE SET
+	target_thread_id = excluded.target_thread_id, merged_offset = excluded.merged_offset,
+	opens_thread = excluded.opens_thread
+`
+
+type UpsertMergedMoveParams struct {
+	SourceThreadID int64
+	SourceOrdinal  int64
+	TargetThreadID int64
+	MergedOffset   int64
+	OpensThread    int64
+}
+
+// The target's PostsMergedIn, for one source ordinal.
+func (q *Queries) UpsertMergedMove(ctx context.Context, arg UpsertMergedMoveParams) error {
+	_, err := q.db.ExecContext(ctx, upsertMergedMove,
+		arg.SourceThreadID,
+		arg.SourceOrdinal,
+		arg.TargetThreadID,
+		arg.MergedOffset,
+		arg.OpensThread,
+	)
+	return err
 }
 
 const upsertPostMeta = `-- name: UpsertPostMeta :exec
@@ -690,6 +1070,44 @@ func (q *Queries) UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) 
 		arg.LogOffset,
 	)
 	return err
+}
+
+const upsertSplitMove = `-- name: UpsertSplitMove :execrows
+
+INSERT INTO post_moves (source_thread_id, source_ordinal, source_revision, target_thread_id, split_offset)
+SELECT p.thread_id, p.ordinal, p.current_revision, ?1, CAST(?2 AS INTEGER)
+FROM post_meta AS p
+WHERE p.thread_id = ?3 AND p.ordinal = ?4
+ON CONFLICT (source_thread_id, source_ordinal) DO UPDATE SET
+	source_revision = excluded.source_revision, target_thread_id = excluded.target_thread_id,
+	split_offset = excluded.split_offset
+`
+
+type UpsertSplitMoveParams struct {
+	TargetThreadID int64
+	SplitOffset    int64
+	SourceThreadID int64
+	SourceOrdinal  int64
+}
+
+// Moved posts (migration 0026, TKT-01M29CXJZZ). The source and the target of
+// a move are projected independently and in either order, so each side's
+// statement inserts the row when it is missing and otherwise sets only the
+// columns that side owns.
+// The source's PostsSplitOut, for one ordinal: source_revision is the moved
+// post's revision as the source projected it, which a moved post keeps. No
+// row is written for a post the source's projection lacks.
+func (q *Queries) UpsertSplitMove(ctx context.Context, arg UpsertSplitMoveParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, upsertSplitMove,
+		arg.TargetThreadID,
+		arg.SplitOffset,
+		arg.SourceThreadID,
+		arg.SourceOrdinal,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const upsertThread = `-- name: UpsertThread :exec

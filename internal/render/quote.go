@@ -116,6 +116,11 @@ const (
 
 	// quoteTombstone is a quote of a deleted post. The quoted text is dropped.
 	quoteTombstone
+
+	// quoteForeign is a quote in a post a split or merge copied from another
+	// thread (Context.Foreign): its ordinal names a post of that thread, not
+	// this one, so it links nowhere and its text is dropped.
+	quoteForeign
 )
 
 // KindQuote is the node kind for an attributed quotation.
@@ -253,7 +258,7 @@ func (quoteBuilder) Transform(doc *ast.Document, reader text.Reader, pc parser.C
 // goldmark extension, because the resolver belongs to the caller. Threading a
 // per-call value through a package-level parser would mean either shared
 // mutable state or a parser built per render, and both are worse than one walk.
-func resolveQuotes(doc ast.Node, posts PostResolver) []Quote {
+func resolveQuotes(doc ast.Node, posts PostResolver, foreign bool) []Quote {
 	var quotes []Quote
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -261,6 +266,17 @@ func resolveQuotes(doc ast.Node, posts PostResolver) []Quote {
 		}
 		q, ok := n.(*quoteNode)
 		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		if foreign {
+			// A copied post's quotes name posts of the thread it came
+			// from. Nothing here resolves them, and the text a moderator
+			// moved in is not this thread's to show, so the quote is a
+			// tombstone with no link and no backlink (docs/06, decided by
+			// the run 2026-10-02).
+			q.State = quoteForeign
+			q.RemoveChildren()
 			return ast.WalkContinue, nil
 		}
 
@@ -349,6 +365,11 @@ func (r *quoteRenderer) renderQuote(
 	// link inside it is a control inside a control: assistive technology
 	// announces the summary as a button and may never reach the link as one
 	// (axe nested-interactive, WCAG 4.1.2).
+	if q.State == quoteForeign {
+		_, _ = w.WriteString("<details class=\"quote\" open>\n<summary>Quote from another thread</summary>\n<blockquote>\n")
+		_, _ = w.WriteString("<p class=\"quote-deleted\">The quoted post is in another thread.</p>\n")
+		return ast.WalkContinue, nil
+	}
 	fmt.Fprintf(w, "<details class=\"quote\" open>\n<summary>Quote from #%d</summary>\n<blockquote>\n", q.Ordinal)
 	fmt.Fprintf(w, "<p class=\"quote-attribution\"><a href=\"#post-%d\" class=\"quote-source\">Post #%d</a></p>\n", q.Ordinal, q.Ordinal)
 

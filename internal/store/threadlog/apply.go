@@ -56,10 +56,57 @@ func (ix *Index) Apply(h FrameHeader, body []byte, offset uint64, frameSize int)
 		}
 		set, clear := postFlagEffect(h.Type, v)
 		return ix.setFlags(h.Ordinal, set, clear)
+	case *PostsSplitOutBody:
+		return ix.applySplitOut(h, b)
 	default:
-		// ThreadCreated and the thread events. No per-post effect.
+		// ThreadCreated, the thread events and PostsMergedIn, whose copies
+		// follow it as Posts. No per-post effect.
 		return nil
 	}
+}
+
+// applySplitOut marks every post a PostsSplitOut names as moved: from here
+// on it is a pointer to the target, and its ordinal stays, so every
+// permalink still resolves (docs/03 "How a move is written").
+//
+// It is strict on shape and lenient on state. A split that is not
+// thread-level, or that names a post the index does not hold, is
+// ErrMalformed, and nothing is changed. A post already moved, or not shown
+// as itself, is marked all the same: the actor never writes such a split,
+// and refusing one here would make the whole thread unreadable on replay
+// for one bad record. ketju fsck reports it instead.
+func (ix *Index) applySplitOut(h FrameHeader, b *PostsSplitOutBody) error {
+	if h.Ordinal != 0 {
+		return fmt.Errorf("%w: a PostsSplitOut is thread-level, and this one names ordinal %d", ErrMalformed, h.Ordinal)
+	}
+	for _, o := range b.Ordinals {
+		if o == 0 || PastLast(o, len(ix.entries)) {
+			return fmt.Errorf("%w: PostsSplitOut names ordinal %d, the index holds %d posts",
+				ErrMalformed, o, len(ix.entries))
+		}
+	}
+	for _, o := range b.Ordinals {
+		ix.entries[o-1].Flags |= EntryMoved
+	}
+	return nil
+}
+
+// splitOrdinals is the posts a record moves out of its thread: a
+// PostsSplitOut's ordinals, or none. It reads the body an append holds, as a
+// pointer or a value, as postFlagEffect does.
+func splitOrdinals(t RecordType, body any) []uint32 {
+	if t != TypePostsSplitOut {
+		return nil
+	}
+	switch b := body.(type) {
+	case *PostsSplitOutBody:
+		if b != nil {
+			return b.Ordinals
+		}
+	case PostsSplitOutBody:
+		return b.Ordinals
+	}
+	return nil
 }
 
 // applyPost appends the entry for a new post.
@@ -75,13 +122,7 @@ func (ix *Index) applyPost(h FrameHeader, b *PostBody, offset uint64, frameSize 
 			ErrMalformed, h.Ordinal, len(ix.entries), want)
 	}
 
-	flags := h.Flags.ToEntryFlags()
-	if len(b.Attachments) > 0 {
-		flags |= EntryHasAttachments
-	}
-	if h.Revision > 1 {
-		flags |= EntryEdited
-	}
+	flags := newPostFlags(h, b)
 
 	ix.entries = append(ix.entries, IndexEntry{
 		Offset:      offset,
@@ -93,6 +134,34 @@ func (ix *Index) applyPost(h FrameHeader, b *PostBody, offset uint64, frameSize 
 		Flags:       flags,
 	})
 	return nil
+}
+
+// newPostFlags is the flags a new post's entry starts with: the frame's
+// machine-authored bit, has-attachments, copied for a Post that carries an
+// origin, and edited for one written at a later revision. body is the
+// decoded *PostBody, or the one an append is about to encode, as a pointer
+// or a value.
+func newPostFlags(h FrameHeader, body any) EntryFlags {
+	var b PostBody
+	switch v := body.(type) {
+	case *PostBody:
+		if v != nil {
+			b = *v
+		}
+	case PostBody:
+		b = v
+	}
+	flags := h.Flags.ToEntryFlags()
+	if len(b.Attachments) > 0 {
+		flags |= EntryHasAttachments
+	}
+	if b.Origin != nil {
+		flags |= EntryCopied
+	}
+	if h.Revision > 1 {
+		flags |= EntryEdited
+	}
+	return flags
 }
 
 // applyEdit repoints an entry at the newer revision.

@@ -97,25 +97,23 @@ discovering it from a refused frame later.
 
 ### Reserved record type numbers
 
-`20` `PostsSplitOut` and `21` `PostsMergedIn` are **held, not free**. They
-appear in the catalogue with names and no body type, they are what
-`RecordType.Reserved` reports, and they sit in the **advisory** range, so a
-reader meeting one skips it rather than refusing the thread. Skipping a split
-or merge leaves a stale render (the moved posts still show in the source
-thread), not a disclosure, and that is the advisory class's test
-(`TestEveryCatalogueTypeIsAdvisory` in `internal/store/threadlog`). The index
-fold and the projection writer both skip them, so the two folds of one log
-agree. Their bodies are specified in the table under "Record types" and will
-be implemented in Phase 4. Decided 2026-09-28 (TKT-01M39973KG): the first
-version of this paragraph said a reader refuses them. The code skipped them
-deliberately from the start, and the document was the one that was wrong.
+`20` `PostsSplitOut` and `21` `PostsMergedIn` were **held** from the format
+freeze and are implemented in Phase 4 (TKT-01M29CXJZZ), at those numbers and
+with the bodies in the table under "Record types". Nothing is held now. They
+sit in the **advisory** range, so a build from before Phase 4 meeting one
+skips it rather than refusing the thread. Skipping a split or merge leaves a
+stale render (the moved posts still show in the source thread), not a
+disclosure, and that is the advisory class's test
+(`TestEveryCatalogueTypeIsAdvisory` in `internal/store/threadlog`). Decided
+2026-09-28 (TKT-01M39973KG): the first version of this paragraph said a
+reader refuses them. The code skipped them deliberately from the start, and
+the document was the one that was wrong.
 
-Every other number is unassigned rather than reserved: `6`–`9`, `17`–`19`,
-`22`–`29`, and `31`–`0x7F` in the advisory range, and `0x81`–`0xFF` in the
-critical range, where `0x80` is claimed for `Redacted` ("Hard redaction").
-`0x00` is never assigned. Unassigned numbers are claimed by the
-procedure in "Claiming a new record type"; held numbers are not available at
-all.
+Every other number is unassigned: `6`–`9`, `17`–`19`, `22`–`29`, and
+`31`–`0x7F` in the advisory range, and `0x81`–`0xFF` in the critical range,
+where `0x80` is claimed for `Redacted` ("Hard redaction"). `0x00` is never
+assigned. Unassigned numbers are claimed by the procedure in "Claiming a new
+record type".
 
 ### Bumping the version, when it comes to that
 
@@ -562,7 +560,10 @@ body field as it stands. The choices are:
     opening another log.
   - `reply_to`, in the `Post` and in every `Edit`, is renumbered to the
     copy's ordinal when it names a post moved with it, and left out
-    otherwise. The text is copied byte for byte.
+    otherwise. An `Edit` without `reply_to` keeps the post's, so when the
+    post's last `reply_to` names a post left behind, every record of the
+    copy leaves it out, and the copy replies to nothing. The text is copied
+    byte for byte.
   - Only posts shown as themselves move, so no `Delete` or `Restore` is
     copied.
   - The two move records carry the moderator as actor.
@@ -582,12 +583,21 @@ body field as it stands. The choices are:
     post accepts no later record, so the source's revision is fixed. A crash
     between a copied `Post` and its `Edit`s therefore leaves the ordinal
     unfinished, not lost.
-  - A copy accepts no `Edit`, `Delete` or `Restore` until it is finished, so
-    its revisions up to the source's are always the carried ones. After that
-    it is an ordinary post, and an edit takes it past the source's revision
-    without unfinishing the move.
+  - The server writes no `Edit` of a copy until it is finished, so its
+    revisions up to the source's are always the carried ones. A `Delete` or
+    `Restore` takes no revision, so a hide, an auto-hide or a suspension
+    still reaches an unfinished copy, and a carried `Edit` lands on a hidden
+    copy as on any hidden post. Once finished it is an ordinary post, and an
+    edit takes it past the source's revision without unfinishing the move.
+  - A thread is not archived while a move into or out of it is unfinished,
+    so recovery never meets a sealed target. Every move, every thread move
+    and every archive hold one process-wide lock, so no thread changes
+    forum or is archived while a move is decided or written.
   - The server finishes unfinished ordinals at startup before serving, and
-    after any move that failed part-way. In ascending source ordinal, it
+    every minute, so a move that failed part-way while serving finishes
+    within a minute; the request that wrote it answers `unavailable`. A
+    failure at startup is logged, and serving goes on. In ascending source
+    ordinal, it
     appends the missing `PostsMergedIn`, each missing copy, and each copy's
     missing `Edit`s (the source revisions above the copy's), from the source
     as the `PostsSplitOut` left it.
@@ -649,11 +659,10 @@ read the thread.
 Note what this rule does *not* say. Every type in the v1 table above is
 advisory, including `Delete` and `Edit`, and that is not a claim that ignoring
 them is harmless. The partition governs only a reader that does not recognise a
-type, and every build recognises the v1 catalogue. The two live cases today are
-the reserved split and merge numbers, which no Phase 0 binary implements —
-skipping those leaves posts rendering as text instead of as pointers, which is
-stale and duplicated rather than disclosed, so advisory is the correct class for
-them.
+type, and every build recognises the v1 catalogue. The two live cases are the
+split and merge records, which no build before Phase 4 implements: skipping
+those leaves posts rendering as text instead of as pointers, which is stale and
+duplicated rather than disclosed, so advisory is the correct class for them.
 
 The first critical type is `Redacted`, `0x80`, the record hard redaction
 appends (see "Hard redaction" above; docs/10 item 4). An older build that
@@ -710,7 +719,7 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 16 | 8 | Author user id | author filter lens without the DB |
 | 24 | 8 | Created at (unix ms, of revision 1) | jump-to-date, "since last visit" |
 | 32 | 2 | Current revision number | cache keys, history |
-| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5), auto-hidden (6, hidden pending review, only beside hidden-by-mod), redacted (7, set by a `Redacted` record, which clears has-attachments: a tombstone to every reader) — `EntryFlags` in `flags.go`, reserved bits 8–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
+| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5), auto-hidden (6, hidden pending review, only beside hidden-by-mod), redacted (7, set by a `Redacted` record, which clears has-attachments: a tombstone to every reader), copied (8, set on a post whose `Post` carries an `origin`: a split or merge copied it here, TKT-01M29CXJZZ) — `EntryFlags` in `flags.go`, reserved bits 9–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
 | 36 | 4 | Reserved | segment rollover, see below |
 
 `machine-authored` mirrors frame flag bit 0, so filtering a thread by whether a

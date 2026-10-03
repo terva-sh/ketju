@@ -117,6 +117,7 @@ var Actions = []string{
 	"post.hidden",
 	"post.redacted",
 	"post.restored",
+	"posts.moved",
 	"setting.changed",
 	"thread.archived",
 	"thread.locked",

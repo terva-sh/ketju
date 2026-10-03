@@ -638,8 +638,29 @@ func scanPosts(path string, fn func(h threadlog.FrameHeader, v any, body []byte)
 // originEdges reads every log under threads/ and returns, for every post
 // with an origin, the post it was copied from. Any log that cannot be read
 // stops the plan: a copy in it could not be found.
+//
+// A move of posts that is unfinished stops it too (TKT-01M29CXJZZ): its
+// source's PostsSplitOut is written and its target does not yet hold every
+// copy at its original's revision, so a copy still to be written has no
+// edge here, and its text would survive the redaction once ketju serve
+// finished the move. Every PostsSplitOut is checked, since the copy set is
+// not known until the edges are.
 func originEdges(ctx context.Context, root string) (map[postRef]postRef, error) {
 	edges := map[postRef]postRef{}
+	revisions := map[postRef]uint32{} // every post's last revision
+	type split struct {
+		source postRef
+		target threadid.ID
+	}
+	var splits []split
+	// A move's copy is the first Post in its target naming its origin after
+	// the PostsMergedIn that names it, as the projection reads it; any other
+	// Post with an origin is an edge but no move's copy (Terva review 2020).
+	type into struct {
+		from   postRef
+		thread threadid.ID
+	}
+	moveCopies := map[into]postRef{}
 	err := filepath.WalkDir(filepath.Join(root, threadid.ThreadsDir), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -654,14 +675,48 @@ func originEdges(ctx context.Context, root string) (map[postRef]postRef, error) 
 		if err != nil {
 			return nil // a stray, which catch-up reports; not a thread
 		}
+		awaiting := map[postRef]bool{}
 		_, err = scanPosts(p, func(h threadlog.FrameHeader, v any, _ []byte) error {
-			if b, ok := v.(*threadlog.PostBody); ok && b.Origin != nil {
-				edges[postRef{Thread: id, Ordinal: h.Ordinal}] = postRef{Thread: threadid.ID(b.Origin.ThreadID), Ordinal: b.Origin.Ordinal}
+			if h.Type == threadlog.TypePost || h.Type == threadlog.TypeEdit {
+				revisions[postRef{Thread: id, Ordinal: h.Ordinal}] = h.Revision
+			}
+			switch b := v.(type) {
+			case *threadlog.PostBody:
+				if b.Origin != nil {
+					from := postRef{Thread: threadid.ID(b.Origin.ThreadID), Ordinal: b.Origin.Ordinal}
+					here := postRef{Thread: id, Ordinal: h.Ordinal}
+					edges[here] = from
+					if awaiting[from] {
+						delete(awaiting, from)
+						moveCopies[into{from, id}] = here
+					}
+				}
+			case *threadlog.PostsMergedInBody:
+				for _, o := range b.Ordinals {
+					awaiting[postRef{Thread: threadid.ID(b.SourceThreadID), Ordinal: o}] = true
+				}
+			case *threadlog.PostsSplitOutBody:
+				for _, o := range b.Ordinals {
+					splits = append(splits, split{postRef{Thread: id, Ordinal: o}, threadid.ID(b.TargetThreadID)})
+				}
 			}
 			return nil
 		})
 		return err
 	})
+	if err == nil {
+		// A post may have copies in more than one thread, so a move's copy
+		// is found by its origin and its thread together (Terva review
+		// 2007, finding 3).
+		for _, s := range splits {
+			c, ok := moveCopies[into{s.source, s.target}]
+			if ok && revisions[c] >= revisions[s.source] {
+				continue
+			}
+			return nil, errDrift{fmt.Errorf("redact: the move of %s/%d into %s is unfinished; "+
+				"start ketju serve once to finish it, stop it, and run redact again", s.source.Thread, s.source.Ordinal, s.target)}
+		}
+	}
 	if err != nil {
 		var c errCorrupt
 		if errors.As(err, &c) {

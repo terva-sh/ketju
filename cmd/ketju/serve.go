@@ -615,7 +615,8 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// use, so the lifted account's cached decisions clear with it.
 	autoHide := jobs.AutoHideSweep(threadSvc)
 	background := []jobs.Job{jobs.SessionSweep(sessions), gc.Job(),
-		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms}), autoHide, jobs.FlagAuditCatchUp(threadSvc)}
+		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms}), autoHide, jobs.FlagAuditCatchUp(threadSvc),
+		jobs.FinishMoves(threadSvc)}
 	if o.job != nil {
 		background = append(background, *o.job)
 	}
@@ -631,6 +632,16 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		log.Warn("the startup auto-hide sweep failed; the next run retries it", "hidden", n, "err", err)
 	} else if n > 0 {
 		log.Info("the startup auto-hide sweep hid posts", "hidden", n)
+	}
+	// A move of posts that a crash or a failed write left part-way is
+	// finished from the logs before anything is served (docs/03 "How a move
+	// is written", TKT-01M29CXJZZ): until then its posts are in neither
+	// thread. A failure is logged and serve goes on, as the sweep above
+	// does; the minute job retries it.
+	if n, err := threadSvc.FinishMoves(ctx); err != nil {
+		log.Warn("finishing unfinished moves at startup failed; the next run retries it", "finished", n, "err", err)
+	} else if n > 0 {
+		log.Info("finished moves left unfinished", "finished", n)
 	}
 	sched := jobs.New(log, background...)
 	if err := sched.Start(run); err != nil {

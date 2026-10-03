@@ -27,13 +27,14 @@ type frame struct {
 // first time. That is what makes replay after a crash safe.
 type applyFunc func(ctx context.Context, q *dbq.Queries, f frame) error
 
-// decision is what the writer does with one record type: an apply function,
-// or a stated reason it has none. TestEveryRecordTypeHasADecision holds every
-// known and reserved type to having one, so a type added to the catalogue
-// cannot slip through unprojected without somebody writing down why.
+// decision is what the writer does with one record type: its apply function.
+// TestEveryRecordTypeHasADecision holds every type in the catalogue to having
+// one and every other type to having none, so a type added to the catalogue
+// cannot slip through unprojected. Since split and merge landed
+// (TKT-01M29CXJZZ) no number is held without a body, so there is no longer a
+// reserved type to state a reason for.
 type decision struct {
-	apply  applyFunc
-	reason string // set when apply is nil
+	apply applyFunc
 }
 
 var decisions = map[threadlog.RecordType]decision{
@@ -51,14 +52,8 @@ var decisions = map[threadlog.RecordType]decision{
 	threadlog.TypeThreadTagged:   {apply: applyTagged},
 	threadlog.TypeThreadArchived: {apply: applyArchived},
 	threadlog.TypeRedacted:       {apply: applyRedacted},
-
-	// Held for Phase 4 (docs/03 "Reserved record type numbers"). This build
-	// has no body for them and skips them, as the index does (apply.go uses
-	// SkipUnknown, and TestEveryCatalogueTypeIsAdvisory gives the reason: a
-	// skipped split leaves a stale render, not a disclosure). The projection
-	// follows the index so the two folds of one log cannot disagree.
-	threadlog.TypePostsSplitOut: {reason: "reserved for Phase 4; skipped, as the index skips it"},
-	threadlog.TypePostsMergedIn: {reason: "reserved for Phase 4; skipped, as the index skips it"},
+	threadlog.TypePostsSplitOut:  {apply: applySplitOut},
+	threadlog.TypePostsMergedIn:  {apply: applyMergedIn},
 }
 
 func applyThreadCreated(ctx context.Context, q *dbq.Queries, f frame) error {
@@ -82,10 +77,16 @@ func applyThreadCreated(ctx context.Context, q *dbq.Queries, f frame) error {
 // applyPost writes the post's row and makes it the thread's latest post.
 // post_count is the ordinal: ordinals are dense and one-based, and deleted or
 // moved posts keep theirs, so the latest ordinal is the count (docs/03).
+//
+// A copy, a Post with an origin, is applyCopy's: it is the latest post only
+// in a thread its move opened.
 func applyPost(ctx context.Context, q *dbq.Queries, f frame) error {
 	b := f.body.(*threadlog.PostBody)
 	if f.h.Ordinal == 0 {
 		return logFault{fmt.Errorf("a Post at offset %d carries ordinal 0", f.offset)}
+	}
+	if b.Origin != nil && (b.Origin.ThreadID == 0 || b.Origin.Ordinal == 0) {
+		return logFault{fmt.Errorf("a Post at offset %d names origin %d/%d", f.offset, b.Origin.ThreadID, b.Origin.Ordinal)}
 	}
 	if err := q.UpsertPostMeta(ctx, dbq.UpsertPostMetaParams{
 		ThreadID:        int64(f.thread),
@@ -98,12 +99,25 @@ func applyPost(ctx context.Context, q *dbq.Queries, f frame) error {
 	}); err != nil {
 		return err
 	}
-	if err := one(q.SetThreadLastPost(ctx, dbq.SetThreadLastPostParams{
-		PostCount:        int64(f.h.Ordinal),
-		LastPostAt:       f.h.TimestampMS,
-		LastPostAuthorID: int64(f.h.Actor),
-		LastPostOrdinal:  int64(f.h.Ordinal),
-		ID:               int64(f.thread),
+	latest := true
+	if b.Origin != nil {
+		var err error
+		if latest, err = applyCopy(ctx, q, f, b.Origin); err != nil {
+			return err
+		}
+	}
+	if latest {
+		if err := one(q.SetThreadLastPost(ctx, dbq.SetThreadLastPostParams{
+			PostCount:        int64(f.h.Ordinal),
+			LastPostAt:       f.h.TimestampMS,
+			LastPostAuthorID: int64(f.h.Actor),
+			LastPostOrdinal:  int64(f.h.Ordinal),
+			ID:               int64(f.thread),
+		}))(f, "thread"); err != nil {
+			return err
+		}
+	} else if err := one(q.SetThreadPostCount(ctx, dbq.SetThreadPostCountParams{
+		PostCount: int64(f.h.Ordinal), ID: int64(f.thread),
 	}))(f, "thread"); err != nil {
 		return err
 	}
@@ -265,6 +279,129 @@ func applyRedacted(ctx context.Context, q *dbq.Queries, f frame) error {
 	// The blanked source quotes nothing, so a reindex of the rewritten log
 	// leaves the post no backlinks either (TKT-01M3YME9AZ).
 	return replaceQuotes(ctx, q, f, "")
+}
+
+// Moves (docs/03 "How a move is written", TKT-01M29CXJZZ). A move writes a
+// PostsSplitOut to the source and a PostsMergedIn, then the copies, to the
+// target, and the two threads are projected independently and in either
+// order. So each side upserts its own columns of the post_moves rows and
+// reads nothing the other side writes, apart from source_revision, which
+// IsCarriedEdit treats as unknown until the source is projected.
+
+// applySplitOut marks every post it names moved, records each one's move
+// from the source's side, and recomputes the thread's last post, which may
+// have been one of them.
+func applySplitOut(ctx context.Context, q *dbq.Queries, f frame) error {
+	b := f.body.(*threadlog.PostsSplitOutBody)
+	if f.h.Ordinal != 0 {
+		return logFault{fmt.Errorf("a PostsSplitOut at offset %d names ordinal %d", f.offset, f.h.Ordinal)}
+	}
+	for _, o := range b.Ordinals {
+		// Before SetPostMoved, though either order reads the same revision.
+		n, err := q.UpsertSplitMove(ctx, dbq.UpsertSplitMoveParams{
+			TargetThreadID: int64(b.TargetThreadID), SplitOffset: f.offset,
+			SourceThreadID: int64(f.thread), SourceOrdinal: int64(o),
+		})
+		if err == nil && n == 1 {
+			n, err = q.SetPostMoved(ctx, dbq.SetPostMovedParams{ThreadID: int64(f.thread), Ordinal: int64(o)})
+		}
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return logFault{fmt.Errorf("a PostsSplitOut at offset %d moves post %d, which the projection does not have",
+				f.offset, o)}
+		}
+	}
+	return setListedLastPost(ctx, q, f)
+}
+
+// setListedLastPost sets the thread's last_post_* to its newest post that
+// is neither moved out nor a copy merged into it, the posts that set them
+// when they were projected (applyPost, applyCopy). A thread left with no
+// such post is as its ThreadCreated left it: its creation, by its author,
+// at ordinal 0, which no list shows. post_count stays the latest ordinal.
+func setListedLastPost(ctx context.Context, q *dbq.Queries, f frame) error {
+	t, err := q.GetThread(ctx, int64(f.thread))
+	if errors.Is(err, sql.ErrNoRows) {
+		return one(0, nil)(f, "thread")
+	} else if err != nil {
+		return err
+	}
+	last := dbq.SetThreadLastPostParams{
+		PostCount: t.PostCount, LastPostAt: t.CreatedAt, LastPostAuthorID: t.AuthorID, ID: t.ID,
+	}
+	switch p, err := q.NewestListedPost(ctx, t.ID); {
+	case err == nil:
+		last.LastPostAt, last.LastPostAuthorID, last.LastPostOrdinal = p.CreatedAt, p.AuthorID, p.Ordinal
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	return one(q.SetThreadLastPost(ctx, last))(f, "thread")
+}
+
+// applyMergedIn records the move of each source ordinal from the target's
+// side. It opens the thread when the thread holds no post yet, which is a
+// split's new thread: its copies then set its last post (applyCopy).
+func applyMergedIn(ctx context.Context, q *dbq.Queries, f frame) error {
+	b := f.body.(*threadlog.PostsMergedInBody)
+	if f.h.Ordinal != 0 {
+		return logFault{fmt.Errorf("a PostsMergedIn at offset %d names ordinal %d", f.offset, f.h.Ordinal)}
+	}
+	t, err := q.GetThread(ctx, int64(f.thread))
+	if errors.Is(err, sql.ErrNoRows) {
+		return one(0, nil)(f, "thread")
+	} else if err != nil {
+		return err
+	}
+	for _, o := range b.Ordinals {
+		if o == 0 {
+			return logFault{fmt.Errorf("a PostsMergedIn at offset %d names ordinal 0", f.offset)}
+		}
+		if err := q.UpsertMergedMove(ctx, dbq.UpsertMergedMoveParams{
+			SourceThreadID: int64(b.SourceThreadID), SourceOrdinal: int64(o),
+			TargetThreadID: int64(f.thread), MergedOffset: f.offset, OpensThread: flag(t.PostCount == 0),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyCopy records where a copied Post landed and says whether it becomes
+// the thread's last post. Only in a thread its move opened, and only when
+// the thread has no last post yet or the copy is at least as new as it: a
+// copy keeps its original's time, which is older than a split thread's
+// creation. A copy merged into a thread that had posts never moves its last
+// post, even when it is newer (docs/06), and only raises post_count.
+func applyCopy(ctx context.Context, q *dbq.Queries, f frame, origin *threadlog.PostOrigin) (bool, error) {
+	key := dbq.GetPostMoveParams{SourceThreadID: int64(origin.ThreadID), SourceOrdinal: int64(origin.Ordinal)}
+	n, err := q.SetCopyMove(ctx, dbq.SetCopyMoveParams{
+		SourceThreadID: key.SourceThreadID, SourceOrdinal: key.SourceOrdinal,
+		TargetThreadID: int64(f.thread), TargetOrdinal: int64(f.h.Ordinal), CopyOffset: f.offset,
+	})
+	if err != nil {
+		return false, err
+	}
+	if n == 0 {
+		// A Post with an origin that no PostsMergedIn here names: no
+		// move's copy, so an ordinary post (Terva review 2011).
+		return true, nil
+	}
+	m, err := q.GetPostMove(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if m.OpensThread == 0 {
+		return false, nil
+	}
+	t, err := q.GetThread(ctx, int64(f.thread))
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, one(0, nil)(f, "thread")
+	} else if err != nil {
+		return false, err
+	}
+	return t.LastPostOrdinal == 0 || f.h.TimestampMS >= t.LastPostAt, nil
 }
 
 // replaceTags sets the tag set wholesale, as ThreadTagged means (docs/03).

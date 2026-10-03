@@ -66,7 +66,7 @@ func scanFrames(r interface {
 		body, err := threadlog.DecodeBody(rec.Header.Type, rec.Header.Encoding, rec.Body)
 		if err != nil {
 			if threadlog.SkipUnknown(err) {
-				return true // advisory or reserved: stepped over, as the index does
+				return true // unknown and advisory: stepped over, as the index does
 			}
 			scanErr = fmt.Errorf("frame at offset %d: %w", rec.Offset, err)
 			return false
@@ -89,6 +89,20 @@ func scanFrames(r interface {
 				return false
 			}
 			s.touched[rec.Header.Ordinal] = true
+		case touchesOrdinals:
+			b, ok := body.(*threadlog.PostsSplitOutBody)
+			if !ok {
+				scanErr = fmt.Errorf("frame at offset %d: a %s names no ordinals the indexer can read",
+					rec.Offset, rec.Header.Type)
+				return false
+			}
+			for _, o := range b.Ordinals {
+				if o == 0 {
+					scanErr = fmt.Errorf("frame at offset %d: a %s names ordinal 0", rec.Offset, rec.Header.Type)
+					return false
+				}
+				s.touched[o] = true
+			}
 		case setsTitle:
 			switch b := body.(type) {
 			case *threadlog.ThreadCreatedBody:

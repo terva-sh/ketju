@@ -57,9 +57,38 @@ type threadReport struct {
 	// id is the thread the path names, when it names one at the right
 	// shard, and whole the length to the last whole frame: what serve's
 	// catch-up projects to once an open has cut a torn tail.
+	// MoveWarnings are what fsckMoves found wrong with this thread's
+	// PostsSplitOut records, none of it damage: the index folds a split
+	// leniently, and the actor writes none of these (TKT-01M29CXJZZ).
+	MoveWarnings []string `json:"move_warnings,omitempty"`
+	// UnfinishedMoves are this thread's PostsSplitOut records whose target
+	// does not yet hold every copy at its original's revision: a crash or a
+	// failed write between the two logs, which ketju serve finishes at
+	// start. A warning, not damage (docs/03 "How a move is written").
+	UnfinishedMoves []string `json:"unfinished_moves,omitempty"`
+
 	id    threadid.ID
 	hasID bool
 	whole int64
+
+	// What fsckMoves matches up across threads, read from the log.
+	splits    []fsckSplit
+	revisions map[uint32]uint32      // ordinal -> its last revision
+	copyOf    map[uint32]fsckPostRef // a move's copy's ordinal -> its origin
+	awaiting  map[fsckPostRef]bool   // origins a PostsMergedIn named, not yet copied
+}
+
+// fsckSplit is one PostsSplitOut a log holds.
+type fsckSplit struct {
+	offset   int64
+	target   threadid.ID
+	ordinals []uint32
+}
+
+// fsckPostRef names a post in some thread.
+type fsckPostRef struct {
+	thread  threadid.ID
+	ordinal uint32
 }
 
 func (r threadReport) clean() bool {
@@ -93,6 +122,12 @@ type fsckSummary struct {
 	// a thread whose creation never finished. Not an error, and not
 	// current either; catch-up reports them the same way.
 	Unfinished int `json:"unfinished_threads"`
+
+	// UnfinishedMoves counts PostsSplitOut records whose target does not
+	// yet hold every copy, and MoveWarnings the threads whose splits name
+	// what no move could (fsckMoves). Neither changes the exit code.
+	UnfinishedMoves int `json:"unfinished_moves"`
+	MoveWarnings    int `json:"move_warning_threads"`
 }
 
 func runFsck(args []string) error { return fsckMain(os.Stdout, args) }
@@ -115,6 +150,11 @@ projection is drift: a crash between the two writes leaves it, and ketju serve
 closes it at startup. A log shorter than its projection, or a projection with
 no log, cannot come from a crash. Serve quarantines that thread and answers
 503 for it until an operator repairs it, and fsck marks it QUARANT.
+
+A move of posts written to its source thread and not yet wholly to its target
+is marked MOVING. A crash between the two logs leaves it, or a backup taken
+mid-move; ketju serve finishes it at start, and it does not change the exit
+code.
 
 Safe against a live data directory, and takes no lock. Neither the logs nor
 the database are written, and fsck scans each log to the size it had when
@@ -205,6 +245,7 @@ func fsckWalk(root string, rebuild bool) (fsckSummary, error) {
 			sum.Rebuilt++
 		}
 	}
+	fsckMoves(&sum)
 	if projected != nil {
 		compareProjection(&sum, projected)
 	}
@@ -322,6 +363,14 @@ func writeFsckText(w io.Writer, sum fsckSummary, quiet bool) {
 			found = true
 			fmt.Fprintf(w, "DRIFT    %s  never projected: %d byte(s) of records\n", r.ID, r.DriftBytes)
 		}
+		for _, m := range r.UnfinishedMoves {
+			found = true
+			fmt.Fprintf(w, "MOVING   %s  %s\n", r.ID, m)
+		}
+		for _, m := range r.MoveWarnings {
+			found = true
+			fmt.Fprintf(w, "WARN     %s  %s\n", r.ID, m)
+		}
 		if !found && !quiet {
 			fmt.Fprintf(w, "ok       %s  %d record(s), %d post(s), %d bytes\n",
 				r.ID, r.Records, r.Posts, r.Bytes)
@@ -351,6 +400,14 @@ func writeFsckText(w io.Writer, sum fsckSummary, quiet bool) {
 	if sum.Unfinished > 0 {
 		fmt.Fprintf(w, "%d thread(s) unfinished: the log holds only its header and nothing projected it; "+
 			"its creation never finished, and there is nothing to project\n", sum.Unfinished)
+	}
+	if sum.UnfinishedMoves > 0 {
+		fmt.Fprintf(w, "%d move(s) of posts unfinished: written to the source and not yet all to the target; "+
+			"ketju serve finishes each before it serves, and until then the posts show in neither thread\n", sum.UnfinishedMoves)
+	}
+	if sum.MoveWarnings > 0 {
+		fmt.Fprintf(w, "%d thread(s) with a split that names a post no move could take; "+
+			"the log was not written by ketju serve\n", sum.MoveWarnings)
 	}
 	switch {
 	case !sum.DriftChecked:
@@ -450,6 +507,11 @@ func checkThread(path string, rebuild bool) threadReport {
 		if r.Header.Type == threadlog.TypePost {
 			rep.Posts++
 		}
+		if err := rep.noteMove(r); err != nil {
+			rep.Damaged++
+			rep.Error = err.Error()
+			return false
+		}
 		lastGood = r.Offset + int64(r.Size)
 		return true
 	})
@@ -458,6 +520,9 @@ func checkThread(path string, rebuild bool) threadReport {
 		return rep
 	}
 	rep.whole = lastGood
+	if len(rep.splits) > 0 && rep.clean() {
+		rep.checkSplits(f, lastGood)
+	}
 
 	if rebuild && rep.Damaged == 0 && rep.Error == "" {
 		if err := rebuildIndex(f, id, path, lastGood); err != nil {

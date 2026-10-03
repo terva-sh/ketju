@@ -68,7 +68,7 @@ func (f FrameFlags) Unknown() FrameFlags { return f &^ FrameFlagsKnown }
 // EntryFlags are the per-post bits an index entry carries so that a lens can
 // answer without reading the log (docs/03, "Index entry").
 //
-// Eight bits used, eight spare. docs/03 names those as the spare capacity for
+// Nine bits used, seven spare. docs/03 names those as the spare capacity for
 // this format — the four reserved bytes at offset 36 are NOT general slack,
 // they are held for the segment number that segment rollover would add to the
 // offset field.
@@ -131,13 +131,21 @@ const (
 	// the marker equals one rebuilt from the rewritten log.
 	EntryRedacted EntryFlags = 1 << 7
 
-	// EntryFlagsReserved is every bit not yet assigned: 8 through 15, written
-	// zero. The next bit to hand out is bit 8.
+	// EntryCopied marks a post a split or merge copied here: its Post
+	// carries an origin (docs/03 "How a move is written", TKT-01M29CXJZZ).
+	// Its quotes name posts of another thread, so they draw as "Quote from
+	// another thread", and the post is read here under this thread's forum.
+	// Like every entry flag it is derived, from the Post record alone.
+	EntryCopied EntryFlags = 1 << 8
+
+	// EntryFlagsReserved is every bit not yet assigned: 9 through 15, written
+	// zero. The next bit to hand out is bit 9.
 	EntryFlagsReserved EntryFlags = ^EntryFlagsKnown
 
 	// EntryFlagsKnown is every bit this build assigns meaning to.
 	EntryFlagsKnown EntryFlags = EntryDeleted | EntryMoved | EntryHiddenByMod |
-		EntryHasAttachments | EntryEdited | EntryMachineAuthored | EntryAutoHidden | EntryRedacted
+		EntryHasAttachments | EntryEdited | EntryMachineAuthored | EntryAutoHidden | EntryRedacted |
+		EntryCopied
 )
 
 // Has reports whether every bit in want is set.

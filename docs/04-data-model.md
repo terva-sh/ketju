@@ -556,7 +556,9 @@ transaction that projects the record, with the frame's timestamp as `at`.
     and `"log_offset"`, for the reason a rename's row names no title: the
     log is the record of what the tags were (TKT-01M29CYSCP);
     `thread.archived` with `"reason"`, an admin's, as a lock's is
-    (TKT-01M29CRJ64);
+    (TKT-01M29CRJ64); `posts.moved`, a `PostsSplitOut`, against the source
+    thread, with `"from_thread"` and `"to_thread"`, both base32 thread ids,
+    and `"count"`, the number of posts moved (TKT-01M29CXJZZ);
   - when the actor is not the thread's author: `thread.renamed`, against
     the thread, with nothing beyond `"thread"` and `"log_offset"`. It
     carries no title, old or new: the log is the record of what the title
@@ -575,7 +577,11 @@ transaction that projects the record, with the frame's timestamp as `at`.
     `flags`.
 
   An author's own rename, edit, delete or restore writes none, nor does a
-  `ThreadCreated`, its tags included, or `Post`. A record's
+  `ThreadCreated`, its tags included, or `Post`. A move's `PostsMergedIn`
+  and its copies write none: the copied `Post`s, and every copied `Edit`
+  up to the source post's revision even when a moderator wrote it, because
+  the source already recorded it. A later edit of the copy is audited as
+  any edit is. A record's
   actor 0 is written as NULL with `"via": "thread-log"`. An actor the log
   names but `users` lacks, as in a database restored from a backup older
   than the logs, is written as NULL with the log's id as `"log_actor"`, so
@@ -653,6 +659,7 @@ names that the list lacks.
 | `post.hidden` | `post` | TKT-01M29CKRGS |
 | `post.redacted` | `post` | TKT-01M29CXJZ9 |
 | `post.restored` | `post` | TKT-01M29CKRGS |
+| `posts.moved` | `thread` | TKT-01M29CXJZZ |
 | `setting.changed` | `setting` | TKT-01M29BYYJ0 |
 | `thread.archived` | `thread` | TKT-01M29CRJ64 |
 | `thread.locked` | `thread` | TKT-01M29CKRGS |
@@ -1203,6 +1210,39 @@ written once per record, so the replay changes nothing else. The notifier
 processes a thread only up to the length the projection holds, so it waits
 for the replay. The cost is one replay of every log at the first start
 after upgrading (Terva review 1998).
+
+### post_moves
+```
+source_thread_id, source_ordinal, source_revision, target_thread_id,
+target_ordinal, split_offset, merged_offset, opens_thread
+PRIMARY KEY (source_thread_id, source_ordinal)
+INDEX (target_thread_id, target_ordinal)
+```
+One row per post a move took (03 "How a move is written", migration 0026,
+TKT-01M29CXJZZ). The two threads are projected independently and in either
+order, so each side sets only its own columns and the rest stay null until
+the other side is projected: the source's `PostsSplitOut` sets
+`split_offset` and `source_revision`, the post's revision when it moved; the
+target's `PostsMergedIn` sets `merged_offset` and `opens_thread`, true when
+the target held no post yet, as a split's new thread does; and the copied
+`Post` sets `target_ordinal`. The copy is the first `Post` naming the row's
+source as its origin after that `PostsMergedIn` in the same log; any other
+`Post` with an origin is no move's copy, touches no row, and is projected
+as an ordinary post. A row is finished when `target_ordinal` is set
+and the copy's `current_revision` has reached `source_revision`; a null
+`source_revision` counts as unfinished. An `Edit` of a copy at or below
+`source_revision`, or while it is null, is carried rather than new. A
+target projected ahead of its source's `PostsSplitOut` reads
+`source_revision` from the source's log when it meets an `Edit` of a copy,
+so a rebuild in either order writes the same `post.edited` rows.
+
+`last_post_*` follow the move. A copy sets them only in a thread its move
+opened, and then only when the thread has no last post yet or the copy is
+at least as new as it. A copy merged into a thread that had posts raises
+`post_count` and leaves them alone. A `PostsSplitOut` recomputes the
+source's from its newest post, by time and then by ordinal, that is
+neither moved nor a merged copy, and a thread left with none reads as its
+`ThreadCreated` left it, at ordinal 0.
 
 ### search (FTS)
 Full-text index over `(thread_id, ordinal, revision, title, source_plain)`.

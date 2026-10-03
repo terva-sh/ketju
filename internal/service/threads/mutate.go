@@ -435,6 +435,11 @@ func (s *Service) changePostAppended(ctx context.Context, id threadid.ID, ordina
 		if err != nil {
 			return err
 		}
+		if rec.Type == threadlog.TypeEdit {
+			if err := s.copyPending(ctx, th, ordinal, e); err != nil {
+				return err
+			}
+		}
 		project = rec.Author != e.Author
 		if res, err = s.Writer.Append(th, rec); err != nil {
 			return err

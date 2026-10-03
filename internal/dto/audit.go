@@ -29,8 +29,9 @@ type AuditEntry struct {
 	Action string      `json:"action"`
 	Target AuditTarget `json:"target"`
 	// Related is the other things the row names, resolved as the target
-	// is: a thread.moved row's forum before and after the move, in that
-	// order. Empty, never null, for every other row.
+	// is: a thread.moved row's forum before and after the move, and a
+	// posts.moved row's thread the posts left and the one they went to,
+	// each in that order. Empty, never null, for every other row.
 	Related []AuditTarget `json:"related"`
 	// Details is the row's details_json as written, a JSON object. It is
 	// data to show as text, never markup.

@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
@@ -189,6 +190,19 @@ type Service struct {
 	// the post's state under the flag lock, before it acts on it. Tests use
 	// it to change the post there.
 	afterQueueRead func(id threadid.ID, ordinal uint32)
+
+	// moveMu is held by every move of posts, its finisher, every thread move
+	// and every archive (move.go), so no thread changes forum or is archived
+	// while a move into or out of it is decided or written.
+	moveMu sync.Mutex
+	// movesPending is every move this process committed and has not
+	// finished, by source and split offset, to its target. Guarded by
+	// moveMu.
+	movesPending map[pendingMove]threadid.ID
+	// afterSplitOut, when set, is called by movePosts once the source's
+	// PostsSplitOut is written, before the target's run. A test returns an
+	// error from it to stop the move there, as a crash would.
+	afterSplitOut func(source, target threadid.ID) error
 
 	// Logger reports what a request cannot answer with: an audit row owed
 	// after an action that happened (queue.go). Nil is slog.Default().
@@ -648,14 +662,18 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 
 	for i, p := range posts {
 		d := dto.Post{
-			Ordinal:         int(p.Ordinal),
-			Revision:        int(p.Revision),
-			Author:          users[int64(p.Author)],
-			CreatedAt:       dto.Millis(p.CreatedMS),
-			ReplyCount:      snap.replies[p.Ordinal],
-			QuotedBy:        []int{},
-			Attachments:     []dto.Attachment{},
-			Deleted:         p.Flags&(threadlog.EntryDeleted|threadlog.EntryHiddenByMod|threadlog.EntryRedacted) != 0,
+			Ordinal:     int(p.Ordinal),
+			Revision:    int(p.Revision),
+			Author:      users[int64(p.Author)],
+			CreatedAt:   dto.Millis(p.CreatedMS),
+			ReplyCount:  snap.replies[p.Ordinal],
+			QuotedBy:    []int{},
+			Attachments: []dto.Attachment{},
+			// A moved post is gone from here, to everyone, moderators
+			// included: deleted with no removal, and no body (docs/07
+			// "Removed posts", TKT-01M29CXJZZ).
+			Deleted: p.Flags&(threadlog.EntryDeleted|threadlog.EntryHiddenByMod|threadlog.EntryRedacted|
+				threadlog.EntryMoved) != 0,
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
 			Redacted:        p.Flags.Has(threadlog.EntryRedacted),
 		}
@@ -726,6 +744,10 @@ func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, ha
 // The post's mentions resolve as of its current revision's time, which the
 // key's revision fixes (mentions.go).
 func (s *Service) htmlDeps(id threadid.ID, p threadlog.Post, rctx render.Context, handles *handleMemo) (string, render.Deps, error) {
+	// A post a move copied here quotes the thread it came from, so its
+	// quotes draw as from another thread (TKT-01M29CXJZZ). The flag is the
+	// post's own and never changes, so the key needs nothing more.
+	rctx.Foreign = p.Flags.Has(threadlog.EntryCopied)
 	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
 	sc := mentionScope{since: p.RevisionMS}
 	if html, deps, ok := s.Render.GetDeps(k); ok && quotesCurrent(deps.Quotes, rctx.Posts) && handles.current(deps.Handles) {

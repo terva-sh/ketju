@@ -229,38 +229,80 @@ func TestRemovedPostsLeaveTheIndex(t *testing.T) {
 	}
 }
 
-// TestMovedIsNotVisible: this build writes no split (the record is reserved
-// until TKT-01M29CXJZZ), so no post can be marked moved yet. When one is,
-// its entry is not Visible, and the indexer drops a touched post whose entry
-// is not Visible, as the removals above show.
-func TestMovedIsNotVisible(t *testing.T) {
+// TestSplitDropsMovedPosts: a PostsSplitOut marks the posts it names moved,
+// which is not Visible, so their rows go from the source, and the copies a
+// move writes into the target are indexed there as Posts. Posts the split
+// does not name keep their rows (TKT-01M29CXJZZ).
+func TestSplitDropsMovedPosts(t *testing.T) {
 	if threadlog.EntryMoved.Visible() {
 		t.Fatal("a moved post's entry is Visible; the indexer would keep its row")
 	}
+	f := newFixture(t)
+	src, created := f.thread("Source")
+	dst, dstCreated := f.thread("Target")
+	evs := []events.Event{created, dstCreated}
+	for _, s := range []string{"stays put", "walrus travels", "narwhal travels"} {
+		evs = append(evs, f.post(src, 5, s))
+	}
+	f.deliver(evs...)
+	if f.hits("travels") != 2 {
+		t.Fatalf("before the move %d posts match", f.hits("travels"))
+	}
+	split := f.append(src, threadlog.Append{Type: threadlog.TypePostsSplitOut, Author: 5,
+		Body: &threadlog.PostsSplitOutBody{Ordinals: []uint32{2, 3}, TargetThreadID: uint64(dst)}})
+	f.deliver(split)
+	for _, o := range []int64{2, 3} {
+		if _, ok := f.row(src, o); ok {
+			t.Errorf("source post %d keeps its search row after the split", o)
+		}
+	}
+	if _, ok := f.row(src, 1); !ok {
+		t.Error("source post 1, which did not move, lost its search row")
+	}
+	merged := f.append(dst, threadlog.Append{Type: threadlog.TypePostsMergedIn, Author: 5,
+		Body: &threadlog.PostsMergedInBody{SourceThreadID: uint64(src), Ordinals: []uint32{2, 3}}})
+	copies := []events.Event{merged}
+	for i, s := range []string{"walrus travels", "narwhal travels"} {
+		copies = append(copies, f.append(dst, threadlog.Append{Type: threadlog.TypePost, Author: 5,
+			Body: &threadlog.PostBody{Source: s, Origin: &threadlog.PostOrigin{ThreadID: uint64(src), Ordinal: uint32(2 + i)}}}))
+	}
+	f.deliver(copies...)
+	if f.hits("travels") != 2 {
+		t.Errorf("after the move %d posts match, want the 2 copies", f.hits("travels"))
+	}
+	for _, o := range []int64{1, 2} {
+		if _, ok := f.row(dst, o); !ok {
+			t.Errorf("the copy at target post %d has no search row", o)
+		}
+	}
+	f.check()
+	if got, want := f.dump(), f.fromScratch(); got != want {
+		t.Errorf("incremental and from-scratch indexes differ after a move:\n%s\n---\n%s", got, want)
+	}
 }
 
-// TestEveryRecordTypeHasAnIndexDecision: every catalogued or reserved
-// record type has a decision, and nothing else does. A type is classed as
-// touching its ordinal when applying a record of it to an index can change
-// a post's entry: the index's own fold is the judge, so a record added later
-// that hides posts cannot be classed as changing nothing.
+// TestEveryRecordTypeHasAnIndexDecision: every catalogued record type has a
+// decision, and nothing else does. A type is classed as touching its
+// ordinals when applying a record of it to an index can change a post's
+// entry: the index's own fold is the judge, so a record added later that
+// hides posts cannot be classed as changing nothing.
 func TestEveryRecordTypeHasAnIndexDecision(t *testing.T) {
 	for i := 1; i < 256; i++ {
 		typ := threadlog.RecordType(i)
 		d, ok := decisions[typ]
 		switch {
-		case (typ.Known() || typ.Reserved()) && !ok:
+		case typ.Known() && !ok:
 			t.Errorf("%s has no index decision", typ)
 			continue
-		case !typ.Known() && !typ.Reserved():
+		case !typ.Known():
 			if ok {
-				t.Errorf("%s is neither catalogued nor reserved, but has a decision", typ)
+				t.Errorf("%s is not catalogued, but has a decision", typ)
 			}
 			continue
 		case d.effect == none && d.reason == "":
 			t.Errorf("%s changes nothing in the index, and its decision gives no reason", typ)
 		}
-		if typ.Known() && changesAnEntry(t, typ) && d.effect != touchesOrdinal {
+		if changesAnEntry(t, typ) && d.effect != touchesOrdinal && d.effect != touchesOrdinals {
 			t.Errorf("%s can change a post's index entry, but its decision does not touch the ordinal", typ)
 		}
 	}
@@ -268,11 +310,13 @@ func TestEveryRecordTypeHasAnIndexDecision(t *testing.T) {
 
 // changesAnEntry reports whether a record of type typ, with any of a few
 // bodies, changes an index entry when applied to a visible post and to a
-// deleted one.
+// deleted one. A thread-level record is tried at frame ordinal 0, with a
+// body naming post 1 as a move does.
 func changesAnEntry(t *testing.T, typ threadlog.RecordType) bool {
 	t.Helper()
 	var bodies [][]byte
-	for _, v := range []any{map[string]any{}, map[string]any{"ordinal": 1}, map[string]any{"ordinal": 1, "title": false}} {
+	for _, v := range []any{map[string]any{}, map[string]any{"ordinal": 1}, map[string]any{"ordinal": 1, "title": false},
+		map[string]any{"ordinals": []uint32{1}, "target_thread_id": 9, "source_thread_id": 9}} {
 		b, err := threadlog.EncodeBody(threadlog.EncodingCBOR, v)
 		if err != nil {
 			t.Fatal(err)
@@ -281,7 +325,7 @@ func changesAnEntry(t *testing.T, typ threadlog.RecordType) bool {
 	}
 	for _, flags := range []threadlog.EntryFlags{0, threadlog.EntryDeleted, threadlog.EntryHiddenByMod} {
 		for _, body := range bodies {
-			for _, ordinal := range []uint32{1, 2} {
+			for _, ordinal := range []uint32{0, 1, 2} {
 				before := []threadlog.IndexEntry{{Offset: 100, FrameLength: 40, Revision: 1, Author: 5, Flags: flags}}
 				ix := threadlog.NewIndex(threadlog.IndexHeader{}, slices.Clone(before))
 				h := threadlog.FrameHeader{Type: typ, Encoding: threadlog.EncodingCBOR, Ordinal: ordinal, Revision: 2, Actor: 5}
@@ -329,8 +373,7 @@ func TestStateNeverPassesTheScan(t *testing.T) {
 // posts, edits, deletes, hides, auto-hides, restores, renames and
 // redactions, delivered in random batches, give the same rows as indexing
 // every thread from its first frame into a fresh database, and FTS5's
-// integrity-check passes on both. Split and merge are reserved and cannot be
-// written in this build.
+// integrity-check passes on both. Moves are TestSplitDropsMovedPosts's.
 func TestIncrementalEqualsFromScratch(t *testing.T) {
 	for seed := range uint64(6) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {

@@ -60,7 +60,10 @@ import (
 // 5: a markdown image with any source but an attachment renders as a link or
 // as text, and the sanitizer keeps an img src only for an attachment
 // (TKT-01M3N24RM0).
-const Version = 5
+//
+// 6: a quote in a post copied from another thread draws as "Quote from
+// another thread" (Context.Foreign, TKT-01M29CXJZZ).
+const Version = 6
 
 // MaxSource is the largest source Render will accept.
 //
@@ -136,6 +139,12 @@ type Context struct {
 	// is open in the docs (TKT-01M29C2WWG's notes), and refusing it is a
 	// narrower rule that can be added here without changing a stored fact.
 	ReplyTo *uint32
+
+	// Foreign is set for a post a split or merge copied from another
+	// thread (TKT-01M29CXJZZ): its quotes name that thread's posts, so each
+	// draws as "Quote from another thread", with no text, no link and no
+	// backlink, whatever Posts says.
+	Foreign bool
 }
 
 // Render converts markdown source to sanitized HTML, with nothing to resolve
@@ -170,7 +179,7 @@ func RenderWith(source string, ctx Context) (Result, error) {
 	src := []byte(source)
 	var buf bytes.Buffer
 	doc := mdParser.Parse(src)
-	quotes := resolveQuotes(doc, ctx.Posts)
+	quotes := resolveQuotes(doc, ctx.Posts, ctx.Foreign)
 	mentions := resolveMentions(doc, ctx.Handles)
 	if err := mdRenderer.Render(&buf, src, doc); err != nil {
 		return Result{}, fmt.Errorf("render: %w", err)

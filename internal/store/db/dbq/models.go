@@ -250,6 +250,17 @@ type PostMetum struct {
 	LogOffset       int64
 }
 
+type PostMove struct {
+	SourceThreadID int64
+	SourceOrdinal  int64
+	SourceRevision sql.NullInt64
+	TargetThreadID int64
+	TargetOrdinal  sql.NullInt64
+	SplitOffset    sql.NullInt64
+	MergedOffset   sql.NullInt64
+	OpensThread    int64
+}
+
 type PostQuote struct {
 	ThreadID      int64
 	Ordinal       int64

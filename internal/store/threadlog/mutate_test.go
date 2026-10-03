@@ -350,7 +350,7 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 	// (TKT-01M29CRJ5J).
 	modRestore := Append{Type: TypeRestore, Ordinal: 1, RequireAny: EntryDeleted | EntryHiddenByMod, Refuse: EntryMoved}
 	ownRestore := Append{Type: TypeRestore, Ordinal: 1, Require: EntryDeleted, Refuse: EntryHiddenByMod | EntryMoved}
-	hide := staged{req: request{a: Append{Body: &DeleteBody{ByModerator: true}}}, header: FrameHeader{Type: TypeDelete, Ordinal: 1}}
+	hide := staged{app: Append{Body: &DeleteBody{ByModerator: true}}, header: FrameHeader{Type: TypeDelete, Ordinal: 1}}
 	del := staged{header: FrameHeader{Type: TypeDelete, Ordinal: 1}}
 	undo := staged{header: FrameHeader{Type: TypeRestore, Ordinal: 1}}
 	for _, c := range []struct {
@@ -384,11 +384,11 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 		// A staged grace Edit does not, as Apply will not (TKT-01M29CKRHS):
 		// the body it is staged with is read, not only its type.
 		{"refusing edited, behind a grace edit", Append{Type: TypeEdit, Ordinal: 1, Refuse: EntryEdited},
-			[]staged{{req: request{a: Append{Body: &EditBody{Grace: true}}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}}}, true},
+			[]staged{{app: Append{Body: &EditBody{Grace: true}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}}}, true},
 		{"refusing edited, behind a grace edit and a visible one", Append{Type: TypeEdit, Ordinal: 1, Refuse: EntryEdited},
 			[]staged{
-				{req: request{a: Append{Body: &EditBody{Grace: true}}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}},
-				{req: request{a: Append{Body: &EditBody{}}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}},
+				{app: Append{Body: &EditBody{Grace: true}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}},
+				{app: Append{Body: &EditBody{}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}},
 			}, false},
 	} {
 		err := a.checkState(c.req, c.ahead)
@@ -420,6 +420,11 @@ func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
 	for ty := range catalogue {
 		if ty == TypePost {
 			continue // creates an entry rather than changing one
+		}
+		if ty == TypePostsSplitOut || ty == TypePostsMergedIn {
+			// Thread-level: they name posts in the body, not the frame,
+			// and TestSplitFoldIsWhatApplyDoes holds the split to Apply.
+			continue
 		}
 		body, _ := NewBody(ty)
 		if ty == TypeRedacted {

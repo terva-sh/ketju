@@ -211,6 +211,8 @@ func insertProjectionRows(t *testing.T, d *DB, author int64) {
 			{`INSERT INTO post_attachments (thread_id, ordinal, hash, position) VALUES (42, 1, ?, 0)`,
 				[]any{strings.Repeat("ab", 32)}},
 			{`INSERT INTO post_quotes (thread_id, ordinal, quoted_ordinal) VALUES (42, 2, 1)`, nil},
+			{`INSERT INTO post_moves (source_thread_id, source_ordinal, source_revision, target_thread_id,
+			  target_ordinal, split_offset) VALUES (42, 1, 1, 43, 1, 200)`, nil},
 		} {
 			if _, err := tx.ExecContext(t.Context(), s.query, s.args...); err != nil {
 				return err

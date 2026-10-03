@@ -288,9 +288,9 @@ type rec = struct {
 	body any
 }
 
-// TestUnknownTypes: an unknown advisory type and a reserved one are stepped
-// over, as the index steps over them. An unknown critical type stops the
-// thread, which then shows as lag.
+// TestUnknownTypes: unknown advisory types, 22 (the first unassigned one,
+// next to split and merge) and 99, are stepped over, as the index steps over
+// them. An unknown critical type stops the thread, which then shows as lag.
 func TestUnknownTypes(t *testing.T) {
 	f := newFixture(t)
 	created := rec{threadlog.TypeThreadCreated, &threadlog.ThreadCreatedBody{Title: "T", Slug: "t", ForumID: 7}}
@@ -298,10 +298,10 @@ func TestUnknownTypes(t *testing.T) {
 	future := map[string]any{"from": "a later phase"}
 
 	id, end := rawLog(t, f, created, post, rec{threadlog.RecordType(99), future},
-		rec{threadlog.TypePostsSplitOut, future}, post)
+		rec{threadlog.RecordType(22), future}, post)
 	f.project(id, end)
 	if d := f.dump(); !strings.Contains(d, "post_count=2") || !strings.Contains(d, "post_meta: 2 rows") {
-		t.Fatalf("skipping the advisory and reserved records lost the posts around them:\n%s", d)
+		t.Fatalf("skipping the unknown advisory records lost the posts around them:\n%s", d)
 	}
 
 	id, end = rawLog(t, f, created, post, rec{threadlog.RecordType(0x90), future}, post)

@@ -194,9 +194,10 @@ var appendAllowed = []string{
 }
 
 // TestEveryAppendGoesThroughTheWriter: no file outside appendAllowed calls
-// .Actor.Append, so every append the server makes passes the gate a backup
-// holds, and publishes its event (TKT-01M29CXK35). It walks the non-test Go
-// files of the module, as the session chokepoint test does.
+// .Actor.Append or .Actor.AppendRun, so every append the server makes passes
+// the gate a backup holds, and publishes its event (TKT-01M29CXK35,
+// TKT-01M29CXJZZ). It walks the non-test Go files of the module, as the
+// session chokepoint test does.
 func TestEveryAppendGoesThroughTheWriter(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
@@ -230,7 +231,7 @@ func TestEveryAppendGoesThroughTheWriter(t *testing.T) {
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Append" {
+			if !ok || (sel.Sel.Name != "Append" && sel.Sel.Name != "AppendRun") {
 				return true
 			}
 			inner, ok := sel.X.(*ast.SelectorExpr)

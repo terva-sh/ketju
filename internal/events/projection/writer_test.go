@@ -201,6 +201,37 @@ func TestReplayIsIdempotentPerRecordType(t *testing.T) {
 			f.post(id, 6, 1, 8)
 			return f.redact(id, 1)
 		}, []string{"ordinal=1 author_id=5", "deleted=1", "mentioned_user_id=8", "mentions: 1 rows"}},
+		// The source's side of a move: the posts are moved, their rows say
+		// where to and at what revision, and the last post falls back to the
+		// newest that stayed.
+		{threadlog.TypePostsSplitOut, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0)
+			f.post(id, 6, 1)
+			f.post(id, 7, 0)
+			f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 6, Ordinal: 2,
+				Body: &threadlog.EditBody{Source: "fixed"}})
+			return f.append(id, threadlog.Append{Type: threadlog.TypePostsSplitOut, Author: 1,
+				Body: &threadlog.PostsSplitOutBody{Ordinals: []uint32{2, 3}, TargetThreadID: 0x1234}})
+		}, []string{"post_count=3", "last_post_author_id=5", "last_post_ordinal=1",
+			"ordinal=2 author_id=6", "moved=1", "post_moves: 2 rows",
+			"source_ordinal=2 source_revision=2 target_thread_id=4660 target_ordinal=NULL split_offset=",
+			"source_ordinal=3 source_revision=1 target_thread_id=4660"}},
+		// The target's side: a merge into a thread with a post, whose copies
+		// raise post_count but not the last post, and whose rows say where
+		// each copy landed.
+		{threadlog.TypePostsMergedIn, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0)
+			f.append(id, threadlog.Append{Type: threadlog.TypePostsMergedIn, Author: 1,
+				Body: &threadlog.PostsMergedInBody{SourceThreadID: 0x1234, Ordinals: []uint32{4, 5}}})
+			f.append(id, threadlog.Append{Type: threadlog.TypePost, Author: 8, TimeMS: 1_700_000_000_500,
+				Body: &threadlog.PostBody{Source: "copy", Origin: &threadlog.PostOrigin{ThreadID: 0x1234, Ordinal: 4}}})
+			f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 8, Ordinal: 2, TimeMS: 1_700_000_000_600,
+				Body: &threadlog.EditBody{Source: "copy, edited"}})
+			return f.append(id, threadlog.Append{Type: threadlog.TypePost, Author: 9, TimeMS: 1_800_000_000_000,
+				Body: &threadlog.PostBody{Source: "copy", Origin: &threadlog.PostOrigin{ThreadID: 0x1234, Ordinal: 5}}})
+		}, []string{"post_count=3", "last_post_author_id=5", "last_post_ordinal=1", "post_moves: 2 rows",
+			"source_ordinal=4 source_revision=NULL target_thread_id=", "target_ordinal=2 split_offset=NULL merged_offset=",
+			"target_ordinal=3", "opens_thread=0", "ordinal=2 author_id=8 created_at=1700000000500 current_revision=2"}},
 	}
 	covered := map[threadlog.RecordType]bool{}
 	for _, c := range cases {
@@ -231,6 +262,12 @@ func TestReplayIsIdempotentPerRecordType(t *testing.T) {
 				reply_to = 77, author_id = 99, created_at = 1`)
 			f.exec(`INSERT INTO mentions SELECT thread_id, ordinal, 777 FROM post_meta`)
 			f.exec(`INSERT INTO thread_tags (thread_id, tag) SELECT id, 'stale' FROM threads`)
+			// Only the columns this thread's side of a move owns: the other
+			// side's are the other thread's to restore.
+			f.exec(`UPDATE post_moves SET split_offset = 1, source_revision = 9, target_thread_id = 99
+				WHERE source_thread_id = ?`, int64(id))
+			f.exec(`UPDATE post_moves SET merged_offset = 1, opens_thread = 1 - opens_thread, target_ordinal = 7
+				WHERE target_thread_id = ?`, int64(id))
 			f.exec(`UPDATE projection_state SET log_length = ?`, threadlog.FileHeaderSize)
 			f.project(id, end)
 			if again := f.dump(); again != first {
@@ -321,10 +358,10 @@ func TestGraceEditProjection(t *testing.T) {
 	}
 }
 
-// TestEveryRecordTypeHasADecision is AC3: every type this build knows, and
-// every type docs/03 holds in reserve, has a projection or a written reason
-// it has none. A known type must project: it has a body, so it says
-// something about the thread.
+// TestEveryRecordTypeHasADecision is AC3: every type this build knows has a
+// projection, and no other type has a decision. A known type must project:
+// it has a body, so it says something about the thread. No number is held
+// in reserve any more: split and merge, the last, landed in TKT-01M29CXJZZ.
 func TestEveryRecordTypeHasADecision(t *testing.T) {
 	for n := 1; n <= 255; n++ {
 		typ := threadlog.RecordType(n)
@@ -332,10 +369,8 @@ func TestEveryRecordTypeHasADecision(t *testing.T) {
 		switch {
 		case typ.Known() && (!ok || d.apply == nil):
 			t.Errorf("%s is in the catalogue and has no projection", typ)
-		case typ.Reserved() && (!ok || (d.apply == nil && d.reason == "")):
-			t.Errorf("%s is reserved and has no stated decision", typ)
-		case !typ.Known() && !typ.Reserved() && ok:
-			t.Errorf("%s is neither known nor reserved but has a decision", typ)
+		case !typ.Known() && ok:
+			t.Errorf("%s is not in the catalogue but has a decision", typ)
 		}
 	}
 }

@@ -108,6 +108,7 @@ type Querier interface {
 	ClearMentions(ctx context.Context) error
 	ClearPostAttachments(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
+	ClearPostMoves(ctx context.Context) error
 	ClearPostQuotes(ctx context.Context) error
 	ClearProjectionState(ctx context.Context) error
 	// The statements ClearSearch runs after FTS5's delete-all, one per table in
@@ -333,6 +334,7 @@ type Querier interface {
 	// (internal/events/notifier, TKT-01M29CRJ2T), which keeps its progress per
 	// thread in notification_progress (migration 0024).
 	GetNotificationProgress(ctx context.Context, threadID int64) (int64, error)
+	GetPostMove(ctx context.Context, arg GetPostMoveParams) (PostMove, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
 	GetReadPosition(ctx context.Context, arg GetReadPositionParams) (ReadPosition, error)
 	// The search index's plain statements (docs/04 "search (FTS)",
@@ -412,6 +414,12 @@ type Querier interface {
 	// any row for the post (notifications_post): DO NOTHING with no target
 	// yields to either.
 	InsertWatchNotification(ctx context.Context, arg InsertWatchNotificationParams) error
+	// Whether an Edit at revision of the post at (target_thread_id,
+	// target_ordinal) is one a move carried rather than a new one: the post is
+	// a copy, and the revision is at most the source post's, or the source's
+	// PostsSplitOut is not projected yet so its revision is unknown. A carried
+	// Edit writes no audit row and notifies nobody, as a copied Post does.
+	IsCarriedEdit(ctx context.Context, arg IsCarriedEditParams) (bool, error)
 	// LatestApplicationForIdentity is the identity's newest application, pending
 	// or decided. The 24-hour rule counts from its created_at.
 	LatestApplicationForIdentity(ctx context.Context, identityID sql.NullInt64) (LatestApplicationForIdentityRow, error)
@@ -572,6 +580,19 @@ type Querier interface {
 	// removed is gone here once projected. A scan of the thread's prefix of
 	// the primary key.
 	MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsParams) ([]int64, error)
+	// The move row of a copy, by where it landed.
+	MoveOfCopy(ctx context.Context, arg MoveOfCopyParams) (MoveOfCopyRow, error)
+	// The source ordinals of source_thread_id's move rows whose source
+	// revision is not known yet: the target was projected first.
+	MovesWithoutSourceRevision(ctx context.Context, sourceThreadID int64) ([]int64, error)
+	// The thread's newest post that is shown in its lists' "last post": not
+	// moved out, and not a copy merged into a thread that already had posts.
+	// Deleted posts count, as applyPost counts them when they are written. A
+	// PostsSplitOut recomputes last_post_* from it (TKT-01M29CXJZZ). Newest by
+	// time, then by ordinal: a copy keeps its original's time, so a thread a
+	// move opened holds copies whose times do not rise with their ordinals,
+	// and applyCopy picks its last post by time (Terva review 2014).
+	NewestListedPost(ctx context.Context, threadID int64) (NewestListedPostRow, error)
 	// NotificationsSince is the install cutoff: when the generator's migration
 	// was applied, found by its name so a renumber does not move it. A record
 	// written at or before it generates nothing, so installing the generator
@@ -701,6 +722,13 @@ type Querier interface {
 	// A null override means the site default.
 	SetAgentLimits(ctx context.Context, arg SetAgentLimitsParams) (int64, error)
 	SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error)
+	// The target's copied Post, a Post whose origin names the source post. It
+	// is the move's copy only when the row's PostsMergedIn is in this thread,
+	// ahead of it in the log, and it is the first such Post: a move writes its
+	// copies right after its PostsMergedIn. Any other Post with an origin, such
+	// as one written by hand, is no move's and touches no row (Terva review
+	// 2011). Updates only; the PostsMergedIn wrote the row.
+	SetCopyMove(ctx context.Context, arg SetCopyMoveParams) (int64, error)
 	// Links closed flags to the audit row that records their closing, in the
 	// transaction that writes the row, and clears the marker of any that were
 	// owed it (TKT-01M29CRJ4E). A flag that already has a row keeps it.
@@ -720,10 +748,15 @@ type Querier interface {
 	// that arrives late, leaves a later mark where it is. The answer is the mark
 	// as it now stands.
 	SetMarkAllRead(ctx context.Context, arg SetMarkAllReadParams) (int64, error)
+	// Sets a row's source revision, read from the source's log, when the
+	// target is projected ahead of the source's PostsSplitOut. It is the value
+	// that split would write: a moved post accepts no later record.
+	SetMoveSourceRevision(ctx context.Context, arg SetMoveSourceRevisionParams) error
 	SetNotificationProgress(ctx context.Context, arg SetNotificationProgressParams) error
 	// log_offset is the current revision's record, as the index entry's Offset
 	// is, so a Delete or Restore (which is not a revision) leaves it alone.
 	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)
+	SetPostMoved(ctx context.Context, arg SetPostMovedParams) (int64, error)
 	// A null reply_to keeps the row's: an Edit without one keeps the post's
 	// reply link, as the index entry does (TKT-01M29CA9BP).
 	SetPostRevision(ctx context.Context, arg SetPostRevisionParams) (int64, error)
@@ -740,6 +773,9 @@ type Querier interface {
 	SetThreadLastPost(ctx context.Context, arg SetThreadLastPostParams) (int64, error)
 	SetThreadLocked(ctx context.Context, arg SetThreadLockedParams) (int64, error)
 	SetThreadPinned(ctx context.Context, arg SetThreadPinnedParams) (int64, error)
+	// A copy merged into a thread that already held posts raises post_count, the
+	// latest ordinal, and leaves last_post_* where they were (TKT-01M29CXJZZ).
+	SetThreadPostCount(ctx context.Context, arg SetThreadPostCountParams) (int64, error)
 	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error)
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	// Watches and mutes (docs/04 "watches", TKT-01M29CRJ29): one row per user
@@ -799,6 +835,13 @@ type Querier interface {
 	// row names the denial that set it (review 1470). Zero rows means the
 	// identity is gone, is not blocked, or was not blocked by that application.
 	UnblockIdentity(ctx context.Context, arg UnblockIdentityParams) (int64, error)
+	// Every move row that is not finished: its copy is not written, the
+	// source's PostsSplitOut is not projected, or the copy has not reached the
+	// source post's revision. copy_revision is null when the copy's post_meta
+	// row is missing. In source order, which is the order the finisher writes.
+	UnfinishedMoves(ctx context.Context) ([]UnfinishedMovesRow, error)
+	// UnfinishedMoves for the moves into or out of one thread.
+	UnfinishedMovesForThread(ctx context.Context, threadID int64) ([]UnfinishedMovesForThreadRow, error)
 	// Clears the pin only when its scope matches, so removing a forum pin does
 	// not silently remove a global one (docs/03). SQLite evaluates every SET
 	// expression against the row as it was, so both CASEs see the old scope.
@@ -830,6 +873,8 @@ type Querier interface {
 	// draft per (user, forum). The title and attachments are replaced as a
 	// whole, so a save without them clears them.
 	UpsertForumDraft(ctx context.Context, arg UpsertForumDraftParams) (Draft, error)
+	// The target's PostsMergedIn, for one source ordinal.
+	UpsertMergedMove(ctx context.Context, arg UpsertMergedMoveParams) error
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
 	// UpsertPostNotification writes one member's notification for one post, or
@@ -848,6 +893,14 @@ type Querier interface {
 	// TKT-01M29CA9CE). The rule lives in the statement rather than in a read
 	// followed by a write, so two beacons racing each other cannot interleave.
 	UpsertReadPosition(ctx context.Context, arg UpsertReadPositionParams) error
+	// Moved posts (migration 0026, TKT-01M29CXJZZ). The source and the target of
+	// a move are projected independently and in either order, so each side's
+	// statement inserts the row when it is missing and otherwise sets only the
+	// columns that side owns.
+	// The source's PostsSplitOut, for one ordinal: source_revision is the moved
+	// post's revision as the source projected it, which a moved post keeps. No
+	// row is written for a post the source's projection lacks.
+	UpsertSplitMove(ctx context.Context, arg UpsertSplitMoveParams) (int64, error)
 	// The projection writer's statements (TKT-01M29C2WW5). Every one sets an
 	// absolute value, never an increment, so replaying a range the database has
 	// already seen converges on the same rows.

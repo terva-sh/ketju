@@ -50,6 +50,25 @@ func (w *Writer) Append(th *threadcache.Thread, a threadlog.Append) (threadlog.R
 	return res, nil
 }
 
+// AppendRun writes run to th as one contiguous run through its actor
+// (threadlog.Actor.AppendRun), all of it or none, and publishes one event
+// at the run's end, as a thread-level change: a subscriber catches up from
+// its log length and reads every record the run wrote. A move's target run
+// is the caller (docs/03 "How a move is written"). It waits on a Hold as
+// Append does.
+func (w *Writer) AppendRun(th *threadcache.Thread, run []threadlog.Append) ([]threadlog.Result, error) {
+	w.gate.enter()
+	defer w.gate.leave()
+	res, err := th.Actor.AppendRun(run)
+	if err != nil || len(res) == 0 {
+		return res, err
+	}
+	if w.Publish != nil {
+		w.Publish(events.Event{Thread: th.ID, LogLength: res[len(res)-1].LogLength})
+	}
+	return res, nil
+}
+
 // ErrHeld is Hold while another Hold is in force.
 var ErrHeld = errors.New("posts: appends are already held")
 

@@ -474,7 +474,7 @@ func (w *Writer) apply(ctx context.Context, q *dbq.Queries, id threadid.ID, rec 
 	body, err := threadlog.DecodeBody(rec.Header.Type, rec.Header.Encoding, rec.Body)
 	if err != nil {
 		if threadlog.SkipUnknown(err) {
-			return nil // advisory, or reserved: stepped over as the index does
+			return nil // unknown and advisory: stepped over as the index does
 		}
 		return logFault{fmt.Errorf("frame at offset %d: %w", rec.Offset, err)}
 	}
@@ -498,6 +498,12 @@ func (w *Writer) apply(ctx context.Context, q *dbq.Queries, id threadid.ID, rec 
 			return logFault{err}
 		}
 		return err
+	}
+	// An Edit of a copy is audited only if it is not one its move carried,
+	// which needs the source's revision; a target projected ahead of its
+	// source reads it from the source's log (movesource.go).
+	if err := w.learnSourceRevisions(ctx, q, f); err != nil {
+		return fmt.Errorf("auditing %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
 	}
 	// In the same transaction, so the row exists exactly when the record's
 	// projection commits (audit.go). A failure here is the database's, not
