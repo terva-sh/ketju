@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -184,6 +185,64 @@ func TestReleaseWorkflowsSplitByForge(t *testing.T) {
 	for _, s := range []string{"buildah login", "buildah push", "manifest push", "api.github.com", "uploads.github.com"} {
 		if strings.Contains(fj, s) {
 			t.Errorf("%s holds %q; it publishes only its own release", forgejoWorkflow, s)
+		}
+	}
+}
+
+// stepScript returns the run block of the named step, dedented.
+func stepScript(t *testing.T, wf, step string) string {
+	t.Helper()
+	lines := strings.Split(wf, "\n")
+	at := slices.Index(lines, "      - name: "+step)
+	if at < 0 {
+		t.Fatalf("no step %q", step)
+	}
+	for i := at + 1; i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "- name: ") {
+			break
+		}
+		if strings.TrimSpace(lines[i]) != "run: |" {
+			continue
+		}
+		indent := len(lines[i]) - len(strings.TrimLeft(lines[i], " "))
+		var b strings.Builder
+		for _, l := range lines[i+1:] {
+			if strings.TrimSpace(l) != "" && len(l)-len(strings.TrimLeft(l, " ")) <= indent {
+				break
+			}
+			b.WriteString(strings.TrimPrefix(l, strings.Repeat(" ", indent+2)) + "\n")
+		}
+		return b.String()
+	}
+	t.Fatalf("step %q has no run block", step)
+	return ""
+}
+
+// TestImageTagsFollowTheOrganization runs the GitHub workflow's tag step: a
+// release floats MAJOR.MINOR and latest, a two-part tag such as v1.0 floats
+// nothing narrower than itself, and a pre-release floats nothing.
+func TestImageTagsFollowTheOrganization(t *testing.T) {
+	script := stepScript(t, readRoot(t, githubWorkflow), "Work out the image tags")
+	const img = "ghcr.io/terva-sh/ketju"
+	for _, c := range []struct{ tag, pre, want string }{
+		{"v1.0.0", "false", img + ":1.0.0," + img + ":1.0," + img + ":latest"},
+		{"v1.2.3", "false", img + ":1.2.3," + img + ":1.2," + img + ":latest"},
+		{"v1.0", "false", img + ":1.0," + img + ":latest"},
+		{"v1.0.0-rc.1", "true", img + ":1.0.0-rc.1"},
+	} {
+		out := filepath.Join(t.TempDir(), "out")
+		cmd := exec.Command("sh", "-c", script)
+		cmd.Env = append(os.Environ(), "TAG="+c.tag, "PRERELEASE="+c.pre,
+			"REPOSITORY=terva-sh/ketju", "GITHUB_OUTPUT="+out)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v\n%s", c.tag, err, b)
+		}
+		b, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), "\ntags="+c.want+"\n") {
+			t.Errorf("%s: outputs\n%s\nwant tags=%s", c.tag, b, c.want)
 		}
 	}
 }

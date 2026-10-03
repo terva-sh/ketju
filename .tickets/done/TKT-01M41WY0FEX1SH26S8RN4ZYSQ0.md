@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-03T22:07:40Z
-updated_at: 2026-10-03T22:19:12Z
+updated_at: 2026-10-03T22:43:36Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -80,6 +80,10 @@ Outside the repository (docs/15 stop class 3), for the maintainer: the GitHub re
 **agent:claude-code/phase4-run-orchestrator** at 2026-10-03T22:07:45Z
 
 Maintainer decision, 2026-10-03: "Match our release mirroring and deployment process to the other repositories in our terva-sh org." This replaces the docs/15 decision of 2026-10-02 that the image is on container.local.sothr.com, and the release secrets RELEASE_FORGEJO_TOKEN, RELEASE_GITHUB_TOKEN and the CONTAINER_PUSH_REPO_* pair. It is also the grant for adding .github/workflows/release.yml, beyond docs/12 "Changing CI", for that file only. The request is the promotion of this ticket.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T22:43:36Z
+
+Review 2084 (head 3759d4e, base edfad27), medium, "Preserve the minor image tag for two-component releases": fixed. The tag step took ${VERSION%.*}, which gives 1 for an accepted v1.0. It now takes the first two components with cut -d. -f1-2, and skips the alias when it equals the version. TestImageTagsFollowTheOrganization runs the step's own script for v1.0.0, v1.2.3, v1.0 and v1.0.0-rc.1.
 
 ## Summary
 

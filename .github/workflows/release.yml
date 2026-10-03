@@ -224,7 +224,13 @@ jobs:
           IMAGE="ghcr.io/${REPOSITORY}"
           TAGS="${IMAGE}:${VERSION}"
           if [ "${PRERELEASE}" = false ]; then
-            TAGS="${TAGS},${IMAGE}:${VERSION%.*},${IMAGE}:latest"
+            # The first two components, so v1.0 and v1.0.0 both float 1.0;
+            # v1.0 names it already.
+            MINOR=$(printf '%s\n' "${VERSION}" | cut -d. -f1-2)
+            if [ "${MINOR}" != "${VERSION}" ]; then
+              TAGS="${TAGS},${IMAGE}:${MINOR}"
+            fi
+            TAGS="${TAGS},${IMAGE}:latest"
           fi
           echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
