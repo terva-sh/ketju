@@ -385,3 +385,18 @@ func (q *Queries) RefreshBlob(ctx context.Context, arg RefreshBlobParams) error 
 	_, err := q.db.ExecContext(ctx, refreshBlob, arg.At, arg.Hash)
 	return err
 }
+
+const unattachedBytes = `-- name: UnattachedBytes :one
+SELECT CAST(coalesce(sum(size), 0) AS INTEGER) FROM blobs WHERE uploaded_by = ? AND refcount = 0
+`
+
+// The bytes an account has stored that no post names (TKT-01M3V73KM1,
+// docs/07 "Attachments"): its blobs with refcount 0, drafts' and those
+// waiting out their seven days included. The partial index
+// blobs_uploader_unreferenced holds exactly these rows.
+func (q *Queries) UnattachedBytes(ctx context.Context, uploadedBy sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, unattachedBytes, uploadedBy)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}

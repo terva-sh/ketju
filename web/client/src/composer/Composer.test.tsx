@@ -921,6 +921,11 @@ describe('attachments', () => {
     const refusals: [string, () => Response, string][] = [
       ['type.png', () => field('type_not_allowed'), 'Only PNG, JPEG and GIF images, PDFs and plain text can be attached.'],
       ['blocked.png', () => field('blocked'), "This file can't be attached."],
+      [
+        'budget.png',
+        () => field('upload_budget'),
+        'You have too many files waiting to be posted. Post them, or wait: files you remove are cleared within 7 days.',
+      ],
       ['big.png', () => problem('payload-too-large', 413), 'This file is larger than this forum accepts.'],
       ['nope.png', () => problem('forbidden', 403), "You can't attach files here."],
       ['fast.png', () => problem('rate-limited', 429, {}, { 'Retry-After': '7' }), 'You are uploading too quickly. You can try again in 7 seconds.'],
@@ -936,7 +941,7 @@ describe('attachments', () => {
     await act(() => void (composerFor(thread.id).source.value = 'x'));
     expect(postButton().disabled).toBe(false);
     await click(host!.querySelector('[data-upload=refused] .file-remove'));
-    expect(host!.querySelectorAll('[data-upload=refused]')).toHaveLength(4);
+    expect(host!.querySelectorAll('[data-upload=refused]')).toHaveLength(refusals.length - 1);
   });
 
   it('ten attachments disable Attach', async () => {

@@ -64,6 +64,9 @@ const (
 	CodeNotYours       = "not_yours"
 	CodeTooMany        = "too_many"
 	CodeUnknown        = "unknown"
+	// CodeUploadBudget refuses new bytes that would take the uploader's
+	// unattached bytes over Budget (TKT-01M3V73KM1).
+	CodeUploadBudget = "upload_budget"
 )
 
 // Service uploads blobs and answers who may read them.
@@ -76,6 +79,10 @@ type Service struct {
 	// Max is the largest file an upload stores, in bytes:
 	// limits.attachment_mb. Zero is config.DefaultAttachmentMB.
 	Max int64
+	// Budget bounds the bytes one account has stored that no post names,
+	// in bytes: limits.unattached_upload_mb. Zero is
+	// config.DefaultUnattachedUploadMB.
+	Budget int64
 	// Now is the clock rows are stamped with; nil is time.Now.
 	Now    func() time.Time
 	Logger *slog.Logger
@@ -108,6 +115,13 @@ func (s *Service) max() int64 {
 		return s.Max
 	}
 	return int64(config.DefaultAttachmentMB) << 20
+}
+
+func (s *Service) budget() int64 {
+	if s.Budget > 0 {
+		return s.Budget
+	}
+	return int64(config.DefaultUnattachedUploadMB) << 20
 }
 
 func (s *Service) log() *slog.Logger {
@@ -179,6 +193,10 @@ func (s *Service) MayUpload(ctx context.Context, v domain.Viewer, t Target) (for
 // part's header. Every refusal and failure removes the staged file before
 // it returns, the client going away mid-body included (docs/03).
 //
+// New bytes that would take v's unattached bytes, the blobs v uploaded that
+// no post names, over Budget are refused with upload_budget, in the write
+// that would store them. Bytes already stored are never refused for it.
+//
 // The file is moved into place and the row written in one database write,
 // so no collector pass interleaves (docs/03 "Blob garbage collection"). If
 // that write fails after the file was placed, a second write removes the
@@ -243,6 +261,17 @@ func (s *Service) Upload(ctx context.Context, v domain.Viewer, t Target, name st
 		b, err := q.GetBlob(ctx, hash)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
+			// Only new bytes are asked about the bound: bytes already
+			// stored use no new disk, so they are never refused for it.
+			// The write connection serializes uploads, so two cannot both
+			// pass on the same total.
+			used, err := q.UnattachedBytes(ctx, sql.NullInt64{Int64: v.UserID, Valid: true})
+			if err != nil {
+				return err
+			}
+			if used > s.budget()-n {
+				return invalid("file", CodeUploadBudget)
+			}
 			b = dbq.Blob{Hash: hash, Size: n, Mime: mime, Width: width, Height: height}
 			if err := q.CreateUploadedBlob(ctx, dbq.CreateUploadedBlobParams{
 				Hash: hash, Size: n, Mime: mime, OriginalName: name,

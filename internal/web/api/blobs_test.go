@@ -424,6 +424,51 @@ func TestUploadContentLengthOverCap(t *testing.T) {
 	}
 }
 
+// budgetFile is a text file of exactly size bytes whose content depends on
+// seed, so that files of one size are different blobs.
+func budgetFile(size, seed int) []byte {
+	head := fmt.Appendf(nil, "file %d\n", seed)
+	return append(head, bytes.Repeat([]byte("a"), size-len(head))...)
+}
+
+// TestUploadBudgetOverHTTP is TKT-01M3V73KM1 through the handler, so
+// MayUpload and the body limits are on the path (Terva review 1945): an
+// account at the bound that uploads new bytes is validation-failed with
+// file upload_budget, the same account gets 201 for bytes the server
+// already holds, its own and another account's, and an account under the
+// bound gets 201.
+func TestUploadBudgetOverHTTP(t *testing.T) {
+	bw := newBlobWorld(t)
+	bw.grantUpload(bw.forum)
+	bw.blobs.Budget = 2000
+
+	own := budgetFile(1000, 1)
+	bw.uploaded("carol", "a.txt", own)
+	bw.uploaded("carol", "b.txt", budgetFile(1000, 2))
+
+	fresh := budgetFile(10, 3)
+	rec := bw.uploadTo("carol", "forum=general", "c.txt", fresh)
+	if got := fieldErrors(t, rec); rec.Code != http.StatusUnprocessableEntity || got != "validation-failed: file upload_budget" {
+		t.Fatalf("new bytes at the bound: %d %s", rec.Code, got)
+	}
+	sum := sha256.Sum256(fresh)
+	if n := bw.refcount(hex.EncodeToString(sum[:])); n != -1 {
+		t.Fatalf("the refused upload left a blob row (refcount %d)", n)
+	}
+	if staged := bw.staged(); len(staged) != 0 {
+		t.Fatalf("staged files left: %v", staged)
+	}
+
+	// Bytes the server holds use no new disk: carol's own, and alice's.
+	bw.uploaded("carol", "again.txt", own)
+	alices := budgetFile(500, 4)
+	bw.uploaded("alice", "x.txt", alices)
+	bw.uploaded("carol", "hers.txt", alices)
+
+	// Alice is under her own bound, whatever carol holds.
+	bw.uploaded("alice", "y.txt", budgetFile(1000, 5))
+}
+
 // TestUploadPermission: who may upload, and how everyone else is refused,
 // each before the body is read.
 func TestUploadPermission(t *testing.T) {

@@ -48,21 +48,22 @@ import (
 // scattered literals so that `ketju config check` and the documentation can
 // name the same numbers the loader uses.
 const (
-	DefaultListen           = "127.0.0.1:8080"
-	DefaultFsync            = "group"
-	DefaultOpenThreads      = threadcache.DefaultBound
-	DefaultRenderedCacheMB  = 256
-	DefaultResponseCacheMB  = 64
-	DefaultProviderScopes   = "openid email profile"
-	DefaultLogLevel         = "info"
-	DefaultLogFormat        = "auto"
-	DefaultAttachmentMB     = 10
-	DefaultSSEConnections   = 1000
-	DefaultSSEPerUser       = 8
-	DefaultSSEAnonymous     = 100
-	defaultMaxCacheMB       = 1 << 20 // 1 TB, a bound to catch a typo, not a policy
-	defaultMaxOpenThreads   = 1 << 20
-	minimumOpenThreadsAllow = 1
+	DefaultListen             = "127.0.0.1:8080"
+	DefaultFsync              = "group"
+	DefaultOpenThreads        = threadcache.DefaultBound
+	DefaultRenderedCacheMB    = 256
+	DefaultResponseCacheMB    = 64
+	DefaultProviderScopes     = "openid email profile"
+	DefaultLogLevel           = "info"
+	DefaultLogFormat          = "auto"
+	DefaultAttachmentMB       = 10
+	DefaultUnattachedUploadMB = 100
+	DefaultSSEConnections     = 1000
+	DefaultSSEPerUser         = 8
+	DefaultSSEAnonymous       = 100
+	defaultMaxCacheMB         = 1 << 20 // 1 TB, a bound to catch a typo, not a policy
+	defaultMaxOpenThreads     = 1 << 20
+	minimumOpenThreadsAllow   = 1
 )
 
 // Config is the whole file, after defaults, overrides and validation.
@@ -157,6 +158,12 @@ type Limits struct {
 	// because what counts as a reasonable attachment depends entirely on who
 	// is running the forum and what their disk looks like.
 	AttachmentMB int `toml:"attachment_mb"`
+
+	// UnattachedUploadMB caps the bytes one account has stored that no post
+	// names: files uploaded and never posted, or posted and then removed,
+	// until the collector clears them (docs/07 "Attachments"). Without it a
+	// member granted upload could fill the disk with files they never attach.
+	UnattachedUploadMB int `toml:"unattached_upload_mb"`
 
 	// SSEConnections caps the live-update streams (GET /events) open at once,
 	// across every viewer. Each one is a held connection and a goroutine, so
@@ -400,6 +407,12 @@ func applyDefaults(c *Config, present map[string]bool) {
 	}
 	if !present["limits.attachment_mb"] {
 		c.Limits.AttachmentMB = DefaultAttachmentMB
+	}
+	// An installation that raised attachment_mb past the default bound, and
+	// set no bound of its own, keeps starting: the bound is never below one
+	// file of the largest size allowed, which validate refuses when it is set.
+	if !present["limits.unattached_upload_mb"] {
+		c.Limits.UnattachedUploadMB = max(DefaultUnattachedUploadMB, c.Limits.AttachmentMB)
 	}
 	if !present["limits.sse_connections"] {
 		c.Limits.SSEConnections = DefaultSSEConnections

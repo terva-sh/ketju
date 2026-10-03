@@ -17,6 +17,13 @@ INSERT INTO blobs (hash, size, mime, original_name, uploaded_by, uploaded_at, re
 VALUES (sqlc.arg('hash'), sqlc.arg('size'), sqlc.arg('mime'), sqlc.arg('original_name'), sqlc.arg('uploaded_by'),
 	sqlc.arg('uploaded_at'), 0, 'ok', sqlc.arg('uploaded_at'), sqlc.narg('width'), sqlc.narg('height'));
 
+-- The bytes an account has stored that no post names (TKT-01M3V73KM1,
+-- docs/07 "Attachments"): its blobs with refcount 0, drafts' and those
+-- waiting out their seven days included. The partial index
+-- blobs_uploader_unreferenced holds exactly these rows.
+-- name: UnattachedBytes :one
+SELECT CAST(coalesce(sum(size), 0) AS INTEGER) FROM blobs WHERE uploaded_by = ? AND refcount = 0;
+
 -- An upload of bytes already stored restarts the collector's seven days
 -- while nothing refers to them, so a blob uploaded again for a post not yet
 -- written is not collected under it. A referenced blob is left alone: its

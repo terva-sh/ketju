@@ -29,33 +29,35 @@ oidc.providers.club.groups_claim = "groups"                      # file
 oidc.providers.club.group_map = { "forum-mods" = "moderators" }  # file
 oidc.providers.club.insecure_skip_issuer_check = false           # default
 limits.attachment_mb = 10                                        # default
+limits.unattached_upload_mb = 100                                # default
 limits.sse_connections = 1000                                    # default
 limits.sse_per_user = 8                                          # default
 limits.sse_anonymous = 100                                       # default
 
 # environment variables this build reads; * is set here.
 # Each but KETJU_CONFIG can instead be given as NAME_FILE, naming a file that holds the value.
-#   KETJU_CONFIG                     (the config file's path)
-#   KETJU_LISTEN                     listen
-#   KETJU_METRICS_LISTEN             metrics_listen
-#   KETJU_DATA_DIR                   data_dir
-#   KETJU_COOKIE_KEY_FILE            cookie_key_file
-# * KETJU_SITE_URL                   site_url
-# * KETJU_LOG_LEVEL                  log.level
-#   KETJU_LOG_FORMAT                 log.format
-#   KETJU_STORAGE_FSYNC              storage.fsync
-#   KETJU_STORAGE_OPEN_THREADS       storage.open_threads
-#   KETJU_STORAGE_RENDERED_CACHE_MB  storage.rendered_cache_mb
-#   KETJU_STORAGE_RESPONSE_CACHE_MB  storage.response_cache_mb
-#   KETJU_LIMITS_ATTACHMENT_MB       limits.attachment_mb
-#   KETJU_LIMITS_SSE_CONNECTIONS     limits.sse_connections
-#   KETJU_LIMITS_SSE_PER_USER        limits.sse_per_user
-#   KETJU_LIMITS_SSE_ANONYMOUS       limits.sse_anonymous
-#   KETJU_BOOTSTRAP_ADMIN_EMAILS     bootstrap.admin_emails
-#   KETJU_BOOTSTRAP_ADMIN_SUBJECTS   bootstrap.admin_subjects
-#   KETJU_OIDC_CLUB_ISSUER           oidc.providers.club.issuer
-#   KETJU_OIDC_CLUB_CLIENT_ID        oidc.providers.club.client_id
-#   KETJU_OIDC_CLUB_CLIENT_SECRET    oidc.providers.club.client_secret
+#   KETJU_CONFIG                       (the config file's path)
+#   KETJU_LISTEN                       listen
+#   KETJU_METRICS_LISTEN               metrics_listen
+#   KETJU_DATA_DIR                     data_dir
+#   KETJU_COOKIE_KEY_FILE              cookie_key_file
+# * KETJU_SITE_URL                     site_url
+# * KETJU_LOG_LEVEL                    log.level
+#   KETJU_LOG_FORMAT                   log.format
+#   KETJU_STORAGE_FSYNC                storage.fsync
+#   KETJU_STORAGE_OPEN_THREADS         storage.open_threads
+#   KETJU_STORAGE_RENDERED_CACHE_MB    storage.rendered_cache_mb
+#   KETJU_STORAGE_RESPONSE_CACHE_MB    storage.response_cache_mb
+#   KETJU_LIMITS_ATTACHMENT_MB         limits.attachment_mb
+#   KETJU_LIMITS_UNATTACHED_UPLOAD_MB  limits.unattached_upload_mb
+#   KETJU_LIMITS_SSE_CONNECTIONS       limits.sse_connections
+#   KETJU_LIMITS_SSE_PER_USER          limits.sse_per_user
+#   KETJU_LIMITS_SSE_ANONYMOUS         limits.sse_anonymous
+#   KETJU_BOOTSTRAP_ADMIN_EMAILS       bootstrap.admin_emails
+#   KETJU_BOOTSTRAP_ADMIN_SUBJECTS     bootstrap.admin_subjects
+#   KETJU_OIDC_CLUB_ISSUER             oidc.providers.club.issuer
+#   KETJU_OIDC_CLUB_CLIENT_ID          oidc.providers.club.client_id
+#   KETJU_OIDC_CLUB_CLIENT_SECRET      oidc.providers.club.client_secret
 
 # runtime settings: stored in the database and changed in the admin UI,
 # never read from this file. Shown with the value a new forum starts with.

@@ -855,6 +855,11 @@ type Querier interface {
 	// be alive by the same cutoffs as LookupSession, at the time of the write, so
 	// a touch that lands just after the idle boundary cannot revive the session.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
+	// The bytes an account has stored that no post names (TKT-01M3V73KM1,
+	// docs/07 "Attachments"): its blobs with refcount 0, drafts' and those
+	// waiting out their seven days included. The partial index
+	// blobs_uploader_unreferenced holds exactly these rows.
+	UnattachedBytes(ctx context.Context, uploadedBy sql.NullInt64) (int64, error)
 	// UnblockIdentity lifts the block that the application application_id set,
 	// and nothing else. That application must be denied, must be the
 	// identity's newest, and must have been decided at the moment of the

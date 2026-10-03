@@ -18,6 +18,7 @@ response_cache_mb = 16
 
 [limits]
 attachment_mb = 25
+unattached_upload_mb = 250
 sse_connections = 2000
 sse_per_user = 4
 sse_anonymous = 50

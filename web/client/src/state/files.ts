@@ -91,8 +91,8 @@ export function filesIn(v: unknown): Attachment[] {
 }
 
 // uploadFailure says why an upload was refused, in the words of attaching
-// (docs/07 "Attachments"): the file's type, a blocked file, the size cap, no
-// upload permission, and the write limiter.
+// (docs/07 "Attachments"): the file's type, a blocked file, the size cap, the
+// bound on files no post names, no upload permission, and the write limiter.
 export function uploadFailure(err: unknown): string {
   const p = asProblem(err);
   switch (p.fieldErrors.file ?? p.type) {
@@ -100,6 +100,8 @@ export function uploadFailure(err: unknown): string {
       return 'Only PNG, JPEG and GIF images, PDFs and plain text can be attached.';
     case 'blocked':
       return "This file can't be attached.";
+    case 'upload_budget':
+      return 'You have too many files waiting to be posted. Post them, or wait: files you remove are cleared within 7 days.';
     case 'payload-too-large':
       return 'This file is larger than this forum accepts.';
     case 'forbidden':

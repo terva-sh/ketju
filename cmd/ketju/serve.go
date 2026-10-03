@@ -603,7 +603,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// attachments through it, and it asks the threads service who may read
 	// the posts that name a blob.
 	blobSvc := &blobs.Service{DB: d, Root: cfg.DataDir, Perm: perms, Threads: threadSvc,
-		Max: int64(cfg.Limits.AttachmentMB) << 20, Logger: log}
+		Max: int64(cfg.Limits.AttachmentMB) << 20, Budget: int64(cfg.Limits.UnattachedUploadMB) << 20, Logger: log}
 	threadSvc.Attachments = blobSvc
 	gc := &jobs.BlobGC{DB: d, Root: cfg.DataDir, Hold: func() string {
 		if n := proj.QuarantinedCount(); n > 0 {

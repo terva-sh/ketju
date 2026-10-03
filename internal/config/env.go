@@ -69,6 +69,9 @@ var overrides = []Override{
 	{Env: "KETJU_LIMITS_ATTACHMENT_MB", Key: "limits.attachment_mb", apply: func(c *Config, v string, p *problemList) {
 		c.Limits.AttachmentMB = parseInt(v, "limits.attachment_mb", "KETJU_LIMITS_ATTACHMENT_MB", p)
 	}},
+	{Env: "KETJU_LIMITS_UNATTACHED_UPLOAD_MB", Key: "limits.unattached_upload_mb", apply: func(c *Config, v string, p *problemList) {
+		c.Limits.UnattachedUploadMB = parseInt(v, "limits.unattached_upload_mb", "KETJU_LIMITS_UNATTACHED_UPLOAD_MB", p)
+	}},
 	{Env: "KETJU_LIMITS_SSE_CONNECTIONS", Key: "limits.sse_connections", apply: func(c *Config, v string, p *problemList) {
 		c.Limits.SSEConnections = parseInt(v, "limits.sse_connections", "KETJU_LIMITS_SSE_CONNECTIONS", p)
 	}},

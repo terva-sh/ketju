@@ -42,12 +42,22 @@ func validate(c *Config, p *problemList) {
 // which is a different ticket and a different conversation.
 const maxAttachmentMB = 512
 
+// maxUnattachedUploadMB is a sanity ceiling in the style of maxAttachmentMB:
+// 1 TB of files no post names is a typo, not a policy.
+const maxUnattachedUploadMB = 1 << 20
+
 func validateLimits(l Limits, p *problemList) {
 	if l.AttachmentMB < 1 {
 		p.addf("limits.attachment_mb", "%d is not a usable cap; an attachment limit below 1 MB refuses every real upload", l.AttachmentMB)
 	}
 	if l.AttachmentMB > maxAttachmentMB {
 		p.addf("limits.attachment_mb", "%d MB is above the ceiling of %d MB; an upload is bounded before the uploader is authenticated", l.AttachmentMB, maxAttachmentMB)
+	}
+	if l.UnattachedUploadMB < l.AttachmentMB {
+		p.addf("limits.unattached_upload_mb", "%d MB is below limits.attachment_mb (%d MB); a member could not upload one file of the largest size allowed", l.UnattachedUploadMB, l.AttachmentMB)
+	}
+	if l.UnattachedUploadMB > maxUnattachedUploadMB {
+		p.addf("limits.unattached_upload_mb", "%d MB is above the ceiling of %d MB; the bound exists to keep one account from filling the disk", l.UnattachedUploadMB, maxUnattachedUploadMB)
 	}
 	for _, s := range []struct {
 		key        string

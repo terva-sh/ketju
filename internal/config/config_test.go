@@ -165,7 +165,7 @@ func TestLoadsTheFullExample(t *testing.T) {
 	if c.Storage.Fsync != "always" || c.Storage.OpenThreads != 128 {
 		t.Errorf("storage = %+v", c.Storage)
 	}
-	if want := (Limits{AttachmentMB: 25, SSEConnections: 2000, SSEPerUser: 4, SSEAnonymous: 50}); c.Limits != want {
+	if want := (Limits{AttachmentMB: 25, UnattachedUploadMB: 250, SSEConnections: 2000, SSEPerUser: 4, SSEAnonymous: 50}); c.Limits != want {
 		t.Errorf("limits = %+v, want %+v", c.Limits, want)
 	}
 	if len(c.OIDC.Providers) != 2 {
@@ -212,6 +212,8 @@ func TestInvalidValuesAreRefusedByName(t *testing.T) {
 		{"streams per user past the ceiling", minimal + "\n[limits]\nsse_per_user = 1001", "limits.sse_per_user"},
 		{"no anonymous stream", minimal + "\n[limits]\nsse_anonymous = -1", "limits.sse_anonymous"},
 		{"anonymous streams past the ceiling", minimal + "\n[limits]\nsse_anonymous = 100001", "limits.sse_anonymous"},
+		{"unattached bound below one attachment", minimal + "\n[limits]\nattachment_mb = 20\nunattached_upload_mb = 19", "limits.unattached_upload_mb"},
+		{"unattached bound past the ceiling", minimal + "\n[limits]\nunattached_upload_mb = 1048577", "limits.unattached_upload_mb"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -545,7 +547,7 @@ func TestSSELimitDefaultsAndEnv(t *testing.T) {
 	t.Parallel()
 
 	c := mustLoad(t, write(t, minimal), env(nil))
-	if want := (Limits{AttachmentMB: DefaultAttachmentMB, SSEConnections: 1000, SSEPerUser: 8, SSEAnonymous: 100}); c.Limits != want {
+	if want := (Limits{AttachmentMB: DefaultAttachmentMB, UnattachedUploadMB: DefaultUnattachedUploadMB, SSEConnections: 1000, SSEPerUser: 8, SSEAnonymous: 100}); c.Limits != want {
 		t.Errorf("defaults = %+v, want %+v", c.Limits, want)
 	}
 
@@ -573,5 +575,46 @@ func TestSSELimitDefaultsAndEnv(t *testing.T) {
 		if !strings.Contains(e.Error(), name) {
 			t.Errorf("a non-numeric %s is refused without naming it: %v", name, e)
 		}
+	}
+}
+
+// TestUnattachedUploadDefaultsAndEnv: limits.unattached_upload_mb defaults to
+// 100 MB, or to limits.attachment_mb when an installation raised that past
+// it without setting a bound, and KETJU_LIMITS_UNATTACHED_UPLOAD_MB wins over
+// the file (TKT-01M3V73KM1, docs/07 "Attachments").
+func TestUnattachedUploadDefaultsAndEnv(t *testing.T) {
+	t.Parallel()
+
+	if c := mustLoad(t, write(t, minimal), env(nil)); c.Limits.UnattachedUploadMB != 100 {
+		t.Errorf("default = %d, want 100", c.Limits.UnattachedUploadMB)
+	}
+	if c := mustLoad(t, write(t, minimal+"\n[limits]\nattachment_mb = 300\n"), env(nil)); c.Limits.UnattachedUploadMB != 300 {
+		t.Errorf("default under attachment_mb = 300 is %d, want 300", c.Limits.UnattachedUploadMB)
+	}
+	if c := mustLoad(t, write(t, minimal), env(map[string]string{"KETJU_LIMITS_ATTACHMENT_MB": "150"})); c.Limits.UnattachedUploadMB != 150 {
+		t.Errorf("default under KETJU_LIMITS_ATTACHMENT_MB = 150 is %d, want 150", c.Limits.UnattachedUploadMB)
+	}
+	if c := mustLoad(t, write(t, minimal+"\n[limits]\nattachment_mb = 10\nunattached_upload_mb = 10\n"), env(nil)); c.Limits.UnattachedUploadMB != 10 {
+		t.Errorf("a bound equal to one attachment = %d, want 10", c.Limits.UnattachedUploadMB)
+	}
+
+	c := mustLoad(t, write(t, minimal+"\n[limits]\nunattached_upload_mb = 50\n"), env(map[string]string{
+		"KETJU_LIMITS_UNATTACHED_UPLOAD_MB": "40",
+	}))
+	if c.Limits.UnattachedUploadMB != 40 {
+		t.Errorf("the variable did not win over the file: %d", c.Limits.UnattachedUploadMB)
+	}
+	want := Source{Layer: LayerEnv, From: "KETJU_LIMITS_UNATTACHED_UPLOAD_MB"}
+	if got := entryMap(t, c)["limits.unattached_upload_mb"].Source; got != want {
+		t.Errorf("source %v, want %v", got, want)
+	}
+
+	e := loadErr(t, write(t, minimal), env(map[string]string{"KETJU_LIMITS_UNATTACHED_UPLOAD_MB": "lots"}))
+	if !strings.Contains(e.Error(), "KETJU_LIMITS_UNATTACHED_UPLOAD_MB") {
+		t.Errorf("a non-numeric KETJU_LIMITS_UNATTACHED_UPLOAD_MB is refused without naming it: %v", e)
+	}
+	e = loadErr(t, write(t, minimal+"\n[limits]\nattachment_mb = 20\n"), env(map[string]string{"KETJU_LIMITS_UNATTACHED_UPLOAD_MB": "5"}))
+	if !hasKey(e, "limits.unattached_upload_mb") {
+		t.Errorf("a bound below attachment_mb from the environment is not refused by name: %v", e)
 	}
 }

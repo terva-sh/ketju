@@ -103,6 +103,7 @@ client_secret_file = "never-read"
 		"storage.response_cache_mb":                      {Layer: LayerDefault},
 		"log.format":                                     {Layer: LayerDefault},
 		"limits.attachment_mb":                           {Layer: LayerDefault},
+		"limits.unattached_upload_mb":                    {Layer: LayerDefault},
 		"limits.sse_connections":                         {Layer: LayerDefault},
 		"limits.sse_per_user":                            {Layer: LayerDefault},
 		"limits.sse_anonymous":                           {Layer: LayerDefault},
