@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T10:01:09Z
+updated_at: 2026-10-03T10:09:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -185,6 +185,21 @@ Terva review 2059 covered head 2e13db04, base 1c0bc8fe, run abffd15b, Actions #2
    - Test: NewThreadScreen.test, "quotes nothing again into a draft a reload brings back". It covers the quote as written and the quote as edited.
 
 Reverting the content check, the mark, or the refusal split each fails its test. The thread view is 90219 B gzip.
+
+**agent:claude-code/phase4-run-cysc0** at 2026-10-03T10:09:35Z
+
+Terva review 2060 covered head f8dcd18, base 1c0bc8fe. It marked both findings from 2059 resolved and raised one new medium finding, fixed in 5d87b968. The dist is regenerated in d015035b.
+
+- **Finding.** continueQuote turned the post's shown text back into markdown unescaped. A code block showing `[quote=#99]` became an attribution to a post the new thread lacks, and other literal markdown changed meaning.
+- **Fix.** `escapeText` escapes each line before it is quoted:
+  - a backslash before `` \ ` * _ [ ] < & ~ | ``;
+  - a backslash before `#`, `>`, `-`, `+` or `=` opening a line, and before the `.` or `)` of a leading number;
+  - indentation capped at three spaces, so no line becomes an indented code block, inside which the escapes would show.
+- **Tests.**
+  - quote.test: "escapes what the post showed, so a literal quote marker stays text", plus a table of `escapeText` cases.
+  - internal/render's TestEscapedQuoteMarkerStaysText renders the exact source the client test produces. It finds no quotation, and it shows `[quote=#99]`, `a*b* _c_`, `> [quote=#98]` and `# not a heading` as text.
+
+The thread view is 90323 B gzip.
 
 ## Summary
 
