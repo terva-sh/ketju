@@ -1,10 +1,6 @@
 {
-  "_ApplyRoot-C_SWIqcC.css": {
-    "file": "assets/ApplyRoot-C_SWIqcC.css",
-    "src": "_ApplyRoot-C_SWIqcC.css"
-  },
-  "_ApplyRoot-CnxL7wJN.js": {
-    "file": "assets/ApplyRoot-CnxL7wJN.js",
+  "_ApplyRoot-BaXHcKcN.js": {
+    "file": "assets/ApplyRoot-BaXHcKcN.js",
     "name": "ApplyRoot",
     "imports": [
       "_Icon-3Osv4awK.js",
@@ -13,6 +9,10 @@
     "css": [
       "assets/ApplyRoot-C_SWIqcC.css"
     ]
+  },
+  "_ApplyRoot-C_SWIqcC.css": {
+    "file": "assets/ApplyRoot-C_SWIqcC.css",
+    "src": "_ApplyRoot-C_SWIqcC.css"
   },
   "_Icon-3Osv4awK.js": {
     "file": "assets/Icon-3Osv4awK.js",
@@ -35,7 +35,7 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-CEHknZv8.js",
+    "file": "assets/index-DMHu5ACD.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -45,7 +45,7 @@
     "dynamicImports": [
       "src/components/thread/MovePosts.tsx",
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-CnxL7wJN.js"
+      "_ApplyRoot-BaXHcKcN.js"
     ],
     "css": [
       "assets/index-DPhwaN7c.css"
@@ -109,7 +109,7 @@
     "src": "src/assets/icon/icon.svg"
   },
   "src/components/thread/MovePosts.tsx": {
-    "file": "assets/MovePosts-CS8V_ivK.js",
+    "file": "assets/MovePosts-DH1uZ4Y-.js",
     "name": "MovePosts",
     "src": "src/components/thread/MovePosts.tsx",
     "isDynamicEntry": true,
@@ -122,12 +122,12 @@
     ]
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-DAmNKpsQ.js",
+    "file": "assets/AdminRoot-E1gAuZua.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-CnxL7wJN.js",
+      "_ApplyRoot-BaXHcKcN.js",
       "_Icon-3Osv4awK.js",
       "index.html"
     ],
