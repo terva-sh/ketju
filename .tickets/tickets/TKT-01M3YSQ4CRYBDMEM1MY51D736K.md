@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQ4CRYBDMEM1MY51D736K
 title: Let a member set an avatar
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-ysq4cr
+  branch: run/ysq4cr-avatar
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
+  commit: ac8e3bf9270c8398536257b3791c2f216191f97c
+  session: null
+  claimed_at: 2026-10-03T04:20:55Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-02T18:30:52Z
+updated_at: 2026-10-03T04:20:55Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-run-orchestrator
+  id: agent:claude-code/phase4-run-ysq4cr
   name: ""
 extensions: {}
 ---
