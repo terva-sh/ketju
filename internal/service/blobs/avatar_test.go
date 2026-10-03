@@ -2,6 +2,7 @@ package blobs_test
 
 import (
 	"bytes"
+	"database/sql"
 	"errors"
 	"image"
 	"image/png"
@@ -139,7 +140,8 @@ func TestSetAvatarRefusals(t *testing.T) {
 // exception to docs/07 "Attachments"), and security: a blob named only as
 // an avatar is served at /avatars/ to signed-in members, its owner and
 // staff among them, and to nobody signed out, a pre-user, or a suspended
-// account. A replaced or cleared avatar is served to no one, an attachment
+// account. A replaced or cleared avatar, or an anonymized account's, is
+// served to no one, an attachment
 // is never served as an avatar, and /blobs/ never serves an avatar no post
 // names.
 func TestAvatarServedOnlyToMembers(t *testing.T) {
@@ -204,6 +206,22 @@ func TestAvatarServedOnlyToMembers(t *testing.T) {
 	}
 	if _, err := s.svc.AuthorizeAvatar(t.Context(), s.viewer("alice"), now); !errors.Is(err, blobs.ErrNotFound) {
 		t.Errorf("a cleared avatar is served: %v", err)
+	}
+
+	// An anonymized account's avatar is served to no one, even while its
+	// avatar_blob still names it.
+	gone, err := s.setAvatar("carol", blobstest.PNG(40, 40, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), `UPDATE users SET anonymized = 1, handle = 'deleted-user-' || id WHERE id = ?`, s.users["carol"])
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.svc.AuthorizeAvatar(t.Context(), s.viewer("alice"), gone); !errors.Is(err, blobs.ErrNotFound) {
+		t.Errorf("an anonymized account's avatar is served: %v", err)
 	}
 }
 
