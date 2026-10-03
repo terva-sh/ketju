@@ -4,7 +4,7 @@
   "headers": {
     "Cache-Control": "private, no-cache",
     "Content-Type": "application/json",
-    "ETag": "\"0369k573g0001-718-r6-ae954c66c11e6311\""
+    "ETag": "\"0369k573g0001-718-r6-225e4ffc6cd6af50\""
   },
   "body": {
     "lens": null,
@@ -116,6 +116,7 @@
       }
     ],
     "thread": {
+      "archived": false,
       "author": {
         "avatar": "",
         "display_name": "Alice Nakamura",

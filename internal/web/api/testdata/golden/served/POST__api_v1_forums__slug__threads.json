@@ -38,6 +38,7 @@
       "revision": 1
     },
     "thread": {
+      "archived": false,
       "author": {
         "avatar": "",
         "display_name": "Carol Ruiz",

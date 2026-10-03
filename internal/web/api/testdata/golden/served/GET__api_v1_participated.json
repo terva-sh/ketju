@@ -10,6 +10,7 @@
     "next_cursor": "",
     "threads": [
       {
+        "archived": false,
         "author": {
           "avatar": "",
           "display_name": "Alice Nakamura",
