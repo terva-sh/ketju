@@ -298,6 +298,48 @@ describe('a removed post', () => {
     expect(root.querySelectorAll('[data-merge-notice]').length).toBe(1);
   });
 
+  // TKT-01M29CYSC0: reply as a new thread.
+  it('offers reply as new thread under each post shown as itself, when the viewer may start a thread', async () => {
+    const posts = [post(1), post(2, { deleted: true, html: '' }), post(3, { deleted: true, html: '', moved: true }), post(4)];
+    const p = page(posts);
+    serve({ ...p, viewer: { ...p.viewer, can_create_thread: true } });
+    let root = await renderAt(`/t/${id}/s?page=1`);
+    const offered = [...root.querySelectorAll<HTMLAnchorElement>('[data-post-action=continue]')];
+    expect(offered.map((a) => a.closest('[data-ordinal]')!.getAttribute('data-ordinal'))).toEqual(['1', '4']);
+    expect(offered[0].getAttribute('href')).toBe(`/f/general/new?from=${id}&ordinal=1`);
+    expect(offered[0].textContent).toBe('reply as new thread');
+    serve({ ...p, viewer: { ...p.viewer, can_create_thread: false } });
+    root = await renderAt(`/t/${id}/s?page=2`);
+    expect(root.querySelector('[data-post-action=continue]')).toBeNull();
+  });
+
+  it('notes the threads continuing a post under it, and only those the server lists', async () => {
+    const a = { id: '3yymw47g000a1', slug: 'export-tooling', title: 'Export tooling' };
+    const b = { id: '3yymw47g000a2', slug: 'retention', title: 'Retention' };
+    serve(page([post(1, { continued_in: [a, b] }), post(2, { continued_in: [] }), post(3)]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    const notes = root.querySelectorAll('[data-continued-in]');
+    expect(notes.length).toBe(1);
+    expect(notes[0].previousElementSibling).toBe(at(root, '#post-1'));
+    expect(notes[0].textContent).toBe('Continued in Export tooling, Retention.');
+    expect([...notes[0].querySelectorAll('a')].map((l) => l.getAttribute('href'))).toEqual([
+      '/t/3yymw47g000a1/export-tooling',
+      '/t/3yymw47g000a2/retention',
+    ]);
+  });
+
+  it('says what a thread continues, linked at the post, when the server says', async () => {
+    const p = page([post(1)]);
+    serve({ ...p, thread: { ...p.thread, continued_from: { thread: { id: '3yymw47g00002', slug: 'origin', title: 'The origin' }, ordinal: 7 } } });
+    let root = await renderAt(`/t/${id}/s?page=1`);
+    const note = root.querySelector('[data-continued-from]')!;
+    expect(note.textContent).toBe('Continued from The origin.');
+    expect(note.querySelector('a')?.getAttribute('href')).toBe('/t/3yymw47g00002/origin/7');
+    serve({ ...p, thread: { ...p.thread, continued_from: null } });
+    root = await renderAt(`/t/${id}/s?page=2`);
+    expect(root.querySelector('[data-continued-from]')).toBeNull();
+  });
+
   it('says where a split thread came from, and only that it was split to a viewer not told', async () => {
     const p = page([post(1)]);
     serve({ ...p, thread: { ...p.thread, split_from: { thread: { id: '3yymw47g00002', slug: 'origin', title: 'The origin' } } } });

@@ -22,6 +22,9 @@ import { permalink, type FlagHandler, type ThreadRef } from './Post';
 // Conversation, the post's reply chain lens, follows link when the post
 // hands it over: a post that is a reply or has replies (TKT-01M29CTY71).
 //
+// Reply as new thread follows conversation when the post hands it over
+// (TKT-01M29CYSC0). It is a link to the new-thread screen.
+//
 // Unread from here is there only when the post hands it over too, and is
 // disabled while its mark is out (unreadBusy). Choosing it closes the list
 // and puts focus back on the button, as Escape does; a mark that succeeds
@@ -36,6 +39,7 @@ export function PostMore({
   onUnread,
   unreadBusy = false,
   chain,
+  continueHref,
 }: {
   thread: ThreadRef;
   ordinal: number;
@@ -45,6 +49,7 @@ export function PostMore({
   onUnread?: () => void;
   unreadBusy?: boolean;
   chain?: string;
+  continueHref?: string;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -104,6 +109,13 @@ export function PostMore({
           <li>
             <a href={chain} data-conversation onClick={() => setOpen(false)}>
               conversation
+            </a>
+          </li>
+        )}
+        {continueHref && (
+          <li>
+            <a href={continueHref} data-post-action="continue" onClick={() => setOpen(false)}>
+              reply as new thread
             </a>
           </li>
         )}

@@ -2,7 +2,7 @@ import { Fragment, type ComponentChild } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
-import type { CreatedPost, Lens, Pinned, Post as PostDTO, SplitFrom, ThreadPage, ThreadViewer, ThreadWatch } from '../api/dto';
+import type { ContinuedFrom, CreatedPost, Lens, Pinned, Post as PostDTO, SplitFrom, ThreadPage, ThreadViewer, ThreadWatch } from '../api/dto';
 import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
@@ -30,7 +30,7 @@ import { isOwn, noControls, postControls, readOnlyViewer } from '../components/t
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
 import { PostTime } from '../components/thread/PostTime';
-import { isTombstone, MergeNotice, movedHref, MoveNotice } from '../components/thread/removal';
+import { ContinuedIn, isTombstone, MergeNotice, movedHref, MoveNotice } from '../components/thread/removal';
 import { expanderShown } from '../components/thread/ReplyExpander';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
@@ -395,6 +395,7 @@ export function ThreadScreen() {
         )}
         {head?.pinned && <PinnedNote pinned={head.pinned} />}
         {head?.split_from && <SplitFromNote split={head.split_from} />}
+        {head?.continued_from && <ContinuedFromNote from={head.continued_from} />}
         <div class="thread-tools">
           {shown && !history && <LensBar page={shown} lens={lens} />}
           {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
@@ -494,6 +495,22 @@ function SplitFromNote({ split }: { split: SplitFrom }) {
     </p>
   );
 }
+
+// ContinuedFromNote says a thread was started by "reply as new thread" from
+// a post of another, linked at that post. The server sends it only to a
+// viewer who may read that thread (docs/07 "Reply as a new thread").
+function ContinuedFromNote({ from }: { from: ContinuedFrom }) {
+  return (
+    <p class="split-from" data-continued-from>
+      Continued from <a href={permalink(from.thread, from.ordinal)}>{from.thread.title}</a>.
+    </p>
+  );
+}
+
+// continueHref is the new-thread screen in forum continuing post ordinal of
+// thread: reply as a new thread (TKT-01M29CYSC0).
+export const continueHref = (forum: string, thread: string, ordinal: number) =>
+  `/f/${encodeURIComponent(forum)}/new?from=${encodeURIComponent(thread)}&ordinal=${ordinal}`;
 
 // PinnedNote says a thread is pinned, where, and until when, in the thread
 // head. The header's pin is null once its end has passed (docs/08: a pin's
@@ -732,8 +749,14 @@ function ThreadBody({
                 own={ownOf(p, i)}
                 expander={expanderShown(p, posts[i + 1])}
                 select={select && !p.deleted ? select(p) : undefined}
+                continueHref={
+                  page.viewer.can_create_thread && !p.deleted && !p.moved
+                    ? continueHref(page.thread.forum.slug, thread.id, p.ordinal)
+                    : undefined
+                }
               />
             )}
+            {p.continued_in?.length > 0 && <ContinuedIn threads={p.continued_in} />}
           </Fragment>
         ))}
         {gaps.end && <GapDivider gap={gaps.end} thread={thread} />}

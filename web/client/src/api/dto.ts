@@ -75,6 +75,15 @@ export interface ThreadHeader {
   // thread is null for a viewer who may not read the thread the posts came
   // from (docs/07 "Moving posts").
   split_from: SplitFrom | null;
+  // continued_from is set on a thread a reply as a new thread started, only
+  // for a viewer who may read the thread it continues (TKT-01M29CYSC0).
+  continued_from: ContinuedFrom | null;
+}
+
+// ContinuedFrom is the post a reply as a new thread continues.
+export interface ContinuedFrom {
+  thread: ThreadLink;
+  ordinal: number;
 }
 
 export interface SplitFrom {
@@ -108,6 +117,10 @@ export interface ThreadViewer {
   can_reply: boolean;
   // can_upload: this viewer may upload a file to attach here.
   can_upload: boolean;
+  // can_create_thread: this viewer may start a thread in the thread's forum,
+  // so each post shown as itself offers reply as a new thread
+  // (TKT-01M29CYSC0).
+  can_create_thread: boolean;
   can_moderate: boolean;
   // slow_mode_seconds is the thread's effective slow mode, 0 for off.
   slow_mode_seconds: number;
@@ -173,6 +186,9 @@ export interface Post {
   // posts were merged from <link>", the link being the source and its first
   // moved post, only to a viewer who may read it (docs/07 "Moving posts").
   merge_notice: MoveNotice | null;
+  // continued_in lists the threads continuing this post that the viewer may
+  // read, oldest first: "Continued in <link>" (TKT-01M29CYSC0).
+  continued_in: ThreadLink[];
   machine_authored: boolean;
 }
 

@@ -66,4 +66,19 @@ describe("a post's More list", () => {
       await settle();
     }
   });
+
+  // TKT-01M29CYSC0.
+  it('lists reply as new thread when the post hands it over, as a link that closes the list', async () => {
+    await act(async () => render(<PostMore thread={thread} ordinal={4} />, root));
+    expect(root.querySelector('[data-post-action=continue]')).toBeNull();
+    const href = '/f/general/new?from=3yymw47g00001&ordinal=4';
+    await act(async () => render(<PostMore thread={thread} ordinal={4} continueHref={href} />, root));
+    await act(async () => more().click());
+    const item = root.querySelector<HTMLAnchorElement>('[data-post-action=continue]')!;
+    expect(item.textContent).toBe('reply as new thread');
+    expect(item.getAttribute('href')).toBe(href);
+    item.addEventListener('click', (e) => e.preventDefault());
+    await act(async () => item.click());
+    expect(list().hidden).toBe(true);
+  });
 });

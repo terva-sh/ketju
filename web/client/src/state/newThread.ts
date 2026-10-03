@@ -40,7 +40,23 @@ export interface NewThread extends Files {
   // loading is whether loadNewThreadDraft has asked, so a second visit
   // while the first GET is still out does not set loaded early.
   loading: boolean;
+  // from is the post this thread continues, "reply as new thread"
+  // (TKT-01M29CYSC0), as the screen's address names it; null for an
+  // ordinary thread. createThread sends it.
+  from: Signal<ContinueFrom | null>;
+  // prefilled is the post whose quote was last put in this composer, so a
+  // second visit to the same address does not quote it again.
+  prefilled: string;
 }
+
+// ContinueFrom names the post a new thread continues.
+export interface ContinueFrom {
+  thread: string;
+  ordinal: number;
+}
+
+// continueKey is from as one string.
+const continueKey = (from: ContinueFrom) => `${from.thread}/${from.ordinal}`;
 
 const states = new Map<string, NewThread>();
 let owner: string | null = null;
@@ -73,6 +89,8 @@ export function newThreadFor(forum: string): NewThread {
       failure: signal(null),
       loaded: signal(false),
       loading: false,
+      from: signal(null),
+      prefilled: '',
       ...newFiles(),
     };
     states.set(forum, s);
@@ -117,6 +135,24 @@ export async function loadNewThreadDraft(forum: string): Promise<void> {
   n.loaded.value = true;
 }
 
+// prefillContinue puts quote, the post from continues as continueQuote
+// writes it, into forum's composer, once per post: in place of an empty
+// body, or after a draft's text, which it keeps. It waits for the draft to
+// load (loaded), so a draft is never written over before it is seen, and
+// does nothing while a thread is being posted.
+export function prefillContinue(forum: string, from: ContinueFrom, quote: string) {
+  const n = newThreadFor(forum);
+  const key = continueKey(from);
+  if (!n.loaded.value || n.posting.value || n.prefilled === key) return;
+  n.prefilled = key;
+  const had = n.source.value.trim();
+  const source = had ? `${n.source.value.trimEnd()}\n\n${quote}\n\n` : `${quote}\n\n`;
+  batch(() => {
+    n.source.value = source;
+    n.caret.value = source.length;
+  });
+}
+
 // createThread creates forum's thread from its composer (POST
 // /forums/{slug}/threads, docs/07) and answers it, or null when nothing was
 // created.
@@ -143,11 +179,13 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
   n.failure.value = null;
   n.tagsSent = tags;
   try {
+    const from = n.from.value;
     const res = await apiSend<CreatedThread>('POST', `/api/v1/forums/${encodeURIComponent(forum)}/threads`, {
       title,
       source,
       ...(tags.length ? { tags } : {}),
       ...hashes(n.attachments.value),
+      ...(from ? { from } : {}),
     });
     if (!current(forum, n, at)) return null;
     drop(draftKey(forum));
@@ -157,6 +195,8 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
       n.source.value = '';
       clearFiles(n);
       n.caret.value = 0;
+      n.from.value = null;
+      n.prefilled = '';
     });
     return res;
   } catch (err) {

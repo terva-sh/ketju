@@ -133,8 +133,10 @@ test('a profile and its posts', async ({ browser }, info) => {
 // A post's "more" control on the phone, its items, and the flag dialog
 // (TKT-01M3QQWA5Z; docs/06 "Mobile"). #3 is carol's, so alice may flag it,
 // and she is signed in, so unread from here is there too (TKT-01M3KFFFJR).
-// #4 answers it, so it offers its conversation (TKT-01M29CTY71). The open
-// list covers the post below it, so only the list is measured.
+// #4 answers it, so it offers its conversation (TKT-01M29CTY71). She may
+// start a thread in the forum, so reply as new thread is there too
+// (TKT-01M29CYSC0). The open list covers the post below it, so only the
+// list is measured.
 test('a post’s more control, its items, and the flag dialog', async ({ browser }, info) => {
   const { ctx, page } = await signedIn(browser, info);
   await page.goto(`${seed.thread}?page=1`);
@@ -143,7 +145,7 @@ test('a post’s more control, its items, and the flag dialog', async ({ browser
   await more.click();
   const list = page.locator('#post-3 .post-more-list');
   await expect(list).toBeVisible();
-  await expect(list.locator('a, button')).toHaveText(['link', 'conversation', 'flag', 'unread from here', 'history']);
+  await expect(list.locator('a, button')).toHaveText(['link', 'conversation', 'reply as new thread', 'flag', 'unread from here', 'history']);
   expect(await small(page, '#post-3 .post-more-list'), 'with #3’s more open').toEqual([]);
   await page.locator('#post-3 [data-post-action=flag]').click();
   await expect(page.getByRole('dialog')).toBeVisible();

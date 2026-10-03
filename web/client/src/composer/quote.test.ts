@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { bodyText, insertBlock, quoteMarkdown, selectionIn } from './quote';
+import { bodyText, continueQuote, insertBlock, quoteMarkdown, selectionIn } from './quote';
 
 // AC2's markdown: the form internal/render/quote.go reads.
 describe('quoteMarkdown', () => {
@@ -113,5 +113,23 @@ describe('the text of a post', () => {
     getSelection()!.removeAllRanges();
     getSelection()!.setBaseAndExtent(outside.firstChild!, 4, text, 6);
     expect(selectionIn(el)).toBeNull();
+  });
+});
+
+// Reply as a new thread's pre-fill (TKT-01M29CYSC0): the member's own text,
+// a plain blockquote with no attribution syntax, read from the rendered post
+// as quote reads a body, its own quotations left out.
+describe('continueQuote', () => {
+  it('writes "@handle wrote:" and a plain blockquote, a paragraph break kept as a bare >', () => {
+    expect(continueQuote('alice', '<p>The bill was the <em>smaller</em> half.</p><p>The export was the rest.</p>')).toBe(
+      '@alice wrote:\n\n> The bill was the smaller half.\n>\n> The export was the rest.',
+    );
+  });
+
+  it('carries no [quote=#N], and leaves out the quotations the post holds', () => {
+    const html = '<details class="quote"><summary>#3</summary><blockquote><p>older words</p></blockquote></details><p>mine</p>';
+    const q = continueQuote('carol', html);
+    expect(q).toBe('@carol wrote:\n\n> mine');
+    expect(q).not.toContain('[quote=');
   });
 });

@@ -73,6 +73,12 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // select is the post's checkbox while a moderator selects posts to move,
 // drawn first in the header (TKT-01M29CYSAM); the thread page hands it over
 // from the MovePosts chunk.
+//
+// continueHref is "reply as new thread", the new-thread screen continuing
+// this post, when the page offers it: to a viewer who may start a thread in
+// the forum, on a post shown as itself, a locked or archived thread's
+// included (TKT-01M29CYSC0). It follows reply in the footer, and is under
+// PostMore on a phone.
 export function Post({
   post,
   thread,
@@ -83,6 +89,7 @@ export function Post({
   own,
   expander = false,
   select,
+  continueHref,
 }: {
   post: PostDTO;
   thread: ThreadRef;
@@ -93,6 +100,7 @@ export function Post({
   own?: Own;
   expander?: boolean;
   select?: ComponentChild;
+  continueHref?: string;
 }) {
   const flag = onFlag && mayFlag(post) ? onFlag : undefined;
   const o = useOwn(own, post.ordinal);
@@ -181,9 +189,15 @@ export function Post({
               onUnread={markHere}
               unreadBusy={mark.busy}
               chain={chain}
+              continueHref={continueHref}
             />
           ) : (
             <>
+              {continueHref && (
+                <a class="hit" href={continueHref} data-post-action="continue">
+                  reply as new thread
+                </a>
+              )}
               <a class="hit" href={permalink(thread, post.ordinal)}>
                 link
               </a>

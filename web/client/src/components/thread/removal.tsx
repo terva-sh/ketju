@@ -1,3 +1,4 @@
+import { Fragment } from 'preact';
 import type { MoveNotice as MoveNoticeDTO, Post as PostDTO, ThreadLink } from '../../api/dto';
 
 // How a removed post reads (docs/08 "Tombstones" and "Flags", docs/07
@@ -81,6 +82,24 @@ export function MoveNotice({ notice }: { notice: MoveNoticeDTO }) {
     <p class="move-notice" data-move-notice>
       {what} to{' '}
       {notice.thread ? <a href={movedHref(notice.thread, notice.ordinal)}>{notice.thread.title}</a> : 'another thread'}.
+    </p>
+  );
+}
+
+// ContinuedIn stands under a post that a reply as a new thread continued
+// (TKT-01M29CYSC0): "Continued in <link>", one link per thread the server
+// lists, which are those the viewer may read. Each goes to the new thread.
+export function ContinuedIn({ threads }: { threads: ThreadLink[] }) {
+  return (
+    <p class="continued-in" data-continued-in>
+      Continued in{' '}
+      {threads.map((t, i) => (
+        <Fragment key={t.id}>
+          {i > 0 && ', '}
+          <a href={movedHref(t, null)}>{t.title}</a>
+        </Fragment>
+      ))}
+      .
     </p>
   );
 }

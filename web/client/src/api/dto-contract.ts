@@ -154,6 +154,9 @@ import splitModerator from '../../../../internal/dto/testdata/golden/split.moder
 import threadMergedMember from '../../../../internal/dto/testdata/golden/thread-merged.member.json';
 import threadMergedAnon from '../../../../internal/dto/testdata/golden/thread-merged.anon.json';
 import mergeModerator from '../../../../internal/dto/testdata/golden/merge.moderator.json';
+import threadContinuedMember from '../../../../internal/dto/testdata/golden/thread-continued.member.json';
+import threadContinuedAnon from '../../../../internal/dto/testdata/golden/thread-continued.anon.json';
+import postContinuedMember from '../../../../internal/dto/testdata/golden/post-continued.member.json';
 import threadHintAnon from '../../../../internal/dto/testdata/golden/thread-hint.anon.json';
 import threadMember from '../../../../internal/dto/testdata/golden/thread.member.json';
 import threadModerator from '../../../../internal/dto/testdata/golden/thread.moderator.json';
@@ -277,6 +280,9 @@ export const contract = [
   matches<ThreadPage>()(threadMergedMember),
   matches<ThreadPage>()(threadMergedAnon),
   matches<MergedPosts>()(mergeModerator),
+  matches<ThreadPage>()(threadContinuedMember),
+  matches<ThreadPage>()(threadContinuedAnon),
+  matches<Post>()(postContinuedMember),
   matches<ThreadPage>()(threadMember),
   matches<ThreadPage>()(threadModerator),
   matches<ThreadHint>()(threadHintAnon),

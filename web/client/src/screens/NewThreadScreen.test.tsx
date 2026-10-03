@@ -426,3 +426,84 @@ describe('on a phone', () => {
     expect(actions()).toEqual([]);
   });
 });
+
+// Reply as a new thread (TKT-01M29CYSC0, docs/06 "Reply as a new thread"):
+// /f/{forum}/new?from={thread}&ordinal={n} reads the post's page, pre-fills
+// a plain quote once the draft has loaded, and sends from.
+describe('reply as a new thread', () => {
+  const source = threadPage({ id: '3yymw47g00001', slug: 'why-we-left-slack', title: 'Why we left Slack' });
+  const pageOf = 'GET /api/v1/threads/3yymw47g00001?ordinal=61';
+  const continuing = `${general}?from=3yymw47g00001&ordinal=61`;
+  const quote = '@alice wrote:\n\n> The bill was the smaller half of it.\n\n';
+
+  it('pre-fills a plain quote of the post, says what it continues, and sends from', async () => {
+    const s = serve('general', { [pageOf]: () => ({ status: 200, body: source }) });
+    const root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(quote);
+    expect(area(root).value).not.toContain('[quote=');
+    const notice = root.querySelector('[data-continues]')!;
+    expect(notice.textContent).toBe('Continuing Why we left Slack, post #61.');
+    expect(notice.querySelector('a')!.getAttribute('href')).toBe('/t/3yymw47g00001/why-we-left-slack/61');
+    // The quote is the member's to edit.
+    await write(root, 'The bill', `${quote}And the export was the rest.`);
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => r.body)).toEqual([
+      { title: 'The bill', source: `${quote}And the export was the rest.`, from: { thread: '3yymw47g00001', ordinal: 61 } },
+    ]);
+  });
+
+  it('keeps a draft and puts the quote after it, once, however often the address is visited', async () => {
+    serve('general', {
+      [pageOf]: () => ({ status: 200, body: source }),
+      'GET /api/v1/forums/general/draft': () => ({ status: 200, body: { forum: 'general', title: 'Saved', source: 'Saved body', updated_at: 0, revision: 4 } }),
+    });
+    let root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(`Saved body\n\n${quote}`);
+    await unmount();
+    root = await renderAt(continuing);
+    await wait(10);
+    expect(area(root).value).toBe(`Saved body\n\n${quote}`);
+  });
+
+  it.each([
+    ['a post that is gone or hidden', (): Answer => problemAnswer('not-found', 404), 61],
+    ['a removed post', (): Answer => ({ status: 200, body: source }), 63],
+  ])('says so of %s, quotes nothing, and starts the thread on its own', async (_, answer, ordinal) => {
+    const s = serve('general', { [`GET /api/v1/threads/3yymw47g00001?ordinal=${ordinal}`]: answer });
+    const root = await renderAt(`${general}?from=3yymw47g00001&ordinal=${ordinal}`);
+    await wait(10);
+    expect(area(root).value).toBe('');
+    expect(root.querySelector('[data-continues-gone]')).not.toBeNull();
+    await write(root, 'On its own', 'Just this.');
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => r.body)).toEqual([{ title: 'On its own', source: 'Just this.' }]);
+  });
+
+  it('ignores an address that names no post', async () => {
+    const s = serve('general');
+    for (const q of ['?from=nope&ordinal=61', '?from=3yymw47g00001&ordinal=0', '?from=3yymw47g00001']) {
+      const root = await renderAt(general + q);
+      await wait(5);
+      expect(root.querySelector('[data-continues], [data-continues-gone]')).toBeNull();
+      await unmount();
+    }
+    expect(s.sent.filter((r) => r.url.startsWith('/api/v1/threads/'))).toEqual([]);
+  });
+
+  it('says why when the server no longer lets the post be continued', async () => {
+    serve('general', {
+      [pageOf]: () => ({ status: 200, body: source }),
+      'POST /api/v1/forums/general/threads': () => problemAnswer('not-found', 404),
+    });
+    const root = await renderAt(continuing);
+    await wait(10);
+    await fill(title(root), 'Too late');
+    await click(post(root));
+    await wait(20);
+    expect(alert(root)).toBe('The post this thread continues is no longer there, or you can no longer read it.');
+  });
+});

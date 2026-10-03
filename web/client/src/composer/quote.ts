@@ -9,12 +9,29 @@
 // stays in the quotation as a bare >, so a quoted paragraph break is still
 // one quotation rather than two.
 export function quoteMarkdown(ordinal: number, text: string): string {
+  return [`> [quote=#${ordinal}]`, ...quotedLines(text)].join('\n');
+}
+
+// quotedLines is text as the lines of a blockquote, normalised as
+// quoteMarkdown says.
+function quotedLines(text: string): string[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   while (lines.length > 0 && lines[0].trim() === '') lines.shift();
   while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
   // Trailing spaces are dropped: selected text ends where the pointer let
   // go, often after a space, and two of them are a hard break in markdown.
-  return [`> [quote=#${ordinal}]`, ...lines.map((l) => (l.trim() === '' ? '>' : `> ${l.trimEnd()}`))].join('\n');
+  return lines.map((l) => (l.trim() === '' ? '>' : `> ${l.trimEnd()}`));
+}
+
+// continueQuote is what "reply as new thread" pre-fills (TKT-01M29CYSC0,
+// docs/06 "Reply as a new thread"): "@handle wrote:" and a plain blockquote
+// of the post's text, read from its rendered html as quote reads a body. It
+// carries no [quote=#N], which would name a post of the new thread; it is
+// the member's own text from here on, to edit as they like. The html is
+// parsed into a document of its own, so nothing in it loads.
+export function continueQuote(handle: string, html: string): string {
+  const body = new DOMParser().parseFromString(html, 'text/html').body;
+  return [`@${handle} wrote:`, '', ...quotedLines(bodyText(body))].join('\n');
 }
 
 // selectionIn is the text selected inside body, or null when nothing is, or

@@ -586,6 +586,15 @@
   font-style: italic;
   border-bottom: 1px solid var(--rule);
 }
+/* "Continued in", under a post a reply as a new thread continued
+   (TKT-01M29CYSC0): the move notice's row, below the post. */
+.continued-in {
+  margin: 0;
+  padding: 10px 24px;
+  color: var(--muted);
+  font-size: 13px;
+  border-bottom: 1px solid var(--rule);
+}
 .thread-head .split-from {
   margin: 0 0 8px;
   color: var(--muted);

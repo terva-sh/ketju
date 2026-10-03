@@ -1,13 +1,15 @@
 import { useLocation, useRoute } from 'preact-iso';
-import { useEffect, useMemo, useRef } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { apiGet, forgetGets, peekGet } from '../api/client';
-import type { Forum, ForumTree, ThreadList } from '../api/dto';
+import type { Forum, ForumTree, ThreadHeader, ThreadList, ThreadPage } from '../api/dto';
 import { asProblem, problemMessage, type ProblemError } from '../api/problem';
 import { useResource } from '../api/resource';
 import { useVisualViewport } from '../composer/ComposerSheet';
 import { attachRefused } from '../composer/Composer';
 import { ComposerBody, DraftNote } from '../composer/ComposerBody';
+import { continueQuote } from '../composer/quote';
 import { threadHref } from '../components/ThreadRow';
+import { permalink } from '../components/thread/Post';
 import { meHref } from '../shell/nav';
 import { uploading } from '../state/files';
 import { isPhone } from '../state/layout';
@@ -18,9 +20,12 @@ import {
   loadNewThreadDraft,
   newThreadFor,
   newThreadNote,
+  prefillContinue,
   refusedHere,
+  type ContinueFrom,
   type NewThread,
 } from '../state/newThread';
+import { threadUrl } from '../state/threads';
 import { useShellContext } from '../state/shell';
 import { hasTagErrors, tagMessages } from '../state/tagErrors';
 import { viewer } from '../state/viewer';
@@ -59,10 +64,18 @@ const maxTitle = 200;
 // (docs/04, docs/08). Only the create route's own forbidden or conflict
 // turns Post off. A refused draft save turns autosave off and says so, and
 // leaves Post alone: the draft route is a separate answer.
+//
+// With ?from={thread}&ordinal={n} it is "reply as new thread"
+// (TKT-01M29CYSC0): the post's page is read, the composer is pre-filled with
+// "@handle wrote:" and a plain blockquote of the post's text once the draft
+// has loaded (prefillContinue), and the thread is sent with from, so the
+// post gains a "continued in" note. A post that cannot be read leaves the
+// composer as it was, says so, and the thread is sent without from.
 export function NewThreadScreen() {
-  const { params } = useRoute();
+  const { params, query } = useRoute();
   const { route, url } = useLocation();
   const slug = params.forum;
+  const from = continueFromQuery(query);
   const signedIn = !!viewer.value.user;
   const phone = isPhone.value;
   const tree = useResource(signedIn ? forumsUrl : null, (signal) => apiGet<ForumTree>(forumsUrl, { signal }), () =>
@@ -83,6 +96,42 @@ export function NewThreadScreen() {
     if (!n.posting.value) n.failure.value = null;
     void loadNewThreadDraft(slug);
   }, [slug, signedIn]);
+
+  // The post continued from, read once per address: its thread's header for
+  // the notice, and its quote for the composer.
+  const [origin, setOrigin] = useState<{ key: string; thread?: ThreadHeader; quote?: string; failed?: unknown } | null>(null);
+  const fromKey = from ? `${from.thread}/${from.ordinal}` : '';
+  useEffect(() => {
+    if (!n) return;
+    n.from.value = from;
+    if (!from) return;
+    const ctl = new AbortController();
+    apiGet<ThreadPage>(threadUrl(from.thread, { ordinal: String(from.ordinal) }), { signal: ctl.signal }).then(
+      (page) => {
+        if (ctl.signal.aborted) return;
+        const post = page.posts.find((p) => p.ordinal === from.ordinal);
+        // A post not shown as itself is not one to continue: the server
+        // would refuse it too.
+        if (!post || post.deleted || post.moved) {
+          setOrigin({ key: fromKey, failed: true });
+          return;
+        }
+        setOrigin({ key: fromKey, thread: page.thread, quote: continueQuote(post.author.handle, post.html) });
+      },
+      (err) => !ctl.signal.aborted && setOrigin({ key: fromKey, failed: err }),
+    );
+    return () => ctl.abort();
+  }, [slug, signedIn, fromKey]);
+  const shownOrigin = origin && origin.key === fromKey ? origin : null;
+  const loaded = n?.loaded.value ?? false;
+  useEffect(() => {
+    if (!n || !from || !shownOrigin) return;
+    if (shownOrigin.failed !== undefined) {
+      n.from.value = null;
+      return;
+    }
+    if (loaded && shownOrigin.quote !== undefined) prefillContinue(slug, from, shownOrigin.quote);
+  }, [shownOrigin, loaded]);
 
   const posting = n?.posting.value ?? false;
   const blocked = !!n && refusedHere(n);
@@ -163,6 +212,17 @@ export function NewThreadScreen() {
         head={phone && note ? <DraftNote draft={draft} note={note} /> : undefined}
         notice={
           <>
+            {shownOrigin?.thread && from && (
+              <p class="new-thread-notice" data-continues>
+                Continuing <a href={permalink(shownOrigin.thread, from.ordinal)}>{shownOrigin.thread.title}</a>, post #
+                {from.ordinal}.
+              </p>
+            )}
+            {shownOrigin && shownOrigin.failed !== undefined && (
+              <p class="new-thread-notice" data-continues-gone>
+                The post you meant to continue is not there, or you cannot read it. This thread will start on its own.
+              </p>
+            )}
             {forum?.archived && (
               <p class="new-thread-notice" data-archived>
                 This forum is archived. Only admins can start threads here.
@@ -250,6 +310,18 @@ function TagsField({ n, errors }: { n: NewThread; errors: string[] }) {
   );
 }
 
+// threadIdPattern is a thread's base32 id (internal/store/threadid).
+const threadIdPattern = /^[0-9a-f][0-9a-hjkmnp-tv-z]{12}$/;
+
+// continueFromQuery reads ?from={thread}&ordinal={n}, or null when the
+// address names no post to continue.
+export function continueFromQuery(query: Record<string, string>): ContinueFrom | null {
+  const thread = query.from ?? '';
+  const ordinal = Number(query.ordinal);
+  if (!threadIdPattern.test(thread) || !Number.isInteger(ordinal) || ordinal < 1) return null;
+  return { thread, ordinal };
+}
+
 // findForum is slug's forum in the tree, a root or a child.
 function findForum(forums: Forum[], slug: string): Forum | undefined {
   for (const f of forums) {
@@ -268,6 +340,8 @@ export function createFailure(err: unknown): string {
   switch (p.type) {
     case 'forbidden':
       return 'You may not start threads in this forum.';
+    case 'not-found':
+      return 'The post this thread continues is no longer there, or you can no longer read it.';
     case 'conflict':
       return 'This forum is archived, so your thread was not posted.';
     case 'validation-failed':

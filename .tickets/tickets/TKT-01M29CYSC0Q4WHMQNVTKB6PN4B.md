@@ -35,7 +35,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T04:15:18Z
+updated_at: 2026-10-03T04:48:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,13 +53,13 @@ This is how drift gets handled before a moderator has to. Someone who notices th
 
 ## Acceptance criteria
 
-- [ ] The source post gains a continued-in note linking to the new thread
-- [ ] The action is available to members, not only moderators
-- [ ] The continued-in note and the new thread's reference to its source name the other thread only to viewers who may read it (TestContinuedNoteRevealsOnlyToReaders)
-- [ ] The flow passes e2e/reply-as-new-thread.spec.ts at 390 and 1440 px with one axe scan per test
+- [x] The source post gains a continued-in note linking to the new thread
+- [x] The action is available to members, not only moderators
+- [x] The continued-in note and the new thread's reference to its source name the other thread only to viewers who may read it (TestContinuedNoteRevealsOnlyToReaders)
+- [x] The flow passes e2e/reply-as-new-thread.spec.ts at 390 and 1440 px with one axe scan per test
 - [ ] The committed dist is regenerated and the reader stays within the 120000 B gzip budget
-- [ ] The new thread opens with the source post pre-filled as an ordinary editable blockquote, which is the member's own text and survives a later removal of the source (TestPrefilledQuoteIsMemberText)
-- [ ] The link is the continues key on the new thread's ThreadCreated, so ketju reindex rebuilds the note from the new thread's log (TestContinuedNoteSurvivesReindex), and the source log is untouched
+- [x] The new thread opens with the source post pre-filled as an ordinary editable blockquote, which is the member's own text and survives a later removal of the source (TestPrefilledQuoteIsMemberText)
+- [x] The link is the continues key on the new thread's ThreadCreated, so ketju reindex rebuilds the note from the new thread's log (TestContinuedNoteSurvivesReindex), and the source log is untouched
 
 ## Implementation plan
 
@@ -131,3 +131,48 @@ Maintainer decision, 2026-10-02. The orchestrator asked as choices, and the answ
 **agent:claude-code/phase4-run-orchestrator** at 2026-10-02T22:47:33Z
 
 Run decision relayed by the orchestrator (pending maintainer review), 2026-10-02. The exit-check grooming (PR #375, TKT-01M3YMG0NX) decided in docs/06 "Moderator flow for drift" that "Reply as new thread" stays available under a post of a locked or archived thread: it writes only the new thread's log, so the archived thread stays read-only. Hiding the action in the client and refusing it on the server both lost. Build to it.
+
+**agent:claude-code/phase4-run-cysc0** at 2026-10-03T04:48:20Z
+
+Phase A is done on run/cysc0-reply-as-thread. The branch is stacked on run/cysba-merge-posts because both change the thread page's notices, movedraw.go and the header read. It is not pushed. It rebases onto main after the split and merge PRs merge, and it waits for the dist after them. The migration is 0027_thread_continuations; it is renumbered at push time if another PR takes 0027 first.
+
+### What landed
+
+- **Record.** `ThreadCreatedBody.Continues *PostRef` (`continues {thread_id, ordinal}`, omitempty).
+  - `CheckThreadCreated` refuses thread 0, ordinal 0 and the record's own thread. The actor checks it before writing, and also refuses a ThreadCreated that names a frame ordinal. The projection treats a bad body as a log fault.
+  - Title redaction (`blankCreated`) keeps `continues`, because it names a post and not the title. Without this, redacting the new thread's title would have dropped the link.
+- **Projection.** Migration 0027 adds `thread_continuations (thread_id PK, source_thread_id, source_ordinal)`, indexed on the source pair. It is listed in ProjectionTables and ClearProjections, and docs/04 has a section for it. No backfill is needed.
+- **Service.**
+  - `CreateThreadRequest.From`. `continuesFrom` answers validation-failed for a malformed id. It answers not-found for:
+    - an unreadable or missing thread;
+    - a missing post;
+    - a post not shown as itself.
+    It runs after the forum, title, tag, source and attachment checks, so a refusal writes nothing. A locked or archived source is accepted, per the 2026-10-02 run decision. The source log is never written.
+  - `ThreadViewer.CanCreateThread` is true for a member, in a forum that is not read-only to them, who holds create_thread there.
+- **Drawing.**
+  - `Post.ContinuedIn []ThreadLink` is always a list. `ThreadHeader.ContinuedFrom *ContinuedFrom`. Both are drawn per viewer through moveLinks and never cached.
+  - The header's split source, continued-from and "is anything continued" now come from one statement, `ThreadLinksOf`, which replaces `SplitSourceOf`. So a thread nobody continued runs no extra statement for continued_in, and the lens statement tests stay equal. Paths without a header (single post, replies, user posts, queue) always read `ContinuationsInRange`.
+- **API.** `POST /forums/{slug}/threads` takes `from {thread, ordinal}`; both fields are required (bad-request otherwise). docs/07 has the route row, a "Reply as a new thread" section, and the post and viewer example.
+- **Client.**
+  - The "reply as new thread" link is in the Post footer, and under PostMore on a phone, when `can_create_thread` is true and the post is shown as itself.
+  - `ContinuedIn` draws a note under the post, and `ContinuedFromNote` draws the header line.
+  - NewThreadScreen reads `?from=&ordinal=`, fetches the post's page, and shows "Continuing <title>, post #N." Once the draft has loaded it pre-fills `@handle wrote:` and a plain blockquote (`continueQuote`). The quote goes after any draft text, and only once per post. A post that cannot be continued gets a notice, and the thread is sent without `from`.
+
+### Deviations from the plan
+
+- `ThreadRef` in the plan is `ThreadLink` in the code, as for the move links.
+- The quote is read from the post's rendered HTML (`bodyText` on a DOMParser document), because a member cannot read another member's markdown source. Links and formatting come through as text.
+- There is no separate `PostFooter` component. The action lives in Post and PostMore, and its tests are in ThreadPage.test.tsx and PostMore.test.tsx.
+- TestReplyAsNewThreadRefusesRedactedSource and TestRedactDoesNotFollowContinues are in internal/web/api, because only that package can rewrite a log offline. The pre-user refusal is in the route test there.
+- e2e/targets.spec.ts now expects "reply as new thread" in alice's phone More list.
+
+### Tests
+
+- **Go:**
+  - threadlog: TestThreadCreatedContinuesRoundTrip (CBOR and JSON goldens, with and without the key), TestThreadCreatedContinuesMalformed. The redact title test now holds `continues`.
+  - service/threads continue_test.go: TestReplyAsNewThreadNeedsCreateThread, TestReplyAsNewThreadRefusesUnreadableOrRemovedSource, TestReplyAsNewThreadWritesOneLog (open, locked and archived sources), TestContinuedNoteRevealsOnlyToReaders, TestContinuedNotInCachedPosts, TestContinuedNoteSurvivesReindex, TestPrefilledQuoteIsMemberText.
+  - web/api continue_test.go: TestReplyAsNewThreadRoute, TestReplyAsNewThreadRefusesRedactedSource, TestRedactDoesNotFollowContinues.
+- **Vitest:** NewThreadScreen (pre-fill, draft kept, one quote per post, unreadable or removed source, no-post addresses, a not-found refusal), ThreadPage (action offered, note, header), PostMore, quote (`continueQuote`).
+- **e2e:** reply-as-new-thread.spec.ts, on carol's session at 390 and 1440 px, with one axe scan per test.
+
+The thread-view bundle was measured with go generate and not committed: 85230 B gzip of 120000, against 84344 B on the merge branch.
