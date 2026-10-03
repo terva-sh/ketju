@@ -128,6 +128,7 @@ test("the editor's phone frame is 390 px across", async () => {
   await expect(phone).toHaveAttribute('aria-pressed', 'true');
   const box = await page.locator('[data-preview]').boundingBox();
   expect(box!.width).toBeLessThanOrEqual(390);
+  await scan(page, 'the phone frame', 'light');
   await phone.click();
 });
 
@@ -191,4 +192,5 @@ test('the fields it started with are saved back', async () => {
   const after = (await (await page.request.get(formUrl)).json()) as { active_version: number; schema: unknown };
   expect(after.active_version).toBe(n + 2);
   expect(after.schema).toEqual(start.schema);
+  await scan(page, 'the form saved back', 'light');
 });

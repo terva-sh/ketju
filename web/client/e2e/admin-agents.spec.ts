@@ -116,6 +116,7 @@ test('once Done is pressed, the token is nowhere on the page', async () => {
   expect(page.url()).not.toContain(first);
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
   expect(stored).not.toContain(first);
+  await scan(page, 'the detail after Done', 'light');
 });
 
 test('the write limits save, and the agent detail passes the scan in the light theme', async () => {
@@ -150,6 +151,7 @@ test('a new token replaces the old one', async () => {
   expect(await accepted(page, second)).toBe(200);
   await panel.getByRole('button', { name: 'Done' }).click();
   expect(await shown(page)).not.toContain(second);
+  await scan(page, 'the detail after a new token', 'light');
 });
 
 test('revoking stops the token, and the agent without a token passes the scan in the light theme', async () => {
@@ -166,4 +168,5 @@ dark('the agent without a token');
 test('closing the detail', async () => {
   await detail.getByRole('button', { name: 'Close' }).click();
   await expect(detail).toHaveCount(0);
+  await scan(page, 'the users list', 'light');
 });
