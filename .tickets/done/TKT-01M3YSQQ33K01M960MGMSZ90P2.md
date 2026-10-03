@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T06:50:35Z
+updated_at: 2026-10-03T07:02:12Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -157,6 +157,16 @@ Phase A is built on run/sqq33-thread-archive. The branch is stacked on run/sqpzx
   - carol reads a thread ada archived and is offered nothing that writes. The whole page is scanned.
 - `go test -race -p 4 ./...` passes. The first run failed only on `internal/web/api`'s page and lock goldens, which each lacked the new `"archived": false` line. They are regenerated with `-update` in their own commit, and the package then passes under race.
 - The full e2e suite at both widths passed 300 of 301. The one failure was the Unread surface test, with the "1 new" symptom that TKT-01M3ZE2211 (Stop the Phase 3 exit Unread surface test failing under CI load) records. That spec passes on its own rerun.
+
+**agent:claude-code/phase4-run-SQQ33** at 2026-10-03T07:02:12Z
+
+Terva review 2051 (run fb1380d2, Actions #2673), on head 03c8749a and base 5469a729, raised one medium finding. Fixed.
+
+- **Finding.** An author still inside their rename window was offered Rename on an archived thread. The page's viewer block can still carry `rename_until` from before the archive, and `offerRename` did not check the header.
+- **Fix.** `windowOpen` is false when the header says archived.
+- **Test.** ThreadScreen.test, "an archived thread offers its author no Rename inside the window". Reverting the fix fails it.
+
+The reader bundle is now 83347 B, which is +317 B over main's 83030 B.
 
 ## Summary
 
