@@ -343,6 +343,26 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	if err := perm.New(d).Grant(ctx, audit.System("e2e seed"), 0, members.ID, domain.PermUpload); err != nil {
 		return 0, err
 	}
+	// The moderators forum is the moderators group's to read, as its
+	// description says, and seedModerator is in the group. A moderator by
+	// role moderates everywhere but reads a restricted forum only through a
+	// grant (docs/04 "permissions"), so without this only an admin read it.
+	// Phase 4's reveal-rule test splits posts into it as mona, where alice
+	// cannot follow them (e2e/phase4-exit.spec.ts, TKT-01M3YMG0NX). No ids
+	// move: this adds a membership and a grant, and no user or forum.
+	var moderators dbq.Group
+	if err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) (err error) {
+		moderators, err = q.GetGroupBySlug(ctx, domain.GroupModerators)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+	if err := perm.New(d).AddMember(ctx, audit.System("e2e seed"), moderators.ID, users[seedModerator]); err != nil {
+		return 0, err
+	}
+	if err := perm.New(d).Grant(ctx, audit.System("e2e seed"), forums["moderators"], moderators.ID, domain.PermRead); err != nil {
+		return 0, err
+	}
 
 	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
 	if err != nil {
