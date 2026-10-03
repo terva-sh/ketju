@@ -20,6 +20,8 @@ references:
     path: null
   - ref: pr:390
     path: null
+  - ref: pr:392
+    path: null
 claim:
   actor: agent:claude-code/phase4-run-me9g0
   branch: run/me9g0-served-goldens
@@ -30,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-03T04:53:00Z
+updated_at: 2026-10-03T04:59:39Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
