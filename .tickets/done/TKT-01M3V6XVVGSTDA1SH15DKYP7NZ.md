@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:40Z
-updated_at: 2026-10-03T10:51:13Z
+updated_at: 2026-10-03T10:56:50Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -142,6 +142,10 @@ Implemented (Phase A, before the dist), as planned, with these readings:
 - **e2e:** a `profile` describe in `e2e/settings.spec.ts` on carol's stored session, with `afterEach` putting back "Carol Ruiz" and an empty bio. It passed at 390 px and 1440 px locally.
 - **Reader bundle:** 81492 B on main at 88b12b3, 82499 B with this change (+1007 B; the plan estimated +1000).
 - **Local runs:** `go test -race -p 4 ./...` timed out once in `cmd/ketju` at the default 10 minutes under a load average of 21 to 26. Run alone it passed in 331 s. Every other package passed.
+
+**agent:claude-code/phase4-run-6xvvg** at 2026-10-03T10:56:50Z
+
+Terva review 2062 on PR #400 (head 3df39b6, base fbe569d) found two mediums; both are fixed in cb5843f. (1) An edit typed while a save was pending was lost. Each field now drops back to the stored value only if it still holds what was sent. Test: 'keeps an edit typed while the save is on its way'. (2) The name input had a UTF-16 maxlength. It is removed; the 100-character limit is now the code-point check the server makes. Test: 'takes a name of 100 characters that are two UTF-16 units each'. Reader is now 91435 B (+1019 over main's 90416).
 
 ## Summary
 
