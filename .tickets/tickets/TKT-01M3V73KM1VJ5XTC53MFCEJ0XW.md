@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V73KM1VJ5XTC53MFCEJ0XW
 title: Bound how much one member may upload
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-v73km1
+  branch: run/v73km1-upload-bound
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
+  commit: 2f2f914df101afe6e7a2f4dd9e4c9004319130c5
+  session: null
+  claimed_at: 2026-10-03T04:07:17Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:50:48Z
-updated_at: 2026-10-02T17:33:37Z
+updated_at: 2026-10-03T04:07:19Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-v73km1
   name: ""
 extensions: {}
 ---
