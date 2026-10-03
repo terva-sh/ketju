@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasTagErrors, splitTags, tagMessages } from './tagErrors';
+import { foldTag, hasTagErrors, splitTags, tagMessages } from './tagErrors';
 
 // TKT-01M3YSQPZX: the Tags field's text as sent, and the refusals named.
 describe('splitTags', () => {
@@ -8,6 +8,16 @@ describe('splitTags', () => {
     expect(splitTags(' ,a,,b\tc\n')).toEqual(['a', 'b', 'c']);
     expect(splitTags('   ')).toEqual([]);
     expect(splitTags('')).toEqual([]);
+  });
+});
+
+describe('foldTag', () => {
+  it('folds ASCII A-Z only, as the server does', () => {
+    expect(foldTag('Long-Read')).toBe('long-read');
+    // The Kelvin sign lowercases to k under Unicode rules; the server
+    // refuses it rather than folding it.
+    expect(foldTag('\u212A')).toBe('\u212A');
+    expect(foldTag('Ä')).toBe('Ä');
   });
 });
 

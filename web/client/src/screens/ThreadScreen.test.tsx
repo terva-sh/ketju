@@ -1188,6 +1188,21 @@ describe('moderating from the thread screen', () => {
     expect(document.activeElement).toBe(root.querySelector('h1'));
   });
 
+  // Terva review 2049: Save is off only for the tags the server would fold
+  // to the set the thread has. The Kelvin sign lowercases to k under
+  // Unicode rules, but the server folds ASCII only and refuses it, so on a
+  // thread tagged k it is a change for the server to judge.
+  it('offers Save for a tag that folds to one the thread has only by Unicode rules', async () => {
+    pages = [at({ thread: { tags: ['k'] } })];
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'tags');
+    expect(sendDisabled()).toBe(true);
+    await typeTags('K');
+    expect(sendDisabled()).toBe(true);
+    await typeTags('\u212A');
+    expect(sendDisabled()).toBe(false);
+  });
+
   it('names each refused tag under the field and keeps what was typed', async () => {
     let answer: Answer = problemAnswer('validation-failed', 422, {
       errors: [

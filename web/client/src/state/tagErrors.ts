@@ -14,6 +14,14 @@ export function splitTags(text: string): string[] {
   return text.split(/[\s,]+/).filter((t) => t !== '');
 }
 
+// foldTag is a tag as the server folds it before checking it: ASCII A-Z
+// only (internal/domain NormalizeTag), so a character that folds to ASCII
+// only through Unicode case rules, such as the Kelvin sign, stays as it is
+// and is the server's to refuse (Terva review 2049).
+export function foldTag(tag: string): string {
+  return tag.replace(/[A-Z]/g, (c) => c.toLowerCase());
+}
+
 // tagMessages says, for each tag a validation-failed answer refused, which
 // one and why, in the order sent, then the count if there were too many
 // (docs/07 `POST /forums/{slug}/threads`: `tags.N` is the Nth tag sent).

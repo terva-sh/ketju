@@ -5,7 +5,7 @@ import type { Forum, ForumTree, Pinned, SlowMode, ThreadHeader } from '../../api
 import { asProblem, isProblem, problemMessage, revokesAccess } from '../../api/problem';
 import { forumsUrl } from '../../screens/ForumIndex';
 import type { PanelKind } from '../../shell/threadActions';
-import { splitTags, tagMessages } from '../../state/tagErrors';
+import { foldTag, splitTags, tagMessages } from '../../state/tagErrors';
 import { storeThreadHeader } from '../../state/threads';
 import { canonicalThreadUrl } from '../../view';
 
@@ -254,7 +254,7 @@ export function ModerateDialog({
   const trimmed = title.trim();
   const length = [...trimmed].length;
   const tags = splitTags(tagText);
-  const sameTags = [...new Set(tags.map((t) => t.toLowerCase()))].sort().join(' ') === had.join(' ');
+  const sameTags = [...new Set(tags.map(foldTag))].sort().join(' ') === had.join(' ');
   const unready =
     (kind === 'rename' && (length === 0 || length > maxTitle || trimmed === current.title)) ||
     (kind === 'move' && !dest) ||
