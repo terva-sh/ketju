@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T10:09:35Z
+updated_at: 2026-10-03T10:13:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -200,6 +200,23 @@ Terva review 2060 covered head f8dcd18, base 1c0bc8fe. It marked both findings f
   - internal/render's TestEscapedQuoteMarkerStaysText renders the exact source the client test produces. It finds no quotation, and it shows `[quote=#99]`, `a*b* _c_`, `> [quote=#98]` and `# not a heading` as text.
 
 The thread view is 90323 B gzip.
+
+**agent:claude-code/phase4-run-cysc0** at 2026-10-03T10:13:34Z
+
+Terva review 2061 covered head 5bee5e0, base 1c0bc8fe. It marked 2060's finding resolved and raised one medium finding, fixed in 44efb60e. The dist is regenerated in 3a3430d5.
+
+- **Finding.** The localStorage prefill mark was written before the quoted draft was saved, and it answered for any restored text. A reload before autosave, or after a failed save, brought back an older draft, and the mark then kept the quote out of it.
+- **Fix.**
+  - The mark now holds the quoted post's key and the composer's text as it last stood. An effect on the body keeps that text current, so the member's edits are included.
+  - A restored draft counts as quoted only when it holds the quote, or when it is exactly the tracked text.
+  - An older draft is another text, so it is quoted into again.
+  - The in-memory `prefilled` no longer starts from storage. It covers only this session's visits.
+- **Tests.**
+  - NewThreadScreen.test, "quotes again into an older draft a reload brings back before the quote was saved". The draft copy is gone and the mark is kept, and the server draft is older.
+  - The reload test now edits the quote in the composer before reloading.
+  - Making the mark answer for any text fails the first test. Removing the mark fails the second.
+
+The thread view is 90416 B gzip. This was review round 3 of the 5 allowed.
 
 ## Summary
 
