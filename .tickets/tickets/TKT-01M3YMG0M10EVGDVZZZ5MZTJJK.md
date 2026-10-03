@@ -13,13 +13,14 @@ assignees: []
 milestone: phase-4
 parent: null
 origin: null
-dependencies: []
+dependencies:
+  - TKT-01M41MTXWHACFNY4DG4C9KDQQ9
 blocks_on: none
 references: []
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T19:43:06Z
+updated_at: 2026-10-03T19:46:11Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
