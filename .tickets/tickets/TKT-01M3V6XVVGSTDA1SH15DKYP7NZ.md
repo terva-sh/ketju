@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6XVVGSTDA1SH15DKYP7NZ
 title: Let a member edit their display name, bio and avatar
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -19,15 +19,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-6xvvg
+  branch: run/6xvvg-profile-settings
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
+  commit: 88b12b35448f4629f13a5d1c9d60c0a83da431ba
+  session: null
+  claimed_at: 2026-10-03T03:34:05Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:40Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-03T03:34:06Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-6xvvg
   name: ""
 extensions: {}
 ---
