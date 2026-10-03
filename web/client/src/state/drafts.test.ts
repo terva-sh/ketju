@@ -5,6 +5,7 @@ import { composerFor, discardReply, loadReplyDraft, postReply, resetComposers } 
 import { draftDelay, draftNote, draftSavedAt, keepaliveLimit, startDrafts } from './drafts';
 import { attach } from './files';
 import { loadNewThreadDraft, newThreadFor, resetNewThreads } from './newThread';
+import { renameViewer } from './rename';
 import { viewer } from './viewer';
 import draftsSource from './drafts.ts?raw';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
@@ -1157,6 +1158,31 @@ describe('whose copies are kept', () => {
     pagehide();
     expect(writes()).toEqual([]);
     expect(copy()).toBeNull();
+  });
+
+  // TKT-01M3V6XTYG, Terva review 2009: renaming the viewer's own account is
+  // the same person under a new handle. Their composers, pending saves and
+  // local copies stay, the copies moved under the new handle.
+  it('a rename of the viewer’s own account keeps their drafts', async () => {
+    const stop = startDrafts();
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'alice’s words';
+    const thread = newThreadFor('general');
+    thread.title.value = 'a title alice typed';
+    localStorage.setItem('ketju.draft.alice.reply:t9', '{"kept":true}');
+    renameViewer('alicia');
+    expect(viewer.value.user?.handle).toBe('alicia');
+    expect(composerFor(T)).toBe(c);
+    expect(c.source.value).toBe('alice’s words');
+    expect(newThreadFor('general')).toBe(thread);
+    expect(localStorage.getItem('ketju.draft.alice.reply:t9')).toBeNull();
+    expect(localStorage.getItem('ketju.draft.alicia.reply:t9')).toBe('{"kept":true}');
+    await wait(draftDelay * 2);
+    expect(writes()).toEqual(['PUT alice’s words']);
+    pagehide();
+    expect(localStorage.getItem(copyKey)).toBeNull();
+    stop();
   });
 
   it('a viewer change drops pending saves before any composer is asked for', async () => {

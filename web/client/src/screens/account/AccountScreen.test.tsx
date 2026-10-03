@@ -2,6 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HandleState, Me } from '../../api/dto';
 import { handleMessage } from '../../handles';
+import { maxDelay } from './AccountScreen';
 import { nav } from '../../leave';
 import { viewer } from '../../state/viewer';
 import { problemAnswer, renderAt, screenOf, settle, stubServer, unmount, type Answer } from '../../testing';
@@ -72,6 +73,26 @@ describe('the handle', () => {
     expect(changeButton(root).disabled).toBe(true);
     expect(hint(root).textContent).toMatch(/^You can change your handle again from .+\.$/);
     expect(hint(root).querySelector('time')?.getAttribute('datetime')).toBe(new Date(until).toISOString());
+  });
+
+  // Terva review 2009: a page left open across the date opens by itself.
+  it('opens the field when the cooldown ends while the screen is open', async () => {
+    serve(state(Date.now() + 300));
+    const root = await renderAt('/settings/account');
+    expect(input(root).disabled).toBe(true);
+    await act(() => new Promise((r) => setTimeout(r, 450)));
+    expect(input(root).disabled).toBe(false);
+    expect(changeButton(root).disabled).toBe(false);
+    expect(hint(root).textContent).toContain('Once every 30 days');
+  });
+
+  it('waits out a cooldown longer than one timer allows in steps', async () => {
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    serve(state(Date.now() + 40 * day));
+    const root = await renderAt('/settings/account');
+    expect(input(root).disabled).toBe(true);
+    expect(timer.mock.calls.some(([, ms]) => ms === maxDelay)).toBe(true);
+    expect(timer.mock.calls.every(([, ms]) => (ms ?? 0) <= maxDelay)).toBe(true);
   });
 
   it('is open when next_change_at is null or has passed', async () => {

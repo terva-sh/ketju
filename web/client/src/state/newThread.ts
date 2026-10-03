@@ -198,6 +198,12 @@ export function newThreadNote(forum: string): string {
   return draftNote(key) || (draftStatus(key) === 'off' ? 'Draft not saved' : '');
 }
 
+// renameNewThreadOwner keeps the new-thread composers across a rename of
+// the viewer's own account (state/rename.ts).
+export function renameNewThreadOwner(from: string, to: string) {
+  if (owner === from) owner = to;
+}
+
 // resetNewThreads forgets every new-thread composer and draft key, for
 // tests.
 export function resetNewThreads() {

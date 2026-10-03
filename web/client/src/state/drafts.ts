@@ -527,11 +527,14 @@ export function clearForeignCopies(handle: string | null) {
   });
 }
 
+// last is the handle startDrafts last saw the viewer under.
+let last: string | undefined;
+
 // startDrafts clears other people's copies now and whenever the viewer
 // changes, and drops the pending saves of a viewer who has left, so none goes
 // out under the next person's session.
 export function startDrafts() {
-  let last: string | undefined;
+  last = undefined;
   return effect(() => {
     const handle = viewer.value.user?.handle ?? '';
     untracked(() => {
@@ -540,6 +543,31 @@ export function startDrafts() {
       last = handle;
     });
   });
+}
+
+// renameDraftOwner moves this browser's drafts from handle from to handle
+// to, when the viewer's own account is renamed in this tab (TKT-01M3V6XTYG,
+// Terva review 2009): it is the same account, so its local copies, its
+// pending saves and what its composers hold stay, where a change of viewer
+// drops them. It runs before the viewer takes the new handle, so
+// startDrafts sees no change of viewer.
+export function renameDraftOwner(from: string, to: string) {
+  if (!from || !to || from === to) return;
+  const old = `${copyPrefix}${from}.`;
+  storage(() => {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(old)) keys.push(k);
+    }
+    for (const k of keys) {
+      const v = localStorage.getItem(k);
+      localStorage.removeItem(k);
+      if (v !== null) localStorage.setItem(`${copyPrefix}${to}.${k.slice(old.length)}`, v);
+    }
+  });
+  for (const e of entries.values()) if (e.owner === from) e.owner = to;
+  if (last === from) last = to;
 }
 
 // draftNote is what the composer says about key's draft.

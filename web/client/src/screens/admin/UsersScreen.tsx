@@ -12,6 +12,7 @@ import type {
 } from '../../api/dto';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { renameViewer } from '../../state/rename';
 import { refreshViewer, viewer } from '../../state/viewer';
 import { AgentPanel } from './AgentPanel';
 import { ConfirmButton } from './common/ConfirmButton';
@@ -220,7 +221,8 @@ function UsersTab({ admin }: { admin: boolean }) {
   const onRenamed = (change: HandleChange) => {
     const me = viewer.value;
     if (me.user && me.user.handle.toLowerCase() === change.previous.toLowerCase()) {
-      viewer.value = { ...me, user: { ...me.user, handle: change.handle } };
+      // The admin's own account: their drafts move with it (state/rename.ts).
+      renameViewer(change.handle);
       refreshViewer().catch(() => {});
     }
     const { live, query: q, selected: open } = now.current;

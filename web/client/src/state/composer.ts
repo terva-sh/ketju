@@ -292,6 +292,12 @@ export function discardReply(thread: string) {
   c.failure.value = null;
 }
 
+// renameComposerOwner keeps the composers across a rename of the viewer's
+// own account (state/rename.ts): the same person, under a new handle.
+export function renameComposerOwner(from: string, to: string) {
+  if (owner === from) owner = to;
+}
+
 // resetComposers forgets every composer, for tests.
 export function resetComposers() {
   forget();

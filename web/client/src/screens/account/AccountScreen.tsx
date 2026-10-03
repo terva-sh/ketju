@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { apiGet, apiSend } from '../../api/client';
 import type { HandleChange, HandleState } from '../../api/dto';
 import { asProblem, isProblem } from '../../api/problem';
@@ -6,7 +6,8 @@ import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
 import { PostTime } from '../../components/thread/PostTime';
 import { handleMessage } from '../../handles';
-import { refreshViewer, viewer } from '../../state/viewer';
+import { renameViewer } from '../../state/rename';
+import { refreshViewer } from '../../state/viewer';
 import { Confirm, leaveHome, SettingsHead } from './settings';
 
 export const handleUrl = '/api/v1/settings/handle';
@@ -14,6 +15,10 @@ export const deactivateUrl = '/api/v1/settings/deactivate';
 
 const lastAdmin = 'You are the only active admin. Make someone else an admin first.';
 const tooSoon = 'You can change your handle once every 30 days.';
+
+// maxDelay is the longest setTimeout waits, 2^31 - 1 ms (about 24.8 days);
+// a longer delay fires at once.
+export const maxDelay = 2 ** 31 - 1;
 
 // AccountScreen is /settings/account (TKT-01M3V6XTYG; docs/05 "Changing a
 // handle", decided by the run 2026-10-02): the member changes their handle,
@@ -53,6 +58,16 @@ export function AccountScreen() {
   const state = changed ?? res.data;
   const next = state?.next_change_at ?? null;
   const until = next !== null && next > Date.now() ? next : null;
+  // The screen draws again when the cooldown ends, so a page left open
+  // across the date opens the field without a reload (Terva review 2009).
+  // A timer cannot wait more than maxDelay, so a longer wait draws again
+  // then and sets another.
+  const [woken, wake] = useState(0);
+  useEffect(() => {
+    if (until === null) return;
+    const t = setTimeout(() => wake((n) => n + 1), Math.min(until - Date.now(), maxDelay));
+    return () => clearTimeout(t);
+  }, [until, woken]);
 
   // refuse closes the dialog and shows why beside the field.
   const refuse = (why: string) => {
@@ -73,8 +88,7 @@ export function AccountScreen() {
   const change = async (to: string) => {
     try {
       const r = await apiSend<HandleChange>('PUT', handleUrl, { handle: to }, { status: 200 });
-      const me = viewer.value;
-      if (me.user) viewer.value = { ...me, user: { ...me.user, handle: r.handle } };
+      renameViewer(r.handle);
       refreshViewer().catch(() => {});
       setChanged({ handle: r.handle, next_change_at: r.next_change_at });
       setValue('');
