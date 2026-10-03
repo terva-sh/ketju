@@ -234,6 +234,11 @@ func (w *p4World) restart() {
 	if err := w.r.shutdown(w.t); err != nil {
 		w.t.Fatalf("stopping serve: %v\n%s", err, w.r.log)
 	}
+	// A connection the old serve closed is not one to send a POST on, which
+	// the client would not retry.
+	for _, a := range w.as {
+		a.httpClient().CloseIdleConnections()
+	}
 	w.serve()
 }
 
@@ -254,6 +259,7 @@ func (w *p4World) agent(handle string) *actor {
 	}
 	a := w.from(handle)
 	a.bearer = made.Credential.Token
+	w.as[handle] = a
 	return a
 }
 
@@ -1014,7 +1020,6 @@ func TestPhase4ExitArchivedThreadIsReadOnlyToEveryone(t *testing.T) {
 
 	// After a restart, the actor's seal is read back: still conflict.
 	w.restart()
-	scribe.r = w.r
 	for _, who := range []string{"pat", "ada", "scribe"} {
 		res := as[who].do(t, http.MethodPost, "/api/v1/threads/"+g+"/posts", map[string]any{"source": "After the restart."})
 		if got := codeOf(res); got != "conflict" {
@@ -1381,6 +1386,9 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	var errBuf bytes.Buffer
 	if err := reindexMain(t.Context(), &out, &errBuf, []string{"--root", got, "--projections", "--search"}, reindexOpts{}); err != nil {
 		t.Fatalf("ketju reindex on the copy: %v\n%s%s", err, &out, &errBuf)
+	}
+	for _, a := range viewers {
+		a.httpClient().CloseIdleConnections()
 	}
 	cw.serve()
 	compare("reindexed")
