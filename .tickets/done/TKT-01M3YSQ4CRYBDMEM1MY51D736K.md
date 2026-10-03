@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-03T11:58:32Z
+updated_at: 2026-10-03T12:30:52Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
@@ -244,6 +244,24 @@ Phase B on run/ysq4cr-avatar, rebased onto main after TKT-01M3V73KM1 (Bound how 
 - A gap found while writing the PR body: AvatarForServing refuses an anonymized account's hash, but no test held it. TestAvatarServedOnlyToMembers now anonymizes carol while her avatar_blob still names the hash, and wants not-found. Dropping `u.anonymized = 0` from the generated query fails it; the query was then restored.
 - Dist regenerated and committed. npm run budget: reader 91501 B before (main with V73KM1), 92274 B after (+773 B gzip), within 120000 B.
 - Tests: go vet; go test -race -p 4 ./internal/... ./tools/... and ./cmd/ketju green; tsc; vitest 100 files, 2823 tests; e2e settings, attachments, profile, admin-suspension, admin-rename and admin-agents specs at 390 px and 1440 px, all green.
+
+**agent:claude-code/phase4-run-ysq4cr** at 2026-10-03T12:30:52Z
+
+Terva review 2063 (PR #402, head 3b49aa0, base b7789a18) raised one high and one medium. Both are fixed.
+
+- **high: clearing before uploading bypassed the avatar storage budget.** Fixed in ed0f0030.
+  - The flaw: SetAvatar refused fresh bytes only when they raised the unattached total over the bound (after > before && after > budget). DELETE moved the old avatar into the total, so the next PUT kept it level and passed every time.
+  - The fix: fresh bytes are now refused whenever the total after the change is over the bound. Clearing is still never refused, and stored bytes still pass.
+  - Tests: TestAvatarAndTheUploadBound gains the clear-then-set refusal, plus a loop of clears and sets that must stop under a bound of three avatars. Restoring the old condition fails it.
+  - Docs: the docs/07 PUT /settings/avatar row and the Attachments paragraph state the rule, and record the rise-only check as the alternative that lost.
+- **medium: profile answers overwrote one another.** Fixed in 3dfabef0.
+  - The flaw: AvatarCard's callback set stored to the profile it rendered with, plus the new avatar. A profile save that landed first was undone, and a PATCH answer that landed last put back an older avatar.
+  - The fix: each answer now merges only its own fields into the latest stored state, through a functional update.
+  - Tests: two vitest cases deliver the answers out of order, each way. The old screen fails both.
+
+The dist was regenerated: reader 92290 B, +789 B over main's 91501 B.
+
+Tests rerun: vitest 100 files and 2825 tests; go test -race over internal/service and internal/web; e2e settings.spec.ts at both widths.
 
 ## Summary
 
