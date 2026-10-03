@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-02T23:59:27Z
+updated_at: 2026-10-03T01:45:57Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -174,11 +174,22 @@ Implemented (Phase A, before the dist), as planned, with these readings:
 - e2e: `e2e/account.spec.ts`, seed members `acct-phone` and `acct-desktop` (`seedAccount`, after `seedSettings`, so earlier ids stay). One sign-in, `paceAuth(2)`, row added in `e2e/session.ts`. Passed at 390 px and 1440 px locally. The test also replays the old session cookie after deactivating and finds `/me` anonymous.
 - Reader bundle measured with the dist built from this branch: 79859 B on main at 56636ca, 81070 B with this change (+1211 B; the plan estimated +1300).
 
+**agent:claude-code/phase4-run-6xtyg** at 2026-10-03T01:45:48Z
+
+Terva review 2009 (run dbbe02ab, head c1a051c, base 4936e55): both findings fixed in 14c9238.
+
+- high, "Preserve this account's drafts when updating its handle". The client keys its drafts, their local copies and its composers by the viewer's handle, so the rename read as a change of person and dropped them. `state/rename.ts` `renameViewer(to)` moves each of them to the new handle (`renameDraftOwner`, `renameComposerOwner`, `renameNewThreadOwner`) before the viewer takes it. The account screen and `UsersScreen`'s own-rename path both use it; the second had the same flaw. Tested by drafts.test.ts "a rename of the viewer's own account keeps their drafts". Another open tab of the same browser still treats the rename as a change of viewer, as before. It keeps only what it had not yet saved to the server, and the server's drafts are keyed by user id, so a reload brings them back. Keying the client by a stable id would need an id in `/me`, which this ticket does not change.
+- medium, "Schedule a render when the handle cooldown expires". The screen sets a timer for `next_change_at`, clamped to setTimeout's 2^31 - 1 ms and re-armed. Tested by "opens the field when the cooldown ends while the screen is open" and "waits out a cooldown longer than one timer allows in steps".
+
+Reader bundle after the fix: 81457 B gzip (+1474 B over main's 79983 B).
+
+CI run 2571 failed phase3-exit.spec.ts:186 at 390 px (a watched alert landed on /1, not /2, after goBack). It is outside this change, and I used the one allowed re-run: run 2579 on c1a051c passed.
+
 ## Summary
 
 A member can now change their handle and deactivate their account from `/settings/account` ("Account"), last in the settings links.
 
 - Server: `GET /api/v1/settings/handle` answers `dto.HandleState {handle, next_change_at}`, no-store, behind the PUT's gates, through `identity.Service.HandleState`. It uses `nextChange`, the rule the PUT refuses by. It has goldens `handle-state.member` and `handle-state.moderator`, and a docs/07 row. `/settings/account` is in docs/07's URL scheme.
-- Client: `screens/account/AccountScreen.tsx`. Both actions are confirmed first. A change takes the new handle into the viewer at once and asks /me again. A deactivation loads / in full. The refused-handle words moved to `src/handles.ts`, `ProblemError` reads `available_at`, and `Confirm` takes an optional `explain`.
-- Tests: TestHandleStateRoute, vitest (AccountScreen, problem, viewerGuard, routes, settings links), and `e2e/account.spec.ts` with seed members `acct-phone` and `acct-desktop`.
-- Reader bundle: 81213 B gzip, 1230 B more than main's 79983 B at 74105a5.
+- Client: `screens/account/AccountScreen.tsx`. Both actions are confirmed first. A change renames the viewer in place through `state/rename.ts` `renameViewer`, which keeps the member's drafts and composers, and then asks /me again. A deactivation loads / in full. The field opens by itself when the cooldown ends. The refused-handle words moved to `src/handles.ts`, `ProblemError` reads `available_at`, and `Confirm` takes an optional `explain`.
+- Tests: TestHandleStateRoute, vitest (AccountScreen, problem, viewerGuard, drafts across a rename, routes, settings links), and `e2e/account.spec.ts` with seed members `acct-phone` and `acct-desktop`.
+- Reader bundle: 81457 B gzip, 1474 B more than main's 79983 B.
