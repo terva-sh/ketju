@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T04:41:38Z
+updated_at: 2026-10-03T05:13:53Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -181,6 +181,16 @@ Edit tags is offered only with `can_moderate` (`threadActions.test.ts`). The cri
 - Mutation checks: each of the main source changes was reverted alone, and every one failed a test.
 - e2e: the whole suite passes at 390 and 1440 px, 297 tests, with the new ones in thread-list, new-thread and thread-moderation. Each runs one axe scan.
 - `go test -race -p 4 ./...` passes.
+
+**agent:claude-code/phase4-run-SQPZX** at 2026-10-03T05:13:53Z
+
+Terva review 2047 (run ce149ddb, Actions #2646), on head 6e31fbf7 and base 5bb0d3b4, raised one medium finding. Fixed.
+
+- **Finding.** A form holding only tags offered no Discard, because `canDiscard` ignored the Tags field.
+- **Fix.** `canDiscard` now counts the tags. `discardNewThread` deletes the forum draft only when the form holds something the draft saves (title, body or attachments). A form of tags alone is cleared without a DELETE, because the tags are not in the draft.
+- **Test.** NewThreadScreen.test, "discards a form of tags alone, and deletes no draft". Reverting either change alone fails it.
+
+The reader bundle is now 82846 B (+1363 B over main's 81483 B).
 
 ## Summary
 
