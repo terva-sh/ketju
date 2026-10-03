@@ -176,8 +176,10 @@ can restore the backup.
 A backup holds the database, every thread log and every attachment. It
 leaves out the thread indexes and thumbnails, which are rebuilt when first
 needed, uploads still in progress, `config.toml` and `secrets/`. Keep your
-own copy of `config.toml`. Without the old `secrets/cookie.key`, only
-sign-ins in progress at the moment of the restore are lost.
+own copy of `config.toml`, and of every `client_secret_file` it names,
+which lives outside the data directory. Without the old
+`secrets/cookie.key`, only sign-ins in progress at the moment of the
+restore are lost.
 
 To restore, copy the backup into an empty data directory and check it:
 
@@ -259,6 +261,13 @@ old queries against a schema they were not written for. Restore the backup
 as the "Backing up and restoring" section says, and start the old binary on
 it. What was posted after the backup is not in it, so decide soon after
 the upgrade.
+
+Never run a binary older than v1.0 on thread logs that v1.0 or later has
+written once a moderator has split or merged posts. Those binaries do not
+know the two move records and skip them, so their `ketju reindex` would
+show the moved posts in their old thread again, to that thread's forum's
+readers. Going back past v1.0 means the backup taken before the upgrade,
+and nothing written since (docs/03 "Reserved record type numbers").
 
 ## Recovering a lost or damaged database
 

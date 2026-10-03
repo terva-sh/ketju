@@ -47,7 +47,7 @@ Three operator commitments are decided (10 Q22–Q24, TKT-01M29BW9PB, 2026-09-24
   their own tools, the README documents the `rsync` and `VACUUM INTO`
   procedure, with its order and caveats.
 
-**Decided by the run (2026-10-02, pending maintainer review)**
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03)**
 (TKT-01M29CXK35):
 - **How `ketju backup` reaches a running server.** It connects to a Unix
   socket, `data/ketju.sock`. `serve` creates the socket under the lock with
@@ -91,7 +91,7 @@ Three operator commitments are decided (10 Q22–Q24, TKT-01M29BW9PB, 2026-09-24
   - Copying `secrets/` lost. It would put a key into every backup's
     storage, and the backup gains nothing from it.
 
-**Decided by the run (2026-10-02, pending maintainer review)**
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03)**
 (TKT-01M29CXK3S): **release binaries are built for `linux/amd64` and
 `linux/arm64`**, with `CGO_ENABLED=0` and `-trimpath`. Those two cover a VPS
 and a 64-bit home server such as a Raspberry Pi 4 or 5. Alternatives:

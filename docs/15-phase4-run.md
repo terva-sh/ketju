@@ -84,6 +84,14 @@ Out of scope, and staying out:
 
 ## Decided by the maintainer
 
+**The run's decisions, 2026-10-03.** Reviewing the v1.0 checklist's part 2,
+the maintainer approved every run decision still marked pending in docs/02
+to docs/08: the 21 this run made and three left from Phase 3. Each now reads
+"maintainer approved 2026-10-03". They also approved the internal choices
+recorded only in ticket plans. One stands for v1.0 only: the avatar hash
+signed-out readers still receive, which TKT-01M41MKE81 removes. The
+checklist's part 2 records the rest of what they settled.
+
 **Metrics and the release, 2026-10-02.**
 - `/metrics` is served only on a separate `metrics_listen` address, and is
   off by default (docs/02).

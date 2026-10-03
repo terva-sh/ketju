@@ -136,7 +136,7 @@ hold any role (05). The thread actions are the exception (decided 2026-09-30,
 TKT-01M3RQP0TG). For lock, unlock, pin, unpin, move and slow mode,
 "moderator" means anyone holding `moderate` in the thread's forum, by role or
 through a group, and so it does for a retag (decided by the run, 2026-10-02,
-pending maintainer review, "Thread tags" below, TKT-01M29CYSCP). A move
+maintainer approved 2026-10-03, "Thread tags" below, TKT-01M29CYSCP). A move
 needs `moderate` in both forums. A global pin, and unpinning or replacing one, stays a moderator's or admin's by role, because
 a global pin heads the thread list of every forum and not only the one
 moderated. Whether to let an agent resolve flags or split threads is an
@@ -161,7 +161,7 @@ What a tag may be is in 04 `thread_tags`. Who may set one is decided here.
   - `agent`
 <!-- reserved-tags:end -->
 
-**Decided by the run (2026-10-02, pending maintainer review):**
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03):**
 - "Moderator" means anyone holding `moderate` in the thread's forum, by
   role or through a group, both for a reserved tag on create and for a
   retag. A retag needs nothing else, so a moderator may set or remove a
@@ -418,14 +418,14 @@ this with an archived forum, where an admin may still post; 07 answers
 `conflict`). Reading, watching, muting and the read position are unchanged,
 as in an archived forum (TKT-01M29CRJ64).
 
-**Decided by the run (2026-10-02, pending maintainer review)**, for
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03)**, for
 TKT-01M29CRJ64: the offline `ketju redact` still redacts an archived
 thread. It is the tool for a takedown or an erasure that must reach every
 post (03 "Hard redaction"), and v1 cannot undo an archive, so refusing it
 would keep the text for good. Alternatives: refusing it, so that nothing at
 all is appended after `ThreadArchived`, lost for that reason; requiring an
-unarchive first lost because v1 has no unarchive record (03), and whether
-it gets one is the maintainer's question (TKT-01M3YSQQ5X).
+unarchive first lost because v1 has no unarchive record (03), and the
+maintainer decided on 2026-10-02 that v1 has none (TKT-01M3YSQQ5X).
 
 ## What is intentionally missing
 

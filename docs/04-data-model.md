@@ -750,7 +750,7 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
   updates") would bury every other alert; a row with a running count lost
   because the count needs a column and goes stale whenever a post is
   removed.
-- **Decided by the run (2026-10-02, pending maintainer review,
+- **Decided by the run (2026-10-02, maintainer approved 2026-10-03,
   TKT-01M3ZE2211):** a watch alerts only to posts written at or after the
   moment the member chose it. The generator reads levels when it processes
   a post, which can be later than the post. Without this rule, a member who
@@ -1132,7 +1132,7 @@ The thread's tags, replaced wholesale by `ThreadCreated` and `ThreadTagged`
 These rules bind what the service writes, not what a reader accepts: a log
 written before them, or by the e2e seed, is read as it stands.
 
-**Decided by the run (2026-10-02, pending maintainer review):**
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03):**
 - A request that names a tag twice, before or after folding, keeps one
   copy and is not refused. Alternatives: refusing it with
   `validation-failed` lost because the author meant the tag once and

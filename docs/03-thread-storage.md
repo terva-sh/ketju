@@ -480,8 +480,8 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
 - **Audit.** The action is written to `audit_log` (04 "audit_log"), and the
   index and projections for each thread are brought current by the appended
   records. The operator must be an active admin.
-- **The search index.** Decided by the run (2026-10-01, pending maintainer
-  review), for TKT-01M3NS122F (Clear the search index in the hard-redaction
+- **The search index.** Decided by the run (2026-10-01, maintainer approved
+  2026-10-03), for TKT-01M3NS122F (Clear the search index in the hard-redaction
   tool). After each log's swap the command brings that thread's search rows
   current as it does its projection, and before it deletes the journal it
   deletes the search row of every (thread, ordinal) the journal lists and
@@ -539,8 +539,8 @@ into the target thread's log as new `Post` records with an `origin
 a pointer. Ordinals in the source thread are never renumbered. This preserves
 every permalink ever issued.
 
-**How a move is written. Decided by the run (2026-10-02, pending maintainer
-review), TKT-01M29CXJZZ.** This reads the record table above and leaves every
+**How a move is written. Decided by the run (2026-10-02, maintainer approved
+2026-10-03), TKT-01M29CXJZZ.** This reads the record table above and leaves every
 body field as it stands. The choices are:
 - **Which log holds which record.**
   - A move takes posts from a source thread into a target thread. For a

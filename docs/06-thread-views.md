@@ -50,7 +50,7 @@ human who does.
   chosen the link, and two run decisions should not disagree about one
   control. `/` now lost because it would add one more shortcut that does
   not meet 2.1.4.
-  **Decided by the run (2026-10-02, pending maintainer review;
+  **Decided by the run (2026-10-02, maintainer approved 2026-10-03;
   TKT-01M3V9DWTN):** the single-key shortcuts can be turned off, which is
   the first of the three ways WCAG 2.1 SC 2.1.4 allows. They are on unless
   turned off. A member turns them off in Settings (`/settings`), and the
@@ -77,7 +77,7 @@ human who does.
     is more UI and collides with browser keys, and `j` and `k` act on the
     page rather than on one control.
 
-  **Decided by the run (2026-10-02, pending maintainer review;
+  **Decided by the run (2026-10-02, maintainer approved 2026-10-03;
   TKT-01M3V7GE59):** `/` opens search on every desktop screen that has the
   top bar, while the shortcuts are on. Elsewhere it goes to `/search`,
   whose field takes focus with no query. On `/search` it focuses the field
@@ -92,8 +92,8 @@ human who does.
 
 Under the title the thread head says who started the thread, when, and how
 many posts it has, then the thread's tags, pin and watch state as their own
-tickets add them. **Decided by the run (2026-10-01, pending maintainer
-review):** it reads "started by HANDLE · TIME · N posts" at both widths.
+tickets add them. **Decided by the run (2026-10-01, maintainer approved
+2026-10-03):** it reads "started by HANDLE · TIME · N posts" at both widths.
 HANDLE is the thread's author as its row in the thread list names it. TIME is
 the thread's creation time, written as every other time is (absolute,
 `PostTime`, see "Post anatomy"). N is the thread's post count, the number the
@@ -105,7 +105,7 @@ not absorb; the mockups' "3 days ago" lost to the absolute-time decision of
 2026-10-01; and a post count without deleted posts lost because it would
 disagree with the pager's "posts 51–75 of 212" on the same screen.
 
-**Decided by the run (2026-10-02, pending maintainer review)**, for
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03)**, for
 TKT-01M3YSQPZX and TKT-01M3YSQQ33:
 - The thread's tags follow that line as chips, drawn as the thread list
   draws them, each a link to the forum's list filtered to it ("Thread list
@@ -268,7 +268,7 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   (TKT-01M29CGBW6).
 - Clicking `↩ #37` scrolls to #37 if it is on the page, otherwise shows it in
   a popover with a "go to" link. Same widget for quote links.
-- **Decided by the run (2026-10-02, pending maintainer review;
+- **Decided by the run (2026-10-02, maintainer approved 2026-10-03;
   TKT-01M3YME9AZ):** a quoted post shows its backlinks as a line between its
   body and its footer, "Quoted by #51 #60", at both widths. Each ordinal is a
   link that behaves as the `↩` indicator does: it scrolls to the quoting post
@@ -538,8 +538,8 @@ lost because a reply to yourself is not what the lens is for
     title along its line by a different amount, so the titles no longer
     start at one edge.
 - Optional per-forum display `?sort=created` for announcement forums.
-- **Filtering by tag.** **Decided by the run (2026-10-02, pending
-  maintainer review)**, for TKT-01M29CYSCP and TKT-01M3YSQPZX: a tag chip
+- **Filtering by tag.** **Decided by the run (2026-10-02, maintainer
+  approved 2026-10-03)**, for TKT-01M29CYSCP and TKT-01M3YSQPZX: a tag chip
   is a link. In a forum's list and on the thread head it opens that
   forum's list filtered to the tag, `/f/{slug}?tag=TAG`; on a cross-forum
   list it opens the row's own forum filtered the same way. A filtered list
@@ -599,7 +599,7 @@ lost because a reply to yourself is not what the lens is for
   such as j and k between forums, lost for the same WCAG reason and
   because nothing asked for them.
 
-  **Decided by the run (2026-10-02, pending maintainer review;
+  **Decided by the run (2026-10-02, maintainer approved 2026-10-03;
   TKT-01M3V9DWTN):** once the shortcuts can be turned off ("Paged, not
   infinite"), `?` is bound on the forum index while they are on, and the
   footer's button reads "Press ? for keyboard shortcuts", as the mockup
@@ -651,7 +651,7 @@ TKT-01M29CYSC0):**
 - **The header.** The new thread shows a "continued from <link>" header only
   to a viewer who may read the source. Nobody else sees a header.
 
-**Decided by the run (2026-10-02, pending maintainer review)**, for
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03)**, for
 TKT-01M3YMG0NX: "Reply as new thread" stays offered under a post of a locked
 or archived thread, to a member who may read it and may create a thread.
 It writes only the new thread's log, so the source thread's log does not
@@ -669,8 +669,8 @@ names the other thread only to a viewer who may read it. Everyone else
 reads "N posts were moved to another thread", or "merged from" or "split from
 another thread".
 
-The rest of this section was **decided by the run (2026-10-02, pending
-maintainer review)** for TKT-01M29CYSAM and TKT-01M29CYSBA:
+The rest of this section was **decided by the run (2026-10-02, maintainer
+approved 2026-10-03)** for TKT-01M29CYSAM and TKT-01M29CYSBA:
 - **Where merged posts go.**
   - Posts merged into an existing thread land at its end, in their source
     order, after a "N posts were merged from <link>" notice.

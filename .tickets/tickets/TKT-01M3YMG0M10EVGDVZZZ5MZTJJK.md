@@ -19,7 +19,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T15:26:09Z
+updated_at: 2026-10-03T19:43:06Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -99,6 +99,22 @@ TKT-01M29BKBMC criterion 2, TKT-01M29BKBM7 criterion 3, TKT-01M29CRJ64 criteria 
 **agent:claude-code/phase4-run-orchestrator** at 2026-10-03T15:26:00Z
 
 in-progress to blocked: Waiting on the maintainer: docs/releases/v1.0-checklist.md part 2 (open items) and part 3 (secrets, pre-release tag, v1.0 tag). After the tag the run ticks TKT-01M3YSVEDJ criteria 1, 2 and 5 and closes this ticket.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T19:43:06Z
+
+Maintainer review of the v1.0 checklist's part 2, 2026-10-03, asked as choices:
+- **Groups approved whole:**
+  - A, screens and interaction;
+  - B, data and storage, including how a move is written, watch timing, tag dedupe and sort, the tightened upload bound, and Phase 3's two.
+- **Approved after reading one by one:**
+  - C, access-adjacent: the backup control socket, moderator-by-group for reserved tags and retag, and redact on archived threads (the stale unarchive wording is fixed);
+  - D, operations: linux amd64 and arm64; a backup omits config.toml and secrets/ (README now names client_secret_file too); the release mechanics; and the internal plan-only choices.
+- **The avatar hash** sent to signed-out readers is accepted for v1.0 as a run decision. TKT-01M41MKE81 is filed to remove it.
+- **PR #380 backlinks replay:** an independent full review was requested, as review-only PR #406.
+- **Rollback past v1.0 with moves:** documented in the README and release notes "Upgrading".
+- **Acknowledged:** the out-of-scope items and the one --force-with-lease push. v1.0 ships without the three items.
+
+All 24 "pending maintainer review" markers in docs/02 to docs/08 now read "maintainer approved 2026-10-03" (docs/15 "Decided by the maintainer").
 
 ## Summary
 

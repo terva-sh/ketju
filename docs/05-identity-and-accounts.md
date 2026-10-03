@@ -394,7 +394,7 @@ kept `handle_releases` rows (04), and an
 anonymized account's old handles redirect nowhere and their mentions are
 text.
 
-**Decided by the run (2026-10-02, pending maintainer review;
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03;
 TKT-01M3V6XTYG):** a member changes their handle, and deactivates their
 account, on a settings screen of its own, `/settings/account` ("Account"),
 last in the settings links. The screen reads `GET /settings/handle`, which
@@ -502,7 +502,7 @@ serving.
 
 ## Display name and bio
 
-**Decided by the run (2026-10-02, pending maintainer review;
+**Decided by the run (2026-10-02, maintainer approved 2026-10-03;
 TKT-01M3V6XVVG):** a member edits their own display name and bio on
 `/settings/profile` ("Profile"), first in the settings links. The screen
 reads `GET /settings/profile`, which answers `{display_name, bio}`, the bio
@@ -542,10 +542,15 @@ either key or both and answers the same shape.
     and clear it, `GET /avatars/{hash}` serves it, and `DELETE
     /admin/users/{handle}/avatar` is staff's, on a suspension's authority,
     with a `user.avatar_cleared` row (07). Only the current avatar is served:
-    a replaced one is not found at once, whoever kept its hash. The `avatar`
-    hash still appears in author blocks a signed-out reader is sent, since
-    `member.Author` is built without a viewer; it grants nothing, and the
-    client draws the initial for that reader.
+    a replaced one is not found at once, whoever kept its hash.
+  - **The hash in author blocks.** Decided by the run (2026-10-02,
+    maintainer approved 2026-10-03 for v1.0): the `avatar` hash still
+    appears in author blocks a signed-out reader is sent, because
+    `member.Author` is built without a viewer. Fetching it gets them
+    nothing, and the client draws the initial for that reader. It does tell
+    them whether a member has an avatar and when it changes, so the
+    maintainer asked for it to go: TKT-01M41MKE81 (Leave the avatar hash out
+    of author blocks sent to signed-out readers).
 
   Alternatives: serving it wherever the member's name is visible, signed
   out included, lost; so did any allowed image type served as uploaded,
