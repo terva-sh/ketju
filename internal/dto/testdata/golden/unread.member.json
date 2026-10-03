@@ -28,6 +28,7 @@
       "last_post_at": 1757500400000,
       "pinned": null,
       "locked": false,
+      "archived": false,
       "forum": {
         "slug": "general",
         "name": "General"
@@ -58,6 +59,7 @@
       "last_post_at": 1757400000000,
       "pinned": null,
       "locked": true,
+      "archived": true,
       "forum": {
         "slug": "standups",
         "name": "Standups"

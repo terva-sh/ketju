@@ -612,10 +612,11 @@ redact` still reaches an archived thread (08 "Locking semantics").
 
 The projection writes `thread.archived` against the thread with
 `{"reason"}` (04 "audit_log"). The record moves the log length, and so the
-response cache key. The thread's header and list rows carry no `archived`
-field yet: the field changes the DTO contract the client checks, so it
-lands with the client's archived view, TKT-01M3YSQQ33 (Show archived
-threads and offer archiving in the client).
+response cache key. The thread's `ThreadHeader` and its `ThreadRow` in
+every list, a forum's and the cross-forum ones, carry `archived`, true once
+the thread is archived, read from the projection row the header and rows
+are drawn from (TKT-01M3YSQQ33). The client shows the archived state and
+offers no control the thread would refuse (06 "The thread head").
 
 #### Form versions (TKT-01M29CP2KE)
 

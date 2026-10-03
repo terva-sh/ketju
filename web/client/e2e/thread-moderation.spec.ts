@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { stateFile } from './session';
 
 // Lock, unlock, pin and unpin from the thread screen (TKT-01M3QGH66W), at
@@ -192,3 +192,92 @@ for (const [kind, name] of panels) for (const colorScheme of ['light', 'dark'] a
     expect(found, colorScheme).toEqual([]);
   });
 }
+
+// Archiving (TKT-01M3YSQQ33). It cannot be undone, so each test archives a
+// thread of its own: carol starts it in site-feedback, where live.spec.ts
+// starts its threads too and no spec reads the list by position. The admin
+// ada archives it from the page, and carol reads it afterwards.
+async function startAsCarol(browser: Browser, info: TestInfo): Promise<{ id: string; slug: string; title: string }> {
+  const ctx = await browser.newContext({ ...info.project.use, storageState: stateFile('carol') });
+  try {
+    const title = `Archive ${info.project.name} ${info.title.slice(0, 16)} ${Date.now()}`;
+    const r = await ctx.request.post('/api/v1/forums/site-feedback/threads', {
+      data: { title, source: 'A thread that ends up closed history.' },
+    });
+    expect(r.status(), await r.text()).toBe(201);
+    const t = ((await r.json()) as { thread: { id: string; slug: string } }).thread;
+    return { ...t, title };
+  } finally {
+    await ctx.close();
+  }
+}
+
+const axeFound = async (page: Page, include?: string) => {
+  const builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
+  const { violations } = await (include ? builder.include(include) : builder).analyze();
+  return violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
+};
+
+test.describe('archiving', () => {
+  test.use({ storageState: stateFile('ada') });
+
+  // One axe scan, of the open panel.
+  test('an admin archives a thread with a reason, and its page and row say so', async ({ page, isMobile, browser }, info) => {
+    const t = await startAsCarol(browser, info);
+    await page.goto(`/t/${t.id}/${t.slug}?page=1`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(t.title);
+    await action(page, isMobile, 'archive');
+    const panel = page.getByRole('group', { name: 'Archive this thread?' });
+    await expect(panel.locator('[data-archive-warning]')).toHaveText(
+      'Archiving makes this thread read-only for everyone, admins included. It cannot be undone.',
+    );
+    const reason = panel.getByRole('textbox', { name: 'Reason (optional)' });
+    await expect(reason).toBeFocused();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, 'horizontal overflow').toBeLessThanOrEqual(0);
+    expect(await axeFound(page, '[data-moderate]')).toEqual([]);
+    await reason.fill('Answered and closed.');
+    const body = page.waitForRequest((r) => r.url().endsWith('/archive') && r.method() === 'POST');
+    await send(page, 'archive', 'Archive');
+    expect((await body).postDataJSON()).toEqual({ reason: 'Answered and closed.' });
+    await expect(page.locator('[data-thread-state=archived]')).toHaveText('This thread is archived.');
+    await expect(page.locator('[data-composer]')).toHaveCount(0);
+    if (isMobile) {
+      await page.locator('[data-shell=phone-topbar] .more > button').click();
+      await expect(page.locator('[data-shell=more-menu] [data-action=archive]')).toHaveCount(0);
+      await expect(page.locator('[data-shell=more-menu] [data-action=lock]')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+    } else {
+      await expect(page.locator('[data-shell=toolbar] [data-action=archive]')).toHaveCount(0);
+      await expect(page.locator('[data-shell=toolbar] [data-action=lock]')).toHaveCount(0);
+    }
+
+    await page.goto('/f/site-feedback');
+    const row = page.locator('[data-thread]', { hasText: t.title });
+    await expect(row.locator('.thread-flag.archived')).toHaveAccessibleName('Archived');
+  });
+
+  // carol reads the thread ada archived: the notice, and nothing that
+  // writes. One axe scan, of the whole page.
+  test('a member reads an archived thread and is offered nothing that writes', async ({ page, browser, isMobile }, info) => {
+    const t = await startAsCarol(browser, info);
+    const r = await page.request.post(`/api/v1/admin/threads/${t.id}/archive`, { data: {} });
+    expect(r.status(), await r.text()).toBe(200);
+    const ctx = await browser.newContext({ ...info.project.use, storageState: stateFile('carol') });
+    try {
+      const carol = await ctx.newPage();
+      await carol.goto(`/t/${t.id}/${t.slug}?page=1`);
+      await expect(carol.locator('[data-thread-state=archived]')).toHaveText('This thread is archived.');
+      await expect(carol.locator('#post-1')).toBeVisible();
+      await expect(carol.locator('[data-composer]')).toHaveCount(0);
+      await expect(carol.locator('.replybar-open')).toHaveCount(0);
+      if (!isMobile) {
+        await expect(carol.locator('#post-1 [data-post-action]')).toHaveCount(1);
+        await expect(carol.locator('#post-1 [data-post-action=unread]')).toBeVisible();
+      }
+      expect(await axeFound(carol)).toEqual([]);
+    } finally {
+      await ctx.close();
+    }
+  });
+});

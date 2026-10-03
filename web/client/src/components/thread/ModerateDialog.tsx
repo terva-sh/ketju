@@ -43,6 +43,7 @@ const titles: Record<PanelKind, string> = {
   move: 'Move this thread',
   'slow-mode': 'Slow mode for this thread',
   tags: 'Edit tags',
+  archive: 'Archive this thread?',
 };
 const buttons: Record<PanelKind, string> = {
   lock: 'Lock',
@@ -53,6 +54,7 @@ const buttons: Record<PanelKind, string> = {
   move: 'Move',
   'slow-mode': 'Save',
   tags: 'Save',
+  archive: 'Archive',
 };
 
 export const moderateChanged = 'This thread changed while you were working.';
@@ -61,6 +63,8 @@ export const slowModeConflict = 'Slow mode is already set to that, or the thread
 export const slowModeInvalid = `Enter a whole number of seconds from 0 to ${slowModeMax}.`;
 export const tagsConflict = 'The thread already has these tags, or it is archived.';
 export const tagsInvalid = 'A tag was refused. The Tags field says which.';
+export const archiveWarning = 'Archiving makes this thread read-only for everyone, admins included. It cannot be undone.';
+export const archiveConflict = 'This thread is already archived.';
 
 // moderateRefusal is what a refused action says. A conflict is another
 // moderator, or an archive, getting there first; forbidden is a grant
@@ -88,7 +92,9 @@ export function moderateRefusal(kind: PanelKind, err: unknown): string {
           ? slowModeConflict
           : kind === 'tags'
             ? tagsConflict
-            : moderateChanged;
+            : kind === 'archive'
+              ? archiveConflict
+              : moderateChanged;
     case 'forbidden':
       return kind === 'move' ? 'You cannot move this thread there.' : named ? problemMessage(p).text : moderateForbidden;
     case 'validation-failed':
@@ -151,6 +157,12 @@ export function destinations(forums: Forum[], current: string, admin: boolean): 
 // a rename's is. Save is off while the field holds the tags the thread has,
 // as the server would fold them, and a refused tag is named under the field
 // (state/tagErrors.ts).
+//
+// Archive (TKT-01M3YSQQ33) takes an optional reason, as lock does, under
+// archiveWarning, since v1 has no unarchive (TKT-01M3YSQQ5X), and sends POST
+// /api/v1/admin/threads/{id}/archive. Its answer is the archived header,
+// stored as a lock's is, and the page then offers what an archived thread
+// offers.
 //
 // It is inline, not modal: it keeps the thread head, where the lock and pin
 // notes change, in view, and needs no focus trap. Focus goes to its first
@@ -267,6 +279,7 @@ export function ModerateDialog({
     switch (kind) {
       case 'lock':
       case 'unlock':
+      case 'archive':
         return reason.trim() ? { reason } : {};
       case 'pin':
         return { scope: staff ? scope : 'forum', until: untilMs };
@@ -356,11 +369,17 @@ export function ModerateDialog({
       <h2 id={heading}>{titles[kind]}</h2>
       {offered || ((kind === 'rename' || kind === 'move' || kind === 'tags') && refused) ? (
         <form onSubmit={send}>
-          {(kind === 'lock' || kind === 'unlock') && (
+          {kind === 'archive' && (
+            <p id={hint} class="moderate-hint" data-archive-warning>
+              {archiveWarning}
+            </p>
+          )}
+          {(kind === 'lock' || kind === 'unlock' || kind === 'archive') && (
             <label class="moderate-field">
               Reason (optional)
               <textarea
                 value={reason}
+                aria-describedby={kind === 'archive' ? hint : undefined}
                 rows={2}
                 maxLength={maxModerateReason}
                 onInput={(e) => setReason(e.currentTarget.value)}

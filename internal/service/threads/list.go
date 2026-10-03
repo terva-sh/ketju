@@ -148,6 +148,7 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 			LastPostAuthor: authors[r.LastPostAuthorID],
 			LastPostAt:     dto.Millis(r.LastPostAt),
 			Locked:         r.Locked,
+			Archived:       r.Archived,
 		}
 		// Only the pins that head the page are shown as pinned: a row
 		// further down is there because its pin has expired.

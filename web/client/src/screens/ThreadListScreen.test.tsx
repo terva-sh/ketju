@@ -118,6 +118,26 @@ describe('rows', () => {
     expect(row(root, '3yymw47g00002').querySelector('.thread-tags')).toBeNull();
   });
 
+  // TKT-01M3YSQQ33: an archived row carries an Archived flag where a locked
+  // one carries the lock, and only that.
+  it('flag an archived thread, by name, in place of the lock', async () => {
+    const list = structuredClone(memberList) as ThreadList;
+    list.threads[0].archived = true;
+    list.threads[1].archived = true;
+    list.threads[1].locked = true;
+    const root = await listAt('/f/general', list, memberMe);
+    for (const id of ['3yymw47g00001', '3yymw47g00002']) {
+      const flag = row(root, id).querySelector('.thread-flag.archived')!;
+      expect(flag.textContent, id).toBe('Archived');
+      expect(flag.getAttribute('title'), id).toBe('Archived');
+      expect(row(root, id).querySelector('.thread-flag.locked'), id).toBeNull();
+    }
+    list.threads[1].archived = false;
+    const live = await listAt('/f/general', list, memberMe);
+    expect(row(live, '3yymw47g00002').querySelector('.thread-flag.archived')).toBeNull();
+    expect(row(live, '3yymw47g00002').querySelector('.thread-flag.locked')).not.toBeNull();
+  });
+
   it('count one reply in the singular', async () => {
     const list = structuredClone(memberList) as ThreadList;
     list.threads[0].reply_count = 1;

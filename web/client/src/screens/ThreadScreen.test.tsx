@@ -414,7 +414,7 @@ describe('moderating from the thread screen', () => {
       [`PATCH ${url}`]: (b) => moderate.rename?.(b) ?? problemAnswer('internal', 500),
       'GET /api/v1/forums': () => ({ status: 200, body: { forums }, headers: { ETag: '"f1"' } }),
     };
-    for (const kind of ['lock', 'unlock', 'pin', 'unpin', 'move'])
+    for (const kind of ['lock', 'unlock', 'pin', 'unpin', 'move', 'archive'])
       routes[`POST /api/v1/admin/threads/${id}/${kind}`] = (b) => moderate[kind]?.(b) ?? problemAnswer('internal', 500);
     routes[`PUT /api/v1/admin/threads/${id}/slow-mode`] = (b) => moderate['slow-mode']?.(b) ?? problemAnswer('internal', 500);
     routes[`PUT /api/v1/admin/threads/${id}/tags`] = (b) => moderate.tags?.(b) ?? problemAnswer('internal', 500);
@@ -1249,6 +1249,131 @@ describe('moderating from the thread screen', () => {
     expect(panel()!.querySelector('[role=alert]')?.textContent).toBe('You can no longer moderate this thread.');
     expect(panel()!.querySelector<HTMLInputElement>('input[type=text]')!.value).toBe('garden water');
     expect(sendDisabled()).toBe(true);
+  });
+
+  // TKT-01M3YSQQ33: an archived thread takes nothing from anyone, admins
+  // included (docs/08 "Locking semantics"), so the page offers no control
+  // the server would refuse, and keeps watch and Mark unread, which it
+  // allows. The page is served with can_moderate and can_reply true here,
+  // so the header alone is what takes them away.
+  const toolbar = (root: HTMLElement) =>
+    [...root.querySelectorAll('[data-shell=toolbar] [data-action]')].map((b) => b.getAttribute('data-action'));
+  const postActions = (root: HTMLElement) =>
+    [...new Set([...root.querySelectorAll('article.post [data-post-action]')].map((b) => b.getAttribute('data-post-action')))];
+
+  it('an archived thread says so and offers no write to a member, a moderator or an admin', async () => {
+    for (const role of ['member', 'moderator', 'admin'] as const) {
+      as(role);
+      pages = [at({ thread: { archived: true, tags: ['garden'] }, viewer: { can_reply: true } })];
+      const root = await renderAt(`/t/${id}/a`);
+      expect(root.querySelector('[data-thread-state=archived]')?.textContent, role).toBe('This thread is archived.');
+      expect(root.querySelector('[data-thread-state=locked]'), role).toBeNull();
+      expect(root.querySelector('[data-composer]'), role).toBeNull();
+      // Watch, First unread and Mark unread stay; nothing that writes does.
+      expect(toolbar(root), role).toEqual(expect.arrayContaining(['watch', 'mark-unread', 'copy-link']));
+      for (const a of ['reply', 'rename', 'lock', 'unlock', 'pin', 'unpin', 'move', 'slow-mode', 'tags', 'archive'])
+        expect(toolbar(root), `${role} ${a}`).not.toContain(a);
+      // On the posts, unread from here stays, and nothing else.
+      expect(postActions(root), role).toEqual(['unread']);
+      expect(root.querySelector('[data-post-action=restore]'), role).toBeNull();
+      // And the phone's top bar has no reply bar.
+      isPhone.value = true;
+      const phone = await renderAt(`/t/${id}/a`);
+      expect(phone.querySelector('.replybar-open'), role).toBeNull();
+      isPhone.value = false;
+    }
+  });
+
+  // The author's own windows close too: alice's post, made just now, is hers
+  // to edit and delete in a live thread and in no archived one.
+  it("an archived thread offers its author nothing on a post inside the windows", async () => {
+    as('member');
+    const fresh = (archived: boolean): ThreadPage => {
+      const p = at({ thread: { archived }, viewer: { can_moderate: false } });
+      p.posts = p.posts.map((post) => (post.ordinal === 61 ? { ...post, created_at: Date.now() } : post));
+      return p;
+    };
+    const own = (root: HTMLElement) =>
+      [...root.querySelectorAll('#post-61 [data-post-action]')].map((b) => b.getAttribute('data-post-action'));
+    pages = [fresh(false)];
+    let root = await renderAt(`/t/${id}/a`);
+    expect(own(root)).toEqual(expect.arrayContaining(['edit', 'delete']));
+    pages = [fresh(true)];
+    root = await renderAt(`/t/${id}/a`);
+    expect(own(root)).toEqual(['unread']);
+  });
+
+  it('a locked and archived thread shows only the archived notice', async () => {
+    pages = [at({ thread: { archived: true, locked: true } })];
+    const root = await renderAt(`/t/${id}/a`);
+    expect([...root.querySelectorAll('[data-thread-state]')].map((p) => p.getAttribute('data-thread-state'))).toEqual(['archived']);
+  });
+
+  it('an admin, and nobody else, is offered Archive on a live thread', async () => {
+    as('admin');
+    let root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-shell=toolbar] [data-action=archive]')?.textContent).toBe('Archive…');
+    // Whatever the page says of moderating the forum: archiving is a role's.
+    pages = [at({ viewer: { can_moderate: false } })];
+    root = await renderAt(`/t/${id}/a`);
+    expect(toolbar(root)).toContain('archive');
+    for (const role of ['member', 'moderator'] as const) {
+      as(role);
+      pages = [at()];
+      root = await renderAt(`/t/${id}/a`);
+      expect(toolbar(root), role).not.toContain('archive');
+    }
+  });
+
+  it('an admin archives with a reason and the page shows the archived state', async () => {
+    as('admin');
+    // The page asked for again is held, so what shows first is the
+    // archive's own answer, the header, with the page still saying the
+    // admin may reply.
+    let land!: () => void;
+    const held = new Promise<ThreadPage>((r) => (land = () => r(at({ thread: { archived: true, log_length: len + 1 }, viewer: { can_reply: false } }))));
+    pages = [at(), held];
+    moderate.archive = () => ({ status: 200, body: header({ archived: true }), headers: { 'Cache-Control': 'no-store' } });
+    const root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-composer]')).not.toBeNull();
+    await open(root, 'archive');
+    expect(panel()!.querySelector('h2')?.textContent).toBe('Archive this thread?');
+    const warning = panel()!.querySelector('[data-archive-warning]')!;
+    expect(warning.textContent).toBe('Archiving makes this thread read-only for everyone, admins included. It cannot be undone.');
+    const reason = panel()!.querySelector('textarea')!;
+    expect(document.activeElement).toBe(reason);
+    expect(reason.getAttribute('aria-describedby')).toBe(warning.id);
+    reason.value = 'Finished, kept for the record';
+    await act(async () => void reason.dispatchEvent(new Event('input', { bubbles: true })));
+    await submit();
+    // The header answered shows at once, before the page is answered again.
+    expect(root.querySelector('[data-thread-state=archived]')?.textContent).toBe('This thread is archived.');
+    expect(root.querySelector('[data-composer]')).toBeNull();
+    expect(postActions(root)).toEqual(['unread']);
+    land();
+    await settle(root);
+    expect(root.querySelector('[data-thread-state=archived]')?.textContent).toBe('This thread is archived.');
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/archive`, body: { reason: 'Finished, kept for the record' } }]);
+    expect(panel()).toBeNull();
+    expect(toolbar(root)).not.toContain('archive');
+    expect(toolbar(root)).not.toContain('lock');
+    expect(document.activeElement).toBe(root.querySelector('h1'));
+  });
+
+  it('an archive with no reason sends none, and a conflict says the thread is already archived', async () => {
+    as('admin');
+    pages = [at(), at({ thread: { archived: true, log_length: len + 1 } })];
+    moderate.archive = () => problemAnswer('conflict', 409);
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'archive');
+    await submit();
+    await settle(root);
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/archive`, body: {} }]);
+    expect(panel()!.querySelector('[role=alert]')?.textContent).toBe('This thread is already archived.');
+    // The page asked again says archived: the panel keeps its words and
+    // offers Close.
+    expect(panel()!.querySelector('[data-moderate-close]')?.textContent).toBe('Close');
+    expect(panel()!.querySelector('.moderate-send')).toBeNull();
   });
 
   it('Edit tags is not offered without can_moderate', async () => {

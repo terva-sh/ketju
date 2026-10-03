@@ -15,8 +15,9 @@ export type ModerateKind = 'lock' | 'unlock' | 'pin' | 'unpin';
 // PanelKind is what the panel under the thread head can be open for: the
 // four above, rename and move (docs/07 "Renaming and moving threads"), slow
 // mode, PUT /api/v1/admin/threads/{id}/slow-mode (TKT-01M3R0PM0K), and the
-// thread's tags, PUT /api/v1/admin/threads/{id}/tags (TKT-01M3YSQPZX).
-export type PanelKind = ModerateKind | 'rename' | 'move' | 'slow-mode' | 'tags';
+// thread's tags, PUT /api/v1/admin/threads/{id}/tags (TKT-01M3YSQPZX), and
+// archiving, POST /api/v1/admin/threads/{id}/archive (TKT-01M3YSQQ33).
+export type PanelKind = ModerateKind | 'rename' | 'move' | 'slow-mode' | 'tags' | 'archive';
 
 // ModerateState is what decides which moderation actions a thread offers:
 // its header's lock and pin, and whether the viewer is a moderator or admin
@@ -64,6 +65,9 @@ export interface ThreadActionOptions {
   // watch is set only for a signed-in member: level is the thread's own,
   // forumLevel its forum's, and open brings up the watch dialog.
   watch?: { level: string; forumLevel: string; open: () => void };
+  // archive brings up the archive panel; the thread page sets it for an
+  // admin by role on a thread that is not archived.
+  archive?: () => void;
 }
 
 // threadActions is every action on a thread, the one list the desktop
@@ -100,6 +104,12 @@ export interface ThreadActionOptions {
 // neither has one (TKT-01M3V6Y87D).
 //
 // Rename is offered when the page hands over rename (see ThreadScreen).
+//
+// Archive is offered when the page hands it over: to an admin by role, on a
+// thread that is not archived (docs/08 "Primitives", TKT-01M3YSQQ33). On an
+// archived thread the page hands over no moderate, rename or archive and no
+// reply, since the server refuses them all, and keeps watch, First unread
+// and Mark unread, which it allows.
 export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions = {}): ShellAction[] {
   const m = opts.moderate;
   return [
@@ -116,6 +126,7 @@ export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions =
           { id: 'tags', label: 'Edit tags…', run: () => m.open('tags') },
         ]
       : []),
+    ...(opts.archive ? [{ id: 'archive', label: 'Archive…', run: opts.archive }] : []),
     {
       id: 'copy-link',
       label: 'Copy link',

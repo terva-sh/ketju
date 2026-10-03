@@ -26,7 +26,7 @@ import {
   type ThreadRef,
   type UnreadHandler,
 } from '../components/thread/Post';
-import { isOwn, noControls, postControls } from '../components/thread/postControls';
+import { isOwn, noControls, postControls, readOnlyViewer } from '../components/thread/postControls';
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
 import { PostTime } from '../components/thread/PostTime';
@@ -151,7 +151,13 @@ export function ThreadScreen() {
   // Reply summons the composer at the foot of the thread body, so it is
   // offered only where there is one: not on the post history route, which
   // shows no body (review 543).
-  const canReply = !history && (shown?.viewer.can_reply ?? false);
+  //
+  // An archived thread takes nothing from anyone (docs/08 "Locking
+  // semantics"). The header shown says so as soon as an archive answers, a
+  // moment before the page is answered again, so what the page offers is
+  // read from it too (TKT-01M3YSQQ33).
+  const archived = head?.archived ?? false;
+  const canReply = !history && !archived && (shown?.viewer.can_reply ?? false);
   // The reader's draft for the thread is loaded once they may reply, here
   // rather than in the composer, so the phone's reply bar shows it before
   // the sheet opens. loadReplyDraft asks once per thread per session.
@@ -169,8 +175,11 @@ export function ThreadScreen() {
   // (moderateKinds). Slow mode is offered to the same viewers whatever the
   // thread's state. The panel is for the thread it was opened on, so moving
   // to another thread leaves it behind.
-  const mayModerate = !history && (shown?.viewer.can_moderate ?? false);
+  const mayModerate = !history && !archived && (shown?.viewer.can_moderate ?? false);
   const staff = isStaff(viewer.value.user?.role);
+  // Archive is an admin's, by role, on a thread not yet archived.
+  const admin = viewer.value.user?.role === 'admin';
+  const offerArchive = !history && !!shown && admin && !archived;
   const [moderating, setModerating] = useState<{ thread: string; kind: PanelKind } | null>(null);
   const locked = head?.locked ?? false;
   const pinned = head?.pinned ?? null;
@@ -244,6 +253,7 @@ export function ThreadScreen() {
               ? { locked, pinned, staff, open: (kind) => setModerating({ thread: known.id, kind }) }
               : undefined,
             rename: offerRename ? () => setModerating({ thread: known.id, kind: 'rename' }) : undefined,
+            archive: offerArchive ? () => setModerating({ thread: known.id, kind: 'archive' }) : undefined,
             watch: offerWatch
               ? {
                   level: watch.watch,
@@ -266,6 +276,7 @@ export function ThreadScreen() {
       pinned?.scope,
       pinned?.until,
       offerRename,
+      offerArchive,
       offerWatch,
       watch?.watch,
       watch?.forum_watch,
@@ -322,10 +333,16 @@ export function ThreadScreen() {
         {/* The thread's tags follow the line above, each a link to its
             forum's list filtered to it (docs/06 "The thread head"). */}
         {head && <TagChips tags={head.tags} forum={head.forum.slug} />}
-        {head?.locked && (
-          <p class="locked" data-thread-state="locked">
-            This thread is locked.
+        {archived ? (
+          <p class="locked" data-thread-state="archived">
+            This thread is archived.
           </p>
+        ) : (
+          head?.locked && (
+            <p class="locked" data-thread-state="locked">
+              This thread is locked.
+            </p>
+          )
         )}
         {head?.pinned && <PinnedNote pinned={head.pinned} />}
         <div class="thread-tools">
@@ -349,6 +366,8 @@ export function ThreadScreen() {
           offered={
             panel.kind === 'rename'
               ? offerRename
+              : panel.kind === 'archive'
+                ? offerArchive
               : mayModerate &&
                 (panel.kind === 'move' || panel.kind === 'slow-mode' || panel.kind === 'tags' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
           }
@@ -356,7 +375,7 @@ export function ThreadScreen() {
           onChanged={res.retry}
           onClose={() => setModerating(null)}
           current={{ title: head.title, forum: head.forum.slug, tags: head.tags }}
-          admin={viewer.value.user?.role === 'admin'}
+          admin={admin}
           onWindowClosed={() => setClosedOn(head.id)}
         />
       )}
@@ -384,6 +403,7 @@ export function ThreadScreen() {
               lens={lens}
               onChanged={res.retry}
               current={pageFor === me}
+              archived={archived}
               firstUnread={goFirstUnread}
             />
           )}
@@ -427,6 +447,7 @@ function ThreadBody({
   lens,
   onChanged,
   current,
+  archived,
   firstUnread,
 }: {
   page: ThreadPage;
@@ -442,6 +463,10 @@ function ThreadBody({
   onChanged: () => void;
   // current is whether page was asked for by the viewer signed in now.
   current: boolean;
+  // archived is whether the thread shown is archived, by the newest header:
+  // the page then offers what readOnlyViewer leaves, no flag, and no
+  // controls on posts.
+  archived: boolean;
   // firstUnread is the thread page's First unread, when it offers one.
   firstUnread?: () => void;
 }) {
@@ -506,7 +531,8 @@ function ThreadBody({
   // Quote and reply, and the composer they feed, are offered to a reader
   // who may reply here, which the server decides (can_reply: the permission,
   // and the lock unless they moderate).
-  const canReply = page.viewer.can_reply;
+  const v = archived ? readOnlyViewer(page.viewer) : page.viewer;
+  const canReply = v.can_reply;
   const actions: PostActions | undefined = canReply
     ? { quote: (o, text) => quotePost(thread.id, o, text), reply: (o) => replyToPost(thread.id, o) }
     : undefined;
@@ -514,9 +540,9 @@ function ThreadBody({
   // user), on the posts Post allows (mayFlag). The dialog is told where
   // focus goes back to, because on a phone the item that opened it is gone.
   const [flagging, setFlagging] = useState<{ ordinal: number; returnTo: HTMLElement } | null>(null);
-  const onFlag: FlagHandler | undefined = viewer.value.user
-    ? (ordinal, returnTo) => setFlagging({ ordinal, returnTo })
-    : undefined;
+  // An archived thread takes no flag (docs/07 `POST /threads/{id}/flags`).
+  const onFlag: FlagHandler | undefined =
+    viewer.value.user && !archived ? (ordinal, returnTo) => setFlagging({ ordinal, returnTo }) : undefined;
   // Edit, delete and restore on the viewer's own posts, and on every post for
   // a viewer who moderates the forum, offered by one rule at this render's
   // now (postControls). The clock renders the page again when the soonest
@@ -524,10 +550,10 @@ function ThreadBody({
   // TKT-01M3QHKD21). Nothing is offered while the page is another viewer's
   // (current false), until the page asked for again answers.
   const now = Date.now();
-  const offers = posts.map((p) => (current ? postControls(p, page.viewer, now) : noControls));
+  const offers = posts.map((p) => (current ? postControls(p, v, now) : noControls));
   useWindowClock(offers.map((c) => c.closesAt));
-  const windows = page.viewer.author_windows;
-  const moderates = page.viewer.can_moderate && !!viewer.value.user;
+  const windows = v.author_windows;
+  const moderates = v.can_moderate && !!viewer.value.user;
   const ownOf = (p: PostDTO, i: number): Own | undefined =>
     current && (moderates || isOwn(p))
       ? {
@@ -554,7 +580,7 @@ function ThreadBody({
   const slow: Slow = {
     seconds: page.viewer.slow_mode_seconds,
     nextPostAt: page.viewer.next_post_at,
-    exempt: page.viewer.can_moderate,
+    exempt: v.can_moderate,
   };
   useThreadShortcuts(page, lensArg, route);
   const list = useRef<HTMLElement>(null);
@@ -637,11 +663,11 @@ function ThreadBody({
               postOf={postOf}
               onPosted={posted}
               slow={slow}
-              canUpload={page.viewer.can_upload}
+              canUpload={v.can_upload}
             />
           )
         ) : (
-          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} slow={slow} canUpload={page.viewer.can_upload} />
+          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} slow={slow} canUpload={v.can_upload} />
         ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
       {flagging && (

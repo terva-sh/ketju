@@ -30,6 +30,10 @@ export function unreadHref(t: Pick<Row, 'id' | 'slug' | 'last_read_ordinal'>): s
 // row names its forum first in the meta line, a link to the forum's list
 // (TKT-01M3V6Y4JP); a forum's own list sends forum null and draws none.
 //
+// An archived thread carries an Archived flag where a locked one carries the
+// lock, and only that one: it takes no post either way (docs/06 "The thread
+// head", TKT-01M3YSQQ33).
+//
 // Its tags are links to a forum's list filtered to each (TKT-01M3YSQPZX):
 // the row's own forum on a cross-forum list, and listForum, the list's, on
 // a forum's own, whose rows name no forum.
@@ -45,11 +49,18 @@ export function ThreadRow({ thread: t, signedIn, listForum }: { thread: Row; sig
               Pinned
             </span>
           )}
-          {t.locked && (
-            <span class="thread-flag locked" title="Locked">
-              <Icon name="lock" size={14} />
-              <span class="visually-hidden">Locked</span>
+          {t.archived ? (
+            <span class="thread-flag archived" title="Archived" data-archived>
+              <Icon name="archive" size={14} />
+              <span class="visually-hidden">Archived</span>
             </span>
+          ) : (
+            t.locked && (
+              <span class="thread-flag locked" title="Locked">
+                <Icon name="lock" size={14} />
+                <span class="visually-hidden">Locked</span>
+              </span>
+            )
           )}
           <a class="thread-title hit" href={threadHref(t)}>
             <span>{t.title}</span>

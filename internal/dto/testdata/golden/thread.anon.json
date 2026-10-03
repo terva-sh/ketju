@@ -17,6 +17,7 @@
     "post_count": 212,
     "log_length": 483920,
     "locked": false,
+    "archived": false,
     "pinned": {
       "scope": "forum",
       "until": 1760000000000

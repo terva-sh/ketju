@@ -23,6 +23,16 @@ export interface Controls {
 
 export const noControls: Controls = { edit: false, delete: false, restore: false, closesAt: null };
 
+// readOnlyViewer is the viewer block an archived thread is offered by, to
+// anyone (TKT-01M3YSQQ33): no reply, no upload, no moderation, and a forum
+// read-only to them, so postControls offers nothing on any post, as the
+// server refuses every write after ThreadArchived (docs/08 "Locking
+// semantics"). The server's own block already says no reply and no upload;
+// this covers the moment between an archive's answer and the page's.
+export function readOnlyViewer(v: ThreadViewer): ThreadViewer {
+  return { ...v, can_reply: false, can_upload: false, can_moderate: false, forum_read_only: true };
+}
+
 // postControls is the one offer rule for Edit, Delete and Restore on a post
 // (docs/07 "Edit, delete and restore"). It offers each only where the server
 // would accept it at now, in ms since the epoch (authorize and restoreRecord

@@ -158,8 +158,11 @@ type ThreadHeader struct {
 	// LogLength is the byte length of the thread log this response reflects.
 	// It is part of the ETag and of the response cache key, and it is what a
 	// client passes back as after_log_length to ask for what it has not seen.
-	LogLength int64    `json:"log_length"`
-	Locked    bool     `json:"locked"`
+	LogLength int64 `json:"log_length"`
+	Locked    bool  `json:"locked"`
+	// Archived is true once the thread is archived: read-only to everyone,
+	// for good (docs/04 `threads`, docs/08 "Locking semantics").
+	Archived  bool     `json:"archived"`
 	Pinned    *Pinned  `json:"pinned"`
 	Tags      []string `json:"tags"`
 	CreatedAt Millis   `json:"created_at"`
@@ -398,6 +401,8 @@ type ThreadRow struct {
 
 	Pinned *Pinned `json:"pinned"`
 	Locked bool    `json:"locked"`
+	// Archived is the thread's archived state, as its header says.
+	Archived bool `json:"archived"`
 
 	// Forum is the thread's forum on a cross-forum list (/unread, /new,
 	// /participated, /watching), where rows from many forums meet, and nil

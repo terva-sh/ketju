@@ -45,8 +45,11 @@ type ThreadRow struct {
 	LastPostAuthorID int64
 	LastPostOrdinal  int64
 	Locked           bool
-	PinnedScope      sql.NullString
-	PinnedUntil      sql.NullInt64
+	// Archived is the thread's archived flag (docs/04 `threads`), shown on
+	// its row (TKT-01M3YSQQ33).
+	Archived    bool
+	PinnedScope sql.NullString
+	PinnedUntil sql.NullInt64
 	// LastReadOrdinal is the viewer's read boundary: their read position, 0
 	// with no row, moved past the posts mark_all_read_at made read, which
 	// is dbq's ReadBoundary and what the thread page lands on.
@@ -94,7 +97,7 @@ func (r ThreadRow) Key(s Sort) Key {
 // TestUnreadMatchesUnreadCount holds the two together.
 const rowColumns = `
 SELECT t.id, t.forum_id, t.slug, t.title, t.author_id, t.created_at, t.post_count, t.last_post_at,
-       t.last_post_author_id, t.last_post_ordinal, t.locked, t.pinned_scope, t.pinned_until,
+       t.last_post_author_id, t.last_post_ordinal, t.locked, t.archived, t.pinned_scope, t.pinned_until,
        CASE
          WHEN me.mark_all_read_at IS NULL OR t.last_post_ordinal <= coalesce(rp.last_read_ordinal, 0)
            THEN coalesce(rp.last_read_ordinal, 0)
@@ -244,13 +247,14 @@ func scanRows(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]ThreadR
 	var out []ThreadRow
 	for rows.Next() {
 		var r ThreadRow
-		var locked int64
+		var locked, archived int64
 		if err := rows.Scan(&r.ID, &r.ForumID, &r.Slug, &r.Title, &r.AuthorID, &r.CreatedAt, &r.PostCount,
-			&r.LastPostAt, &r.LastPostAuthorID, &r.LastPostOrdinal, &locked, &r.PinnedScope, &r.PinnedUntil,
+			&r.LastPostAt, &r.LastPostAuthorID, &r.LastPostOrdinal, &locked, &archived, &r.PinnedScope, &r.PinnedUntil,
 			&r.LastReadOrdinal, &r.Unread, &r.Watch); err != nil {
 			return nil, err
 		}
 		r.Locked = locked != 0
+		r.Archived = archived != 0
 		out = append(out, r)
 	}
 	return out, rows.Err()

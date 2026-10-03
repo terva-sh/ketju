@@ -464,6 +464,16 @@ func archivedForumThread() ThreadPage {
 	return p
 }
 
+// archivedThread is a thread archived in a live forum (TKT-01M29CRJ64):
+// read-only to everyone, so the viewer block offers no reply, and the
+// header and its rows say archived (TKT-01M3YSQQ33).
+func archivedThread() ThreadPage {
+	p := lockedThread()
+	p.Thread.Locked = false
+	p.Thread.Archived = true
+	return p
+}
+
 // crossForumList is /unread and its siblings: the same rows with no forum,
 // which is the one field that separates "this forum" from "anywhere".
 func crossForumList() ThreadList {
@@ -476,6 +486,8 @@ func crossForumList() ThreadList {
 	l.Threads[0].Pinned = nil
 	l.Threads[0].Forum = &ForumRef{Slug: "general", Name: "General"}
 	l.Threads[1].Forum = &ForumRef{Slug: "standups", Name: "Standups"}
+	// A row's archived flag (TKT-01M3YSQQ33).
+	l.Threads[1].Archived = true
 	return l
 }
 
@@ -550,6 +562,8 @@ var corpus = map[string]any{
 
 	"thread-locked." + tMember:   lockedThread(),
 	"thread-archived." + tMember: archivedForumThread(),
+	// An archived thread, not an archived forum's (TKT-01M3YSQQ33).
+	"thread-archived-thread." + tMember: archivedThread(),
 
 	"slow-mode." + tModerator: SlowMode{Seconds: 30},
 

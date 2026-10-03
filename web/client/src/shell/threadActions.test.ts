@@ -121,6 +121,28 @@ describe('the thread actions', () => {
     expect(threadActions(t, { canReply: true }).map((a) => a.id)).not.toContain('move');
   });
 
+  // TKT-01M3YSQQ33: Archive comes with the archive option, which the page
+  // sets for an admin by role on a thread not yet archived, after the
+  // moderation and before Copy link. On an archived thread the page hands
+  // over watch and Mark unread and nothing that writes, and those stay.
+  it('offers Archive with archive, and watch and Mark unread without moderation', () => {
+    const archive = vi.fn();
+    const actions = threadActions(t, { archive, moderate: { locked: false, pinned: null, staff: true, open() {} } });
+    expect(actions.map((a) => a.id).slice(-2)).toEqual(['archive', 'copy-link']);
+    const item = actions.find((a) => a.id === 'archive')!;
+    expect(item.label).toBe('Archive…');
+    item.run();
+    expect(archive).toHaveBeenCalledOnce();
+    expect(threadActions(t, { moderate: { locked: false, pinned: null, staff: true, open() {} } }).map((a) => a.id)).not.toContain('archive');
+    const watch = { level: '', forumLevel: '', open() {} };
+    expect(threadActions(t, { markUnread() {}, firstUnread() {}, watch }).map((a) => a.id)).toEqual([
+      'first-unread',
+      'mark-unread',
+      'watch',
+      'copy-link',
+    ]);
+  });
+
   it('counts only moderators and admins by role as staff', () => {
     expect(['moderator', 'admin', 'member', 'agent', '', undefined].map(isStaff)).toEqual([true, true, false, false, false, false]);
   });

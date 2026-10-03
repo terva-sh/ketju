@@ -89,6 +89,7 @@ func (s *Service) CrossList(ctx context.Context, v domain.Viewer, list views.Lis
 			LastPostAuthor: authors[r.LastPostAuthorID],
 			LastPostAt:     dto.Millis(r.LastPostAt),
 			Locked:         r.Locked,
+			Archived:       r.Archived,
 			Forum:          &forum,
 			// No list holds a muted thread, so every row's badge is its
 			// count.

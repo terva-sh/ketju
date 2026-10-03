@@ -572,6 +572,7 @@ func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, starter dto.Author,
 		PostCount: n,
 		LogLength: logLength,
 		Locked:    row.Locked != 0,
+		Archived:  row.Archived != 0,
 		Tags:      append([]string{}, tags...),
 		CreatedAt: dto.Millis(row.CreatedAt),
 	}

@@ -62,6 +62,9 @@ func TestArchiveThread(t *testing.T) {
 	if h.ID != id.String() {
 		t.Errorf("the answer is the header of %s", h.ID)
 	}
+	if !h.Archived {
+		t.Error("the answer's header does not say archived")
+	}
 	hd, body := w.lastRecord(id)
 	if hd.Type != threadlog.TypeThreadArchived || hd.Actor != uint64(vs["dora"].UserID) {
 		t.Errorf("the last record is %v by %d, want dora's ThreadArchived", hd.Type, hd.Actor)
@@ -423,16 +426,40 @@ func TestArchiveMovesTheResponseCacheKey(t *testing.T) {
 
 // TestArchivedThreadStaysReadable: a reader still reads the archived
 // thread, a post, its history, and finds it in the forum's list and in
-// /participated.
+// /participated. The page's header and both rows say archived, and a live
+// thread's row beside it does not (TKT-01M3YSQQ33).
 func TestArchivedThreadStaysReadable(t *testing.T) {
 	w, vs := archiveWorld(t)
 	id := w.threadIn(500, w.forum, "Still readable", "alice")
+	live := w.threadIn(501, w.forum, "Still live", "alice")
 	w.post(id, "carol", "carol was here", 0)
+	w.post(live, "carol", "and here", 0)
 	header(t, w.sendAs(vs["dora"], http.MethodPost, archivePath(id), ``))
 	carol := vs["carol"]
 	p := page(t, w.get(carol, threadPath(id)))
 	if len(p.Posts) != 2 {
 		t.Errorf("the archived page has %d posts", len(p.Posts))
+	}
+	if !p.Thread.Archived {
+		t.Error("the archived page's header does not say archived")
+	}
+	if page(t, w.get(carol, threadPath(live))).Thread.Archived {
+		t.Error("a live thread's header says archived")
+	}
+	for name, rows := range map[string][]dto.ThreadRow{
+		"the forum's list": decode[dto.ThreadList](t, w.get(carol, threadsPath("general"))).Threads,
+		"/participated":    w.crossPage("carol", "participated", "").Threads,
+	} {
+		got := map[string]bool{}
+		for _, r := range rows {
+			got[r.ID] = r.Archived
+		}
+		if a, ok := got[id.String()]; !ok || !a {
+			t.Errorf("%s: the archived thread's row says archived %v (listed %v)", name, a, ok)
+		}
+		if a, ok := got[live.String()]; !ok || a {
+			t.Errorf("%s: the live thread's row says archived %v (listed %v)", name, a, ok)
+		}
 	}
 	for _, path := range []string{postPathN(id, 2), postPathN(id, 2) + "/history"} {
 		if rec := w.get(carol, path); rec.Code != http.StatusOK {

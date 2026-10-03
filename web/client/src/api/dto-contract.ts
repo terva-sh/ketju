@@ -143,6 +143,7 @@ import slowModeModerator from '../../../../internal/dto/testdata/golden/slow-mod
 import threadAnon from '../../../../internal/dto/testdata/golden/thread.anon.json';
 import threadLockedMember from '../../../../internal/dto/testdata/golden/thread-locked.member.json';
 import threadArchivedMember from '../../../../internal/dto/testdata/golden/thread-archived.member.json';
+import threadArchivedThreadMember from '../../../../internal/dto/testdata/golden/thread-archived-thread.member.json';
 import threadHintAnon from '../../../../internal/dto/testdata/golden/thread-hint.anon.json';
 import threadMember from '../../../../internal/dto/testdata/golden/thread.member.json';
 import threadModerator from '../../../../internal/dto/testdata/golden/thread.moderator.json';
@@ -257,6 +258,7 @@ export const contract = [
   matches<ThreadPage>()(threadAnon),
   matches<ThreadPage>()(threadLockedMember),
   matches<ThreadPage>()(threadArchivedMember),
+  matches<ThreadPage>()(threadArchivedThreadMember),
   matches<ThreadPage>()(threadMember),
   matches<ThreadPage>()(threadModerator),
   matches<ThreadHint>()(threadHintAnon),

@@ -64,6 +64,10 @@ export interface ThreadHeader {
   post_count: number;
   log_length: number;
   locked: boolean;
+  // archived is true once the thread is archived: read-only to everyone,
+  // admins included, for good (docs/08 "Locking semantics",
+  // TKT-01M3YSQQ33).
+  archived: boolean;
   pinned: Pinned | null;
   tags: string[];
   created_at: Millis;
@@ -189,6 +193,7 @@ export interface ThreadRow {
   last_post_at: Millis;
   pinned: Pinned | null;
   locked: boolean;
+  archived: boolean;
   // forum is the row's forum on a cross-forum list, null on a forum's own
   // (TKT-01M29CTY7K).
   forum: ForumRef | null;
