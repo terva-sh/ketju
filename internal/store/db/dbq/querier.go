@@ -745,10 +745,15 @@ type Querier interface {
 	// Watches and mutes (docs/04 "watches", TKT-01M29CRJ29): one row per user
 	// per thread and per user per forum. Setting a level replaces the row's
 	// level and keeps its created_at; clearing it deletes the row, since no
-	// row is what "follow the forum" and "nothing" mean. The conflict target
+	// row is what "follow the forum" and "nothing" mean. updated_at moves only
+	// when the level changes, so it is when the member chose the level the row
+	// holds: the notification generator alerts a watcher only to posts written
+	// from then on (TKT-01M3ZE2211), and setting the same level again does not
+	// restart that. The conflict target
 	// names the partial index's predicate, which SQLite requires to match it,
-	// and the update takes its values from excluded only, because sqlc does
-	// not bind a parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1).
+	// and the update binds no parameter, taking new values from excluded,
+	// because sqlc does not bind a parameter inside ON CONFLICT ... DO UPDATE
+	// on SQLite (v1.31.1).
 	SetThreadWatch(ctx context.Context, arg SetThreadWatchParams) error
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	// SetUserStatus is every status change but anonymizing (internal/perm,
@@ -767,7 +772,9 @@ type Querier interface {
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
 	// ThreadWatchers is every watches row that bears on a thread: its own rows,
 	// and the rows for the forum it is in now. The generator combines a
-	// member's two through domain.EffectiveWatch (docs/04 "watches").
+	// member's two through domain.EffectiveWatch (docs/04 "watches"), and
+	// alerts to a post only when it was written at or after updated_at, the
+	// moment the member chose the level the row holds (TKT-01M3ZE2211).
 	ThreadWatchers(ctx context.Context, arg ThreadWatchersParams) ([]ThreadWatchersRow, error)
 	// The threads holding a post by the user, from the projection: every
 	// thread a suspension's hide or restore has to look in (TKT-01M29CP2QK).

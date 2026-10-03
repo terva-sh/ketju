@@ -250,6 +250,36 @@ func TestMuteSuppressesEveryKind(t *testing.T) {
 	)
 }
 
+// TestAWatchAlertsFromWhenItWasSet: a watcher is alerted only to posts
+// written at or after they chose the level that makes them one, whenever
+// the generator gets to the posts (TKT-01M3ZE2211). Every watch here but
+// bob's is set after #1, and the generator runs only after #3, as when it
+// is behind. carol's thread watch dates from #2 exactly, so #2 alerts her;
+// dave's forum watch and mod's thread watch date from between #1 and #2.
+// mod also watched the forum before #1, but his thread's own row is the
+// one that decides his level, so its time is the one that counts. bob,
+// who watched the forum before #1, is alerted to #1.
+func TestAWatchAlertsFromWhenItWasSet(t *testing.T) {
+	f := newFixture(t)
+	id, created := f.thread(f.forum)
+	p1 := f.post(id, "alice", "first", 0)
+	f.watch("bob", 0, f.forum, domain.WatchWatch)
+	f.watch("mod", 0, f.forum, domain.WatchWatch)
+	between := f.clock.Load() + 500
+	f.watchAt("dave", 0, f.forum, domain.WatchWatch, between)
+	f.watchAt("mod", id, 0, domain.WatchWatch, between)
+	p2 := f.post(id, "alice", "second", 0)
+	f.watchAt("carol", id, 0, domain.WatchWatch, f.clock.Load())
+	p3 := f.post(id, "alice", "third", 0)
+	f.deliver(created, p1, p2, p3)
+	f.want(
+		"bob thread_you_watch #1 by alice",
+		"carol thread_you_watch #2 by alice",
+		"dave thread_you_watch #2 by alice",
+		"mod thread_you_watch #2 by alice",
+	)
+}
+
 // TestReplayIsIdempotent is AC4: delivering the same events again, then
 // again with the progress reset to the file header, then as a batch
 // reporting drops, writes nothing new and leaves a read row read.

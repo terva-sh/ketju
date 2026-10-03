@@ -199,15 +199,22 @@ func (f *fixture) deliver(evs ...events.Event) {
 	}
 }
 
-// watch sets handle's level on a thread (forum 0) or a forum (thread 0).
+// watch sets handle's level on a thread (forum 0) or a forum (thread 0),
+// chosen before every record.
 func (f *fixture) watch(handle string, thread threadid.ID, forum int64, level string) {
 	f.t.Helper()
+	f.watchAt(handle, thread, forum, level, 1)
+}
+
+// watchAt is watch with the level chosen at at, in Unix milliseconds.
+func (f *fixture) watchAt(handle string, thread threadid.ID, forum int64, level string, at int64) {
+	f.t.Helper()
 	if thread != 0 {
-		f.exec(`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at) VALUES (?, ?, ?, 1, 1)`,
-			f.users[handle], int64(thread), level)
+		f.exec(`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+			f.users[handle], int64(thread), level, at, at)
 	} else {
-		f.exec(`INSERT INTO watches (user_id, forum_id, level, created_at, updated_at) VALUES (?, ?, ?, 1, 1)`,
-			f.users[handle], forum, level)
+		f.exec(`INSERT INTO watches (user_id, forum_id, level, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+			f.users[handle], forum, level, at, at)
 	}
 }
 

@@ -69,6 +69,15 @@ async function reply(request: APIRequestContext, t: Thread, source: string) {
   expect(r.status(), await r.text()).toBe(201);
 }
 
+// unreadIn is t's unread count on the first page of /unread for the reader
+// signed in on request, 0 when t is not there.
+async function unreadIn(request: APIRequestContext, t: Thread): Promise<number> {
+  const r = await request.get('/api/v1/unread');
+  expect(r.status(), await r.text()).toBe(200);
+  const rows = ((await r.json()) as { threads: { id: string; unread: number }[] }).threads;
+  return rows.find((row) => row.id === t.id)?.unread ?? 0;
+}
+
 const title = (info: TestInfo, what: string) => `${what} ${info.project.name} ${Date.now()}`;
 
 // ordinals are the posts the page draws, in order.
@@ -161,6 +170,14 @@ test('a member finds a thread with new posts on the Unread surface, opens it at 
     await reply(request, t, 'The second post.');
     await reply(request, t, 'The third post.');
   });
+  // A reply's 201 means the log holds it. /unread reads the database
+  // projection, which follows the event bus (docs/03 "Write path", step 5),
+  // so under load the list can still count one reply, or none, for a
+  // moment. The screen fetches the list once, so wait for the server to
+  // count both before opening it (TKT-01M3ZE2211).
+  await expect
+    .poll(() => unreadIn(page.request, t), { timeout: 15_000, message: 'the projection counts both replies' })
+    .toBe(2);
 
   await page.goto('/');
   await page.locator(`${bar(isMobile)} [data-nav=unread]`).click();
@@ -465,7 +482,10 @@ test.describe('settings and profile', () => {
       await expect(page.locator('article.post').first()).toBeVisible();
       await expect(page.locator('article.post')).toHaveCount(10);
       await page.goto(`${seed.thread}?page=2`);
-      expect((await ordinals(page))[0]).toBe(11);
+      // goto returns at the load event, and the page draws its posts only
+      // once the thread's answer arrives after it, so the first ordinal is
+      // polled rather than read once (TKT-01M3ZGWX60, CI run 2558).
+      await expect.poll(async () => (await ordinals(page))[0]).toBe(11);
     } finally {
       const r = await page.request.patch('/api/v1/settings', { data: { page_size: before } });
       expect(r.status(), await r.text()).toBe(200);

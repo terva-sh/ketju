@@ -734,6 +734,28 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
   updates") would bury every other alert; a row with a running count lost
   because the count needs a column and goes stale whenever a post is
   removed.
+- **Decided by the run (2026-10-02, pending maintainer review,
+  TKT-01M3ZE2211):** a watch alerts only to posts written at or after the
+  moment the member chose it. The generator reads levels when it processes
+  a post, which can be later than the post. Without this rule, a member who
+  watched a thread a moment after it started, or while the generator worked
+  through a backlog after a restart, was alerted to a post written before
+  they watched. In CI under load, a member who watched a thread just after
+  it started was alerted to its opening post instead of the reply that
+  followed, and the one-unread-watch rule then kept the alert on the
+  opening post. The member's moment is the `updated_at` of the `watches`
+  row that decides their level (see `watches`): the thread's own row when
+  it has one, else the forum's. The post's moment is its record's
+  timestamp. Alternatives:
+  - reading the level as it stands when the post is processed, as before,
+    lost because what a member is alerted to then depends on how far
+    behind the generator is;
+  - skipping posts at or below the member's read position lost because a
+    member who watches a thread they have not opened would still be
+    alerted to its first post;
+  - taking the earlier of the thread's and the forum's rows lost because a
+    thread row that is `watch` now may have been `mute` before, and the row
+    does not record that.
 - **Decided by the run (2026-10-01, maintainer approved):** an `Edit`
   notifies the members its `mentions` names, as `mention`, and nothing else.
   A member already notified about the post is not notified again, though an
@@ -765,7 +787,9 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
 
 Generation skips the post's author, any member who is not `active`, any
 member who cannot read the forum when the post is processed, and any member
-whose effective level on the thread is `mute` (see `watches`). It also skips
+whose effective level on the thread is `mute` (see `watches`). A member
+whose level is `watch` gets `thread_you_watch` only for a post written at or
+after they chose it (run decision above). It also skips
 two kinds of record. The first is one written at or before the moment the
 generator's migration was applied (its `schema_migrations.created_at`), so
 installing it alerts nobody to history, even in a range the projection had
@@ -813,6 +837,10 @@ down, and a member can watch a child forum directly.
 coalesce of the thread's row, then the forum's, then the empty string; tests
 hold the two together. A member sets either level through the two watch
 routes in 07, and an empty level deletes the row (TKT-01M29CRJ29).
+`updated_at` moves only when the level changes, so it is when the member
+chose the level the row holds; setting the same level again leaves it. The
+notification generator alerts a watcher only to posts written from then on
+(TKT-01M3ZE2211).
 
 ### read_positions
 ```

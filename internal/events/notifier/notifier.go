@@ -9,11 +9,13 @@
 // A Post written here, not copied by a split or merge, gives the author of
 // the post it replies to reply_to_you, each member its mentions key names
 // mention, the author of each earlier post it quotes quoted, and each member
-// whose effective level on the thread is watch thread_you_watch. An Edit
-// whose mentions key is present gives the members it names mention. No other
-// record generates anything. The log carries no quotes, so a Post's are read
-// from the post_quotes projection, which the projection writer fills from
-// the source (TKT-01M3YME9AZ); nothing here renders.
+// whose effective level on the thread is watch thread_you_watch, if they
+// chose that level at or before the post was written (the updated_at of the
+// watches row that decides the level). An Edit whose mentions key is present
+// gives the members it names mention. No other record generates anything.
+// The log carries no quotes, so a Post's are read from the post_quotes
+// projection, which the projection writer fills from the source
+// (TKT-01M3YME9AZ); nothing here renders.
 //
 // One post gives one member at most one notification, of the strongest kind
 // (rank). A member has at most one unread thread_you_watch per thread, which
@@ -737,24 +739,38 @@ func (g *Generator) generate(ctx context.Context, q *dbq.Queries, id threadid.ID
 	if err != nil {
 		return err
 	}
-	onThread, onForum := map[int64]string{}, map[int64]string{}
+	// A watcher is alerted only to posts written at or after the moment
+	// they chose the level that makes them one, the updated_at of the row
+	// that decides it: the thread's own when it has one, else the forum's.
+	// The level is read when the post is processed, which can be after the
+	// member set it, so without the time a watch set a moment after a post,
+	// or during a backlog, would alert to the post before it
+	// (TKT-01M3ZE2211, docs/04 "notifications").
+	type setting struct {
+		level string
+		since int64
+	}
+	onThread, onForum := map[int64]setting{}, map[int64]setting{}
 	for _, r := range rows {
 		if r.OnThread != 0 {
-			onThread[r.UserID] = r.Level
+			onThread[r.UserID] = setting{r.Level, r.UpdatedAt}
 		} else {
-			onForum[r.UserID] = r.Level
+			onForum[r.UserID] = setting{r.Level, r.UpdatedAt}
 		}
 	}
-	level := func(u int64) string { return domain.EffectiveWatch(onThread[u], onForum[u]) }
-	var watchers []int64
-	for u := range onThread {
+	level := func(u int64) string { return domain.EffectiveWatch(onThread[u].level, onForum[u].level) }
+	type watcher struct {
+		user, since int64
+	}
+	var watchers []watcher
+	for u, t := range onThread {
 		if level(u) == domain.WatchWatch {
-			watchers = append(watchers, u)
+			watchers = append(watchers, watcher{u, t.since})
 		}
 	}
-	for u := range onForum {
+	for u, f := range onForum {
 		if _, own := onThread[u]; !own && level(u) == domain.WatchWatch {
-			watchers = append(watchers, u)
+			watchers = append(watchers, watcher{u, f.since})
 		}
 	}
 
@@ -784,8 +800,10 @@ func (g *Generator) generate(ctx context.Context, q *dbq.Queries, id threadid.ID
 			c.author = p.AuthorID
 		} else {
 			c.author = it.actor
-			for _, u := range watchers {
-				offer(u, domain.NotifyThreadYouWatch)
+			for _, w := range watchers {
+				if it.at >= w.since {
+					offer(w.user, domain.NotifyThreadYouWatch)
+				}
 			}
 			for _, o := range it.quotes {
 				if p, ok := posts[o]; ok && p.Deleted == 0 && p.Moved == 0 {

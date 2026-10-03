@@ -45,16 +45,21 @@ SELECT level FROM watches WHERE user_id = ? AND forum_id = ?;
 -- Watches and mutes (docs/04 "watches", TKT-01M29CRJ29): one row per user
 -- per thread and per user per forum. Setting a level replaces the row's
 -- level and keeps its created_at; clearing it deletes the row, since no
--- row is what "follow the forum" and "nothing" mean. The conflict target
+-- row is what "follow the forum" and "nothing" mean. updated_at moves only
+-- when the level changes, so it is when the member chose the level the row
+-- holds: the notification generator alerts a watcher only to posts written
+-- from then on (TKT-01M3ZE2211), and setting the same level again does not
+-- restart that. The conflict target
 -- names the partial index's predicate, which SQLite requires to match it,
--- and the update takes its values from excluded only, because sqlc does
--- not bind a parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1).
+-- and the update binds no parameter, taking new values from excluded,
+-- because sqlc does not bind a parameter inside ON CONFLICT ... DO UPDATE
+-- on SQLite (v1.31.1).
 -- name: SetThreadWatch :exec
 INSERT INTO watches (user_id, thread_id, level, created_at, updated_at)
 VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(level), sqlc.arg(now), sqlc.arg(now))
 ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
 	level = excluded.level,
-	updated_at = excluded.updated_at;
+	updated_at = CASE WHEN watches.level = excluded.level THEN watches.updated_at ELSE excluded.updated_at END;
 
 -- name: ClearThreadWatch :exec
 DELETE FROM watches WHERE user_id = ? AND thread_id = ?;
@@ -64,7 +69,7 @@ INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
 VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(level), sqlc.arg(now), sqlc.arg(now))
 ON CONFLICT (user_id, forum_id) WHERE forum_id IS NOT NULL DO UPDATE SET
 	level = excluded.level,
-	updated_at = excluded.updated_at;
+	updated_at = CASE WHEN watches.level = excluded.level THEN watches.updated_at ELSE excluded.updated_at END;
 
 -- name: ClearForumWatch :exec
 DELETE FROM watches WHERE user_id = ? AND forum_id = ?;

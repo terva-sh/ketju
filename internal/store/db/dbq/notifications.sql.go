@@ -439,9 +439,9 @@ func (q *Queries) SetNotificationProgress(ctx context.Context, arg SetNotificati
 }
 
 const threadWatchers = `-- name: ThreadWatchers :many
-SELECT tw.user_id, tw.level, 1 AS on_thread FROM watches AS tw WHERE tw.thread_id = ?1
+SELECT tw.user_id, tw.level, tw.updated_at, 1 AS on_thread FROM watches AS tw WHERE tw.thread_id = ?1
 UNION ALL
-SELECT fw.user_id, fw.level, 0 AS on_thread FROM watches AS fw WHERE fw.forum_id = ?2
+SELECT fw.user_id, fw.level, fw.updated_at, 0 AS on_thread FROM watches AS fw WHERE fw.forum_id = ?2
 `
 
 type ThreadWatchersParams struct {
@@ -450,14 +450,17 @@ type ThreadWatchersParams struct {
 }
 
 type ThreadWatchersRow struct {
-	UserID   int64
-	Level    string
-	OnThread int64
+	UserID    int64
+	Level     string
+	UpdatedAt int64
+	OnThread  int64
 }
 
 // ThreadWatchers is every watches row that bears on a thread: its own rows,
 // and the rows for the forum it is in now. The generator combines a
-// member's two through domain.EffectiveWatch (docs/04 "watches").
+// member's two through domain.EffectiveWatch (docs/04 "watches"), and
+// alerts to a post only when it was written at or after updated_at, the
+// moment the member chose the level the row holds (TKT-01M3ZE2211).
 func (q *Queries) ThreadWatchers(ctx context.Context, arg ThreadWatchersParams) ([]ThreadWatchersRow, error) {
 	rows, err := q.db.QueryContext(ctx, threadWatchers, arg.ThreadID, arg.ForumID)
 	if err != nil {
@@ -467,7 +470,12 @@ func (q *Queries) ThreadWatchers(ctx context.Context, arg ThreadWatchersParams) 
 	var items []ThreadWatchersRow
 	for rows.Next() {
 		var i ThreadWatchersRow
-		if err := rows.Scan(&i.UserID, &i.Level, &i.OnThread); err != nil {
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Level,
+			&i.UpdatedAt,
+			&i.OnThread,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

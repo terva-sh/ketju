@@ -367,6 +367,56 @@ func TestWatchIsOnOneTarget(t *testing.T) {
 	}
 }
 
+// TestWatchTimeIsWhenTheLevelWasChosen: setting a thread's or a forum's
+// level keeps created_at, moves updated_at when the level changes, and
+// leaves it when the same level is set again, so updated_at is when the
+// member chose the level they hold. The notification generator alerts a
+// watcher only to posts written from then on (TKT-01M3ZE2211).
+func TestWatchTimeIsWhenTheLevelWasChosen(t *testing.T) {
+	d, _ := openTest(t)
+	u := newUser(t, d, "watcher")
+	f, err := newForum(t, d, "watched", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := sql.NullInt64{Int64: 42, Valid: true}
+	forum := sql.NullInt64{Int64: f, Valid: true}
+	for _, c := range []struct {
+		name  string
+		set   func(q *dbq.Queries, level string, now int64) error
+		where string
+		arg   sql.NullInt64
+	}{
+		{"thread", func(q *dbq.Queries, level string, now int64) error {
+			return q.SetThreadWatch(t.Context(), dbq.SetThreadWatchParams{UserID: u, ThreadID: thread, Level: level, Now: now})
+		}, "thread_id", thread},
+		{"forum", func(q *dbq.Queries, level string, now int64) error {
+			return q.SetForumWatch(t.Context(), dbq.SetForumWatchParams{UserID: u, ForumID: forum, Level: level, Now: now})
+		}, "forum_id", forum},
+	} {
+		set := func(level string, now, created, updated int64) {
+			t.Helper()
+			write(t, d, func(q *dbq.Queries, _ *sql.Tx) error { return c.set(q, level, now) })
+			var gotLevel string
+			var gotCreated, gotUpdated int64
+			if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+				return tx.QueryRowContext(t.Context(), `SELECT level, created_at, updated_at FROM watches
+					WHERE user_id = ? AND `+c.where+` = ?`, u, c.arg).Scan(&gotLevel, &gotCreated, &gotUpdated)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if gotLevel != level || gotCreated != created || gotUpdated != updated {
+				t.Fatalf("%s: set %s at %d: level %s, created %d, updated %d; want %s, %d, %d",
+					c.name, level, now, gotLevel, gotCreated, gotUpdated, level, created, updated)
+			}
+		}
+		set(domain.WatchMute, 10, 10, 10)
+		set(domain.WatchWatch, 20, 10, 20)
+		set(domain.WatchWatch, 30, 10, 20)
+		set(domain.WatchMute, 40, 10, 40)
+	}
+}
+
 // TestUnreadFromMarkAllReadAlone is AC4. A user with no read_positions rows
 // has every post unread, until mark_all_read_at marks everything written
 // before it read; a thread partly posted after it counts only the later
