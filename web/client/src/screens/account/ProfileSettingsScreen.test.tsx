@@ -25,7 +25,7 @@ afterEach(async () => {
 
 const stored = (): ProfileSettings => structuredClone(golden);
 
-function serve(routes: Record<string, (body: unknown) => Answer> = {}) {
+function serve(routes: Record<string, (body: unknown) => Answer | Promise<Answer>> = {}) {
   return stubServer({ [`GET ${url}`]: () => ({ status: 200, body: stored() }), ...routes });
 }
 
@@ -120,6 +120,42 @@ describe('the profile settings', () => {
     const status = root.querySelector('[role=status]')!;
     expect(status.textContent).toContain('Saved.');
     expect(status.querySelector('a')?.getAttribute('href')).toBe('/u/alice');
+  });
+
+  // Terva review 2062, finding 1: what is typed while a save is on its way
+  // is kept, and only the field still holding what was sent takes the
+  // stored value.
+  it('keeps an edit typed while the save is on its way', async () => {
+    let answer!: (a: Answer) => void;
+    const s = serve({ [`PATCH ${url}`]: () => new Promise<Answer>((r) => (answer = r)) });
+    const root = await renderAt('/settings/profile');
+    await type(root, bioField(root), 'Sent bio.');
+    await type(root, nameField(root), 'Sent name');
+    await submit(root);
+    expect(s.sent.filter((r) => r.method === 'PATCH').map((r) => r.body)).toEqual([{ display_name: 'Sent name', bio: 'Sent bio.' }]);
+    await type(root, bioField(root), 'Typed after Save.');
+    await act(async () => answer({ status: 200, body: { ...stored(), display_name: 'Sent name', bio: 'Sent bio.' } }));
+    await settle(root);
+    expect(bioField(root).value).toBe('Typed after Save.');
+    expect(nameField(root).value).toBe('Sent name');
+    // The kept edit is still unsaved: Save sends it.
+    await submit(root);
+    expect(s.sent.filter((r) => r.method === 'PATCH').map((r) => r.body)[1]).toEqual({ bio: 'Typed after Save.' });
+  });
+
+  // Terva review 2062, finding 2: the name is limited in characters, as the
+  // server counts them, not in UTF-16 units, so the input sets no maxlength.
+  it('takes a name of 100 characters that are two UTF-16 units each', async () => {
+    const s = serve({ [`PATCH ${url}`]: (b) => ({ status: 200, body: { ...stored(), ...(b as object) } }) });
+    const root = await renderAt('/settings/profile');
+    expect(nameField(root).hasAttribute('maxlength')).toBe(false);
+    await type(root, nameField(root), '😀'.repeat(100));
+    await submit(root);
+    expect(s.sent.filter((r) => r.method === 'PATCH').map((r) => r.body)).toEqual([{ display_name: '😀'.repeat(100) }]);
+    await type(root, nameField(root), '😀'.repeat(101));
+    await submit(root);
+    expect(s.sent.filter((r) => r.method === 'PATCH')).toHaveLength(1);
+    expect(fieldError(root, 'display_name').textContent).toBe('A display name is at most 100 characters.');
   });
 
   it('any other refusal says why and keeps the edits', async () => {

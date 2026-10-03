@@ -93,11 +93,16 @@ export function ProfileSettingsScreen() {
       return;
     }
     setBusy(true);
+    // The fields stay editable while the save is on its way, so each edit
+    // is dropped for the stored value only if it is still the one sent: a
+    // change typed meanwhile is kept, unsaved (Terva review 2062).
+    const sentName = name;
+    const sentBio = bio;
     try {
       const r = await apiSend<ProfileSettings>('PATCH', profileUrl, patch, { status: 200 });
       setStored(r);
-      setName(null);
-      setBio(null);
+      setName((now) => (now === sentName ? null : now));
+      setBio((now) => (now === sentBio ? null : now));
       setSaved(true);
       if (patch.display_name !== undefined) refreshViewer().catch(() => {});
     } catch (err) {
@@ -125,14 +130,14 @@ export function ProfileSettingsScreen() {
               ref={nameField}
               type="text"
               value={shownName}
-              maxLength={nameMax}
               autocomplete="name"
               aria-describedby="profile-display_name-hint profile-display_name-error"
               aria-invalid={!!errors.display_name}
               onInput={(e) => setName(e.currentTarget.value)}
             />
             <p id="profile-display_name-hint" class="settings-hint">
-              Shown on your posts in place of your handle. Leave it empty to show your handle.
+              Shown on your posts in place of your handle, at most {nameMax} characters. Leave it empty to show your
+              handle.
             </p>
             <p id="profile-display_name-error" class="settings-error" data-field-error="display_name">
               {errors.display_name}
