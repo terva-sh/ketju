@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T00:53:51Z
+updated_at: 2026-10-03T01:30:40Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -116,3 +116,49 @@ run decision: pending maintainer review. Phase 4 grooming (tags and archive lane
 **agent:claude-code/phase4-run-orchestrator** at 2026-10-02T22:47:33Z
 
 Run decision relayed by the orchestrator (pending maintainer review), 2026-10-02. The exit-check grooming (PR #375, TKT-01M3YMG0NX) decided in docs/06 "Moderator flow for drift" that "Reply as new thread" stays available under a post of a locked or archived thread: it writes only the new thread's log, so the archived thread stays read-only. Hiding the action in the client and refusing it on the server both lost. Build to it.
+
+**agent:claude-code/phase4-run-SQQ33** at 2026-10-03T01:30:40Z
+
+Phase A is built on run/sqq33-thread-archive. The branch is stacked on run/sqpzx-thread-tags, as the orchestrator asked, because both change the thread head and the rows. It is rebased onto main once the tags PR merges. The dist is not committed yet: it waits for its place in the dist queue (docs/15 "Order").
+
+### Server: the archived field
+
+- `archived` is added to the Go `dto.ThreadHeader` and `dto.ThreadRow`, to `dto.ts`, and to the goldens, all in one commit. `dto-contract.ts` holds `dto.ts` to the goldens.
+  - The header reads the projection row (`header()` in `service/threads/view.go`).
+  - The rows read `t.archived`, which is added to `views.rowColumns` and scanned in `scanRows`. That covers a forum's list and every cross-forum list (`list.go`, `crosslist.go`).
+  - A new golden, `thread-archived-thread.member`, is an archived thread in a live forum. `thread-archived.member` is the archived forum's.
+  - One cross-forum fixture row is archived, so `TestEveryFieldIsPopulatedSomewhere` holds the field.
+- Tests:
+  - `TestArchiveThread` now checks that the archive's answer says archived.
+  - `TestArchivedThreadStaysReadable` checks the page header and the rows in the forum's list and in /participated, for an archived thread and for a live one beside it.
+  - Removing each of the four assignments alone fails one of those tests.
+- docs/07's "Archiving threads" no longer says the field is missing. It names where the field is.
+- This is the rest of TKT-01M29CRJ64's criteria 1 and 7. That ticket is not mine to tick; the report to the orchestrator says so.
+
+### Client
+
+- **The notice.** "This thread is archived." takes the place of the locked notice (`data-thread-state="archived"`). A thread that is both locked and archived shows only the archived notice.
+- **What the page offers.**
+  - `archived` is read from the newest header, so the state shows as soon as an archive answers, a moment before the page is answered again. A test holds the refetch to prove it.
+  - On an archived thread, `canReply` and `mayModerate` are false. That removes the composer, the phone's reply bar, Reply, Rename, Lock, Pin, Move, Slow mode and Edit tags.
+  - In `ThreadBody`, `readOnlyViewer` (in `postControls.ts`) gives the block no reply, no upload, no moderation, and a forum read-only to the viewer, so `postControls` offers nothing on any post. The author's own post inside the windows is covered too, and so is flag.
+  - Watch, First unread, Mark unread, Copy link, and "unread from here" on a post stay.
+  - The LensMenu still reads the server's `can_moderate` for the Removed posts lens, because reading is allowed on an archived thread.
+- **The row flag.** An Archived flag takes the place of the lock flag: an `archive` icon plus a visually hidden "Archived", with a title. This follows the locked flag, as the plan settled.
+- **Archive.**
+  - Offered as "Archive…" to an admin by role on a thread that is not archived, whatever the page's `can_moderate` says.
+  - Panel title: "Archive this thread?". It shows the warning "Archiving makes this thread read-only for everyone, admins included. It cannot be undone." The reason textarea is focused and is described by the warning.
+  - It sends `POST /admin/threads/{id}/archive` with `{reason}`, or `{}` when no reason is given. The answer's header is stored.
+  - A conflict says "This thread is already archived." Once the page is answered again, the panel keeps its words and offers Close.
+- **TKT-01M3YSQPZX criterion 3.** Edit tags is not offered on an archived thread. The archived test checks that the `tags` action is absent for a member, a moderator and an admin. That ticket's criterion is ticked in this PR.
+- **"Reply as new thread"** (the relayed run decision). The client has no such action yet, so nothing hides it. Whoever builds it should keep it available under a post of an archived thread.
+
+### Measured
+
+- The reader bundle grows from 81345 B on the tags branch to 81668 B, +323 B. Against main at 79983 B the growth is +1685 B with the tags change, and this ticket's share is within the plan's 0.5 to 0.7 KB.
+- Vitest: 2618 tests pass. Mutation checks: each gate was reverted alone, and each one fails a test.
+- e2e: `thread-moderation.spec.ts` has two new tests, each with one axe scan:
+  - ada archives carol's new thread from the page and scans the panel. The page shows the notice and no composer, and the list row's flag is named "Archived".
+  - carol reads a thread ada archived and is offered nothing that writes. The whole page is scanned.
+- `go test -race -p 4 ./...` passes. The first run failed only on `internal/web/api`'s page and lock goldens, which each lacked the new `"archived": false` line. They are regenerated with `-update` in their own commit, and the package then passes under race.
+- The full e2e suite at both widths passed 300 of 301. The one failure was the Unread surface test, with the "1 new" symptom that TKT-01M3ZE2211 (Stop the Phase 3 exit Unread surface test failing under CI load) records. That spec passes on its own rerun.
