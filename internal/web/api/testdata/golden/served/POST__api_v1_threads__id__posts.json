@@ -24,6 +24,8 @@
       "edited_by_moderator": false,
       "html": "<p>A new reply.</p>\n",
       "machine_authored": false,
+      "move_notice": null,
+      "moved": false,
       "moved_to": null,
       "ordinal": 5,
       "quoted_by": [],

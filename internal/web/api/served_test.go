@@ -376,6 +376,7 @@ var servedCases = map[string]servedCase{
 	"POST /api/v1/admin/threads/{id}/move":              {viewer: "bob", req: servedMove},
 	"PUT /api/v1/admin/threads/{id}/tags":               servedModerate("bob", "tags", `{"tags":["meta","help"]}`),
 	"POST /api/v1/admin/threads/{id}/archive":           servedModerate("dana", "archive", `{"reason":"Settled."}`),
+	"POST /api/v1/admin/threads/{id}/split":             servedModerate("bob", "split", `{"ordinals":[2],"title":"The agent's aside","forum":"general"}`),
 }
 
 // then is a case path and body with setup run in the case's world first.

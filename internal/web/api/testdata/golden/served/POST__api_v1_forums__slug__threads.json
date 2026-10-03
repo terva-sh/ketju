@@ -25,6 +25,8 @@
         "edited_by_moderator": false,
         "html": "<p>Its first post.</p>\n",
         "machine_authored": false,
+        "move_notice": null,
+        "moved": false,
         "moved_to": null,
         "ordinal": 1,
         "quoted_by": [],
@@ -57,6 +59,7 @@
       "pinned": null,
       "post_count": 1,
       "slug": "a-thread-from-the-api",
+      "split_from": null,
       "tags": [],
       "title": "A thread from the API"
     }

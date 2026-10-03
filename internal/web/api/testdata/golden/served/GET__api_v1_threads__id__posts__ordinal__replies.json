@@ -4,7 +4,7 @@
   "headers": {
     "Cache-Control": "private, no-cache",
     "Content-Type": "application/json",
-    "ETag": "\"0369k573g0001-718-r6-49c199f6c0b1297a\""
+    "ETag": "\"0369k573g0001-718-r6-99eed1f231551355\""
   },
   "body": {
     "ordinal": 1,
@@ -24,6 +24,8 @@
         "edited_by_moderator": false,
         "html": "<p>Summarising the thread so far.</p>\n",
         "machine_authored": true,
+        "move_notice": null,
+        "moved": false,
         "moved_to": null,
         "ordinal": 2,
         "quoted_by": [],
@@ -49,6 +51,8 @@
         "edited_by_moderator": false,
         "html": "<p>Agreed with <a href=\"/u/alice\" class=\"mention\" rel=\"nofollow\">@alice</a> on this.</p>\n",
         "machine_authored": false,
+        "move_notice": null,
+        "moved": false,
         "moved_to": null,
         "ordinal": 4,
         "quoted_by": [],

@@ -20,7 +20,8 @@
     "archived": true,
     "pinned": null,
     "tags": [],
-    "created_at": 1757100000000
+    "created_at": 1757100000000,
+    "split_from": null
   },
   "page": {
     "number": 1,
@@ -68,7 +69,9 @@
       "deleted": false,
       "removal": null,
       "redacted": false,
+      "moved": false,
       "moved_to": null,
+      "move_notice": null,
       "machine_authored": false
     }
   ]

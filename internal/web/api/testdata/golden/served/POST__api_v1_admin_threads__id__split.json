@@ -1,0 +1,70 @@
+{
+  "request": "POST /api/v1/admin/threads/{thread}/split",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "source": {
+      "archived": false,
+      "author": {
+        "avatar": "",
+        "display_name": "Alice Nakamura",
+        "handle": "alice",
+        "kind": "human",
+        "role": "member"
+      },
+      "created_at": 1757500100000,
+      "forum": {
+        "name": "General",
+        "slug": "general"
+      },
+      "id": "0369k573g0001",
+      "locked": false,
+      "log_length": 792,
+      "pinned": {
+        "scope": "forum",
+        "until": 1760000000000
+      },
+      "post_count": 4,
+      "slug": "why-we-left-slack",
+      "split_from": null,
+      "tags": [
+        "meta",
+        "tools"
+      ],
+      "title": "Why we left Slack"
+    },
+    "thread": {
+      "archived": false,
+      "author": {
+        "avatar": "",
+        "display_name": "Bob Iyer",
+        "handle": "bob",
+        "kind": "human",
+        "role": "moderator"
+      },
+      "created_at": 1757501200000,
+      "forum": {
+        "name": "General",
+        "slug": "general"
+      },
+      "id": "0369k7gb80000",
+      "locked": false,
+      "log_length": 344,
+      "pinned": null,
+      "post_count": 1,
+      "slug": "the-agent-s-aside",
+      "split_from": {
+        "thread": {
+          "id": "0369k573g0001",
+          "slug": "why-we-left-slack",
+          "title": "Why we left Slack"
+        }
+      },
+      "tags": [],
+      "title": "The agent's aside"
+    }
+  }
+}

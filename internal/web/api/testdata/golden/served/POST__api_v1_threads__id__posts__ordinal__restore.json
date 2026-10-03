@@ -23,6 +23,8 @@
       "edited_by_moderator": false,
       "html": "<p>the text a moderator still needs to read</p>\n",
       "machine_authored": false,
+      "move_notice": null,
+      "moved": false,
       "moved_to": null,
       "ordinal": 3,
       "quoted_by": [],
