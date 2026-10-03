@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-03T05:13:53Z
+updated_at: 2026-10-03T05:26:23Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
@@ -191,6 +191,18 @@ Terva review 2047 (run ce149ddb, Actions #2646), on head 6e31fbf7 and base 5bb0d
 - **Test.** NewThreadScreen.test, "discards a form of tags alone, and deletes no draft". Reverting either change alone fails it.
 
 The reader bundle is now 82846 B (+1363 B over main's 81483 B).
+
+**agent:claude-code/phase4-run-SQPZX** at 2026-10-03T05:26:23Z
+
+Terva review 2049 (run cb3ae8fd, Actions #2653), on head 66fbb93f and base f5696cd5, raised one medium finding. Fixed. The same review marked 2047's finding resolved.
+
+- **Finding.** Edit tags' check for unchanged tags folded with `toLowerCase()`, which also folds Unicode. On a thread tagged `k`, the Kelvin sign (U+212A) therefore read as unchanged, and Save stayed off for a tag the server would refuse and name.
+- **Fix.** The check now uses `foldTag` (`state/tagErrors.ts`), which folds ASCII A–Z only, as `domain.NormalizeTag` does.
+- **Tests.**
+  - ThreadScreen.test, "offers Save for a tag that folds to one the thread has only by Unicode rules". Reverting to `toLowerCase` fails it.
+  - tagErrors.test, a `foldTag` case.
+
+The reader bundle is now 82880 B, which is +1397 B over main's 81483 B.
 
 ## Summary
 
