@@ -225,6 +225,47 @@ describe('the avatar', () => {
     expect(card(root).querySelector('[role=status]')?.textContent).toBe('Avatar removed.');
   });
 
+  // Terva review 2063: the avatar card and the profile form work side by
+  // side, and each answer takes only the fields its own request set.
+  it('keeps a profile save that lands while an avatar is on its way', async () => {
+    let answer!: (a: Answer) => void;
+    const s = serve({
+      [`PUT ${avatarUrl}`]: () => new Promise<Answer>((r) => (answer = r)),
+      [`PATCH ${url}`]: (b) => ({ status: 200, body: { ...stored(), ...(b as object) } }),
+    });
+    const root = await renderAt('/settings/profile');
+    await pick(root, image());
+    await type(root, bioField(root), 'Saved while the avatar went.');
+    await submit(root);
+    // The avatar's answer was written before the save, so it carries the old bio.
+    await act(async () => answer({ status: 200, body: { ...stored(), avatar: 'f'.repeat(64) } }));
+    for (let i = 0; i < 4; i++) await act(() => new Promise((r) => setTimeout(r, 0)));
+    await settle(root);
+    expect(bioField(root).value).toBe('Saved while the avatar went.');
+    expect(card(root).querySelector('img.avatar')?.getAttribute('src')).toBe(`/avatars/${'f'.repeat(64)}`);
+    // The saved bio is still the stored one: Save sends nothing.
+    await submit(root);
+    expect(s.sent.filter((r) => r.method === 'PATCH')).toHaveLength(1);
+  });
+
+  it('keeps an avatar set while a profile save is on its way', async () => {
+    let answer!: (a: Answer) => void;
+    serve({
+      [`PATCH ${url}`]: () => new Promise<Answer>((r) => (answer = r)),
+      [`PUT ${avatarUrl}`]: () => ({ status: 200, body: { ...stored(), avatar: 'f'.repeat(64) } }),
+    });
+    const root = await renderAt('/settings/profile');
+    await type(root, bioField(root), 'A new bio.');
+    await submit(root);
+    await pick(root, image());
+    expect(card(root).querySelector('img.avatar')?.getAttribute('src')).toBe(`/avatars/${'f'.repeat(64)}`);
+    // The save's answer was written before the avatar, so it carries the old one.
+    await act(async () => answer({ status: 200, body: { ...stored(), bio: 'A new bio.' } }));
+    await settle(root);
+    expect(card(root).querySelector('img.avatar')?.getAttribute('src')).toBe(`/avatars/${'f'.repeat(64)}`);
+    expect(bioField(root).value).toBe('A new bio.');
+  });
+
   it('refuses a file over 1 MB here, without sending', async () => {
     const s = serve();
     const root = await renderAt('/settings/profile');

@@ -102,7 +102,10 @@ export function ProfileSettingsScreen() {
     const sentBio = bio;
     try {
       const r = await apiSend<ProfileSettings>('PATCH', profileUrl, patch, { status: 200 });
-      setStored(r);
+      // The avatar card works alongside, so a save takes only the fields it
+      // sets and keeps the avatar as last stored, whichever answer arrives
+      // last (Terva review 2063).
+      setStored((now) => ({ ...(now ?? r), display_name: r.display_name, bio: r.bio }));
       setName((now) => (now === sentName ? null : now));
       setBio((now) => (now === sentBio ? null : now));
       setSaved(true);
@@ -123,7 +126,13 @@ export function ProfileSettingsScreen() {
     <main class="account" data-screen="settings-profile">
       <SettingsHead title="Profile" />
       {res.error && !base && <ErrorPanel error={res.error} what="Your profile" onRetry={res.retry} />}
-      {base && me && <AvatarCard me={me} avatar={base.avatar} onChange={(r) => setStored({ ...base, avatar: r.avatar })} />}
+      {base && me && (
+        <AvatarCard
+          me={me}
+          avatar={base.avatar}
+          onChange={(r) => setStored((now) => ({ ...(now ?? r), avatar: r.avatar }))}
+        />
+      )}
       {base && (
         <form class="account-card settings-form" onSubmit={save} data-profile-form>
           <div class="settings-field">
