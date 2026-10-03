@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-03T04:24:35Z
+updated_at: 2026-10-03T04:50:41Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
@@ -55,11 +55,11 @@ A rule for avatars, which docs/05, 07 and 08 do not give. That is docs/14 stop c
 
 ## Acceptance criteria
 
-- [ ] The maintainer has answered the open decision, and docs/05 or docs/07 records the avatar rule
-- [ ] A blob named only as an avatar is served to exactly the viewers the rule names, and attachment serving is unchanged (a test)
-- [ ] A member sets and clears an avatar on /settings/profile under that rule
-- [ ] A blob an avatar_blob names does not count against limits.unattached_upload_mb
-- [ ] An e2e test covers it at 390 px and 1440 px, with one axe scan per test
+- [x] The maintainer has answered the open decision, and docs/05 or docs/07 records the avatar rule
+- [x] A blob named only as an avatar is served to exactly the viewers the rule names, and attachment serving is unchanged (a test)
+- [x] A member sets and clears an avatar on /settings/profile under that rule
+- [x] A blob an avatar_blob names does not count against limits.unattached_upload_mb
+- [x] An e2e test covers it at 390 px and 1440 px, with one axe scan per test
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
@@ -177,3 +177,60 @@ Maintainer decision, 2026-10-02, on the open decision. Asked as choices, the mai
 - what an avatar may be: 'PNG/JPEG, 1 MB, square crop (Recommended)'. The server re-encodes it to a 256 px square, which strips its metadata. The member sets or clears their own, and a moderator may clear one.
 
 This is written into docs/05 'Display name and bio'. Signed-out readers and pre-users see the initials placeholder. An avatar is an explicit exception to docs/07 'Attachments' serving, so the plan must give it its own serving route and test that a signed-out request is refused. The open decision is settled, and the ticket can be promoted once its plan says this.
+
+**agent:claude-code/phase4-run-ysq4cr** at 2026-10-03T04:50:41Z
+
+Phase A done on run/ysq4cr-avatar at 635409b (source only; the dist is not committed, so criterion 6 waits for Phase B).
+
+### Stacking
+
+The branch is origin/main 2f2f914d with two commits cherry-picked onto it:
+- c177fe35, TKT-01M3V6XVVG (Let a member edit their display name, bio and avatar), as a9b0433d;
+- 4e64f390, TKT-01M3V73KM1 (Bound how much one member may upload), as ac8e3bf9.
+
+Both of those are still unmerged. I took the code commits only, not their ticket commits. Once both land, rebase this branch onto main and the cherry-picks drop out. If either one gets review fix-ups first, expect conflicts in profile.go, ProfileSettingsScreen.tsx, blobs.sql or budget_test.go.
+
+Migration numbers: 0027 belongs to V73KM1 and 0028 to this ticket. Check both again at push.
+
+### Decisions made at implementation, with the alternatives that lost
+
+- **Serving.** Avatars get their own prefix, `/avatars/{hash}`, which the blobs web group serves.
+  - `/blobs/avatar/{hash}` lost because it conflicts with `GET /blobs/{hash}/thumb` in ServeMux: `/blobs/avatar/thumb` matches both patterns.
+  - Widening `Authorize` lost because it would change the attachment rule itself.
+  - `AuthorizeAvatar` serves a hash only when it is the current `avatar_blob` of an account that is not anonymized. A replaced avatar therefore stops being served at once. This answers grooming question 4 in the strict direction.
+- **Signed-out readers.** The client draws `/avatars/` only when `viewer.user` is set. The server still puts the `avatar` hash in author blocks sent to a signed-out reader.
+  - Withholding the hash on the server lost. `member.Author` is built without a viewer in eight places, and the hash grants nothing because `/avatars/` refuses that reader.
+  - A Terva finding on this point would be a security finding, and docs/05 states it openly so a reviewer can weigh it.
+- **Pre-users.** `web.PreUserGate` answers a pre-user's request for `/avatars/` with 303 to `/apply/status` before the route runs. `AuthorizeAvatar` also refuses them, and the service test covers that.
+- **Format.** A PNG stays a PNG, so transparency is kept, and a JPEG stays a JPEG at quality 85. This matches `ThumbType`. A single output format lost: PNG makes photos large, and JPEG drops transparency.
+- **Decoding.** Avatars use the thumbnail path's header bounds (`MaxSide`, `MaxDecodeBytes`) and the same one-decode semaphore, so the process-wide bound still holds. The scaler is `fit` generalised to `scale(img, rect, w, h)`, and the thumbnail output is unchanged.
+- **Upload bound.** `UnattachedBytes` leaves out any blob a `users.avatar_blob` names, through the new partial index `users_avatar_blob`.
+  - A new avatar is refused with `upload_budget` only when its bytes are new and the avatar it replaces takes the account's unattached total up and over the bound. This bounds avatar churn the same way uploads are bounded.
+  - Bytes already stored are never refused.
+  - Clearing an avatar is never refused.
+- **No `blob_uploads` row.** An avatar has no upload row, so the member cannot attach it. `Check` answers `not_yours`, and `TestSetAvatar` covers that.
+- **Staff clear.** `DELETE /admin/users/{handle}/avatar` goes through `staffGate` and uses `mayActOn`, the suspension authority: a moderator may act on members, and an admin on anyone but themselves. It writes `user.avatar_cleared`, which is added to `audit.Actions` and the docs/04 table.
+  - An account with no avatar is `conflict`, as unsuspending an active account is.
+  - An idempotent 204 lost because it would write an audit row for nothing.
+- **CSRF.** `needsJSON` exempts `PUT /settings/avatar` (multipart), for PUT only. CrossOriginProtection still refuses a cross-site PUT, which `TestCrossSiteAvatarPutIsRefused` covers. `web.Limits` measures that path against `AvatarMaxBytes` plus `UploadOverhead`.
+- **Error code.** `image_too_large` is a new field code, for an image whose header declares more than the decode bounds.
+
+### Tests run
+
+- **Go.** `go vet ./...` is clean. `go test -p 4 ./internal/... ./tools/...` is green. `go test ./cmd/ketju` run alone is green (51 s).
+- **Go, under -race.** `internal/service/blobs` is green.
+- **Security mutation check.** Removing `v.Member()` from `AuthorizeAvatar` fails both `TestAvatarServedOnlyToMembers` and `TestAvatarFetchOverHTTP`: a signed-out request then got 200 and a 304. The check is restored.
+- **Client.** `tsc --noEmit` passes, and vitest is green at 93 files and 2640 tests.
+- **e2e.** `e2e/settings.spec.ts` and `e2e/attachments.spec.ts` pass at phone and desktop, 20 of 20 including setup. The new avatar test has one axe scan.
+
+### Bundle
+
+`npm run budget` on the reader:
+
+| Build | Reader (B gzip) |
+|---|---|
+| main 2f2f914d | 81492 |
+| stack base: V6XVVG and V73KM1 client source, built with vite without tsc, because the old dto contract does not type the new golden | 82571 |
+| this branch | 83315 |
+
+This ticket alone adds 744 B. The whole stack adds 1823 B over main. The budget is 120000 B. The generated dist was restored and is not committed.
