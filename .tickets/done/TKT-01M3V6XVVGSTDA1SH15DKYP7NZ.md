@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6XVVGSTDA1SH15DKYP7NZ
 title: Let a member edit their display name, bio and avatar
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,17 +19,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-6xvvg
-  branch: run/6xvvg-profile-settings
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
-  commit: 88b12b35448f4629f13a5d1c9d60c0a83da431ba
-  session: null
-  claimed_at: 2026-10-03T03:34:05Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:47:40Z
-updated_at: 2026-10-03T04:06:45Z
+updated_at: 2026-10-03T10:50:41Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -54,7 +47,7 @@ This needs a design line first. The open questions are the endpoint, the bio's l
 - [x] /settings/profile edits the display name and bio and sends only what changed; the profile then shows both, and the own profile's Account block links to Edit profile
 - [x] A display-name change misses the response cache, and the next thread page carries the new name (TestDisplayNameChangeMissesTheResponseCache)
 - [x] e2e/settings.spec.ts covers the screen at 390 px and 1440 px, with one axe scan per test, and puts carol's name and bio back after
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
 
@@ -147,3 +140,32 @@ Implemented (Phase A, before the dist), as planned, with these readings:
 - **e2e:** a `profile` describe in `e2e/settings.spec.ts` on carol's stored session, with `afterEach` putting back "Carol Ruiz" and an empty bio. It passed at 390 px and 1440 px locally.
 - **Reader bundle:** 81492 B on main at 88b12b3, 82499 B with this change (+1007 B; the plan estimated +1000).
 - **Local runs:** `go test -race -p 4 ./...` timed out once in `cmd/ketju` at the default 10 minutes under a load average of 21 to 26. Run alone it passed in 331 s. Every other package passed.
+
+## Summary
+
+A member edits their own display name and bio on /settings/profile, as docs/05 "Display name and bio" describes.
+
+### Server
+- `GET` and `PATCH /settings/profile` call `users.Service.Profile` and `UpdateProfile`.
+- The display name follows the rule `CheckDisplayName` holds, which agents share.
+- The bio is Markdown, at most 2000 characters. Its mentions link but notify nobody.
+- Both routes are for a member session only: an agent by its credential and a pre-user get `forbidden`, and an anonymous caller gets `unauthenticated`.
+- A display-name change misses the response cache.
+- The DTO is `dto.ProfileSettings`, with a golden.
+- Served goldens cover `GET` and `PATCH /settings/profile`, as the #390 guard requires.
+
+### Client
+- `ProfileSettingsScreen` sits at /settings/profile and is first in the settings links.
+- Save sends only the fields that changed, then fetches /me again.
+- The Account block on a member's own profile links to it as "Edit profile".
+
+### Built client
+The reader is 91416 B gzip against main's 90416 B, so it grows by 1000 B. The budget is 120000 B.
+
+### Tests
+- `go test -race -p 4 ./internal/... ./tools/...` is green.
+- `cmd/ketju` passes with `-race` when run on its own.
+- vitest is green: 2810 tests.
+- `e2e/settings.spec.ts` and `e2e/account.spec.ts` pass at 390 px and 1440 px: 14 tests.
+
+The avatar is TKT-01M3YSQ4CR's.
