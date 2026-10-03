@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YTHAZB21Y6T36WC4FXZVR8
 title: Show who quoted a post on the thread page
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ references:
     path: null
   - ref: pr:394
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-thazb
-  branch: run/thazb-quoted-by
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae0919645aa3f5e55
-  commit: bb6faf740f9d86ddce3e467d62fea3ec387c6ec4
-  session: null
-  claimed_at: 2026-10-03T00:58:41Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T17:28:04Z
-updated_at: 2026-10-03T06:14:27Z
+updated_at: 2026-10-03T06:14:44Z
 created_by:
   id: agent:claude-code/phase4-groom-correctness
   name: ""
@@ -96,3 +89,7 @@ Phase A done on run/thazb-quoted-by (unpushed, commit f8c62d50 on main 5f50eb27)
 **agent:claude-code/phase4-run-thazb** at 2026-10-03T06:13:59Z
 
 Phase B: rebased onto origin/main 1198e2b8 without conflict. Regenerated the dist: reader bundle 82880 B -> 83030 B gzip (+150 B) of 120000 B (the Phase A figure, 79983 -> 80135, was measured on the older base). TestServedGoldens passes unchanged, so neither quoted_by nor the seed change alters a served golden. go test -race -p 4 ./... passed; the full Playwright suite passed (301 passed, 25 skipped) on the rebased branch. Criterion 2's cases live in ThreadPage.test.tsx rather than ThreadScreen.test.tsx, as the implementation note records.
+
+## Summary
+
+Landed in PR #394. A post whose quoted_by is non-empty draws 'Quoted by #N ...' between its body and its footer (QuotedBy in web/client/src/components/thread/Post.tsx): at most ten #N links, each an a[data-reply-to] that the existing delegate scrolls to or opens in PostPopover, then 'and N more'; nothing for an empty list or a tombstone. The listing itself is the server's access rule (TKT-01M3YME9AZ, #380); the client draws what it is given. On phones the links carry the 44 px .hit target and the line is spaced 28 px by 32 px so neighbouring targets do not overlap (targets.spec.ts). The e2e seed's #44 now quotes #1, so e2e/quoted-by.spec.ts opens the popover for an off-page quoting post. Reader bundle 82880 B -> 83030 B gzip (+150 B) of 120000 B. Criterion 2's unit cases live in ThreadPage.test.tsx rather than ThreadScreen.test.tsx, where the reply-to delegate tests already were.
