@@ -203,6 +203,16 @@ jobs:
         # e2e/phase3-exit.spec.ts.
         run: go test -race ./cmd/ketju/ -run '^TestPhase3Exit' -count=1 -v
 
+      - name: Phase 4 exit tests, by name
+        # TKT-01M3YMG0NX. As the steps above: docs/15's invariants (moving
+        # posts follows the thread-move rule, archived is read-only for
+        # everyone, a backup restores) and the metrics guard are proven by
+        # reading this log, so these run again here, verbose. The
+        # Playwright step's list reporter names each test of
+        # e2e/phase4-exit.spec.ts, and the release dry run step is the
+        # pipeline's own test.
+        run: go test -race ./cmd/ketju/ -run '^TestPhase4Exit' -count=1 -v
+
       - name: fuzz the frame parser, body decoder and id parser (bounded)
         # TKT-01M29C2WTV. The parser reads a length off disk and sizes work
         # from it, so a hostile or corrupt length must be refused before it is
