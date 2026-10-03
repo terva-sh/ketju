@@ -209,7 +209,7 @@ func (a *actor) send(t *testing.T, req *http.Request) answer {
 	for _, c := range a.cookies {
 		req.AddCookie(&http.Cookie{Name: c.Name, Value: c.Value})
 	}
-	resp, err := noRedirects.Do(req)
+	resp, err := a.httpClient().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

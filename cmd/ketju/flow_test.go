@@ -42,6 +42,9 @@ type actor struct {
 	// bodies is every answer this actor was given, for a test that checks
 	// that something never reached them.
 	bodies []string
+	// client, when set, sends this actor's requests in place of
+	// noRedirects: from an address of their own (TKT-01M3YMG0NX).
+	client *http.Client
 }
 
 func newActor(r *running, name string) *actor {
@@ -51,6 +54,14 @@ func newActor(r *running, name string) *actor {
 // noRedirects answers each redirect itself, so a test sees the 303 a
 // callback or a page gives.
 var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+// httpClient is the client a's requests go through.
+func (a *actor) httpClient() *http.Client {
+	if a.client != nil {
+		return a.client
+	}
+	return noRedirects
+}
 
 // answer is a response read whole.
 type answer struct {
@@ -95,7 +106,7 @@ func (a *actor) do(t *testing.T, method, path string, body any) answer {
 	for _, c := range a.cookies {
 		req.AddCookie(&http.Cookie{Name: c.Name, Value: c.Value})
 	}
-	resp, err := noRedirects.Do(req)
+	resp, err := a.httpClient().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
