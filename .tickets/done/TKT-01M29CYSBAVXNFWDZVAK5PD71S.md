@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T08:50:06Z
+updated_at: 2026-10-03T09:11:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -165,6 +165,22 @@ Phase A done on run/cysba-merge-posts, cut from run/cysam-split-posts and unpush
 Go: internal/service/threads/merge_test.go (TestMergeAcrossForumsNeedsModerateInBoth, TestMergeValidation, TestMergeNoticesRevealOnlyToReaders, TestMergeNoticeNotInCachedPosts, TestMergeRefusesArchived, TestMergeIntoArchivedForumAdminOnly, TestMergeAppendsAtEndInSourceOrder, TestMergeKeepsAuthorsTimesAndOrigin, TestMergeNoticesBothWays, TestMergeReplyToInsideSetResolves, TestMergeBackRestoresReading, TestMergeDoesNotBumpThread); internal/web/api/merge_test.go (TestMergeRouteGated, TestMergeNotifiesNobody). Vitest: MergeDialog.test.tsx, MergeNotice.test.tsx, MovePosts.test.tsx, ThreadPage.test.tsx, ThreadScreen.select.test.tsx. e2e: posts-split.spec.ts gains the merge-back test; it and thread, thread-moderation, thread-rename-move, targets and a11y pass at 390 and 1440 px.
 
 Bundle, measured with go generate and not committed: thread-view 84344 B gzip of 120000 (83279 B on the split branch). MovePosts chunk 3160 B JS and 548 B CSS gzip.
+
+**agent:claude-code/phase4-run-cysba** at 2026-10-03T09:11:25Z
+
+Terva review 2058 covered head 8303a318, base 5e8d033c, run 01f626ab, Actions #2693. It raised one medium finding, fixed in 6deeeb71. This note supersedes the line in the earlier implementation note that said MergedPosts stays `{source, target}`.
+
+- **Finding.** The dialog found the first copy by counting back from the target header (`post_count - n + 1`). That header is read after the move, so a reply that lands in the target in between makes the landing late.
+- **Fix.**
+  - `MergedPosts` gains `first_copy`, which is `MoveResult.Copies[0]`, the move's own answer.
+  - The dialog passes it to `onMerge`.
+  - docs/07 describes the field.
+- **Tests.**
+  - TestMergeAnswersItsFirstCopy appends a reply to the target through a new `afterMerge` hook, between the move and the header read. The header then counts 4, and `first_copy` is still 2, the post carrying the merge notice.
+  - MergeDialog.test: "lands on the first copy the answer names, whatever the target now counts".
+  - The dto and served goldens carry `first_copy`.
+
+The thread view is 89137 B gzip.
 
 ## Summary
 
