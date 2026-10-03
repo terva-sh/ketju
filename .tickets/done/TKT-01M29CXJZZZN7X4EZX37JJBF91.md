@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-03T01:49:21Z
+updated_at: 2026-10-03T01:59:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -415,6 +415,22 @@ Terva review 2020 (run 9e7dbad2, head 0a299062, base bfa50b8c) confirmed that 20
 **agent:claude-code/phase4-run-cxjzz** at 2026-10-03T01:49:21Z
 
 PR #383 conflicted with main once main took migration 0025 for quote backlinks (TKT-01M3YME9AZ). Its final tree was carried onto main as one commit on run/cxjzz-split-merge-2, PR #387, as the brief's rule for a moved main says. post_moves is now migration 0026, and ProjectionTables and ClearProjections keep both post_quotes and post_moves. #383 is closed unmerged. Note: one push to run/cxjzz-split-merge passed --force-with-lease; it was a fast-forward (the remote head cfd73478 was its parent), so nothing was rewritten.
+
+**agent:claude-code/phase4-run-cxjzz** at 2026-10-03T01:59:26Z
+
+Terva review 2024 on PR #387 (run 0793885b, head edb18fbe, base bfa50b8c) is the first full review of the carried tree. It raised one medium finding, and it is fixed.
+
+**Medium: a resumed move could leave a copy replying to the wrong post.**
+
+The trouble came from a copy whose `reply_to` named a later moved post. `finishInto` gave that later post a predicted ordinal. If a crash cut the run and an ordinary post then arrived in the target before the finish, the later copy landed at a different ordinal, and the record that named it was already written and could not be corrected.
+
+`reply_to` is now renumbered only when it names a moved post ahead of this one, that is, at a lower source ordinal. That post's copy is written earlier in the run, so its ordinal is fixed (in `post_moves`) before anything names it. Every other `reply_to` is dropped, and the `lastReplyTo` rule from review 2020 still applies on top of this.
+
+A post replies only to an earlier post, and the service's Edits carry the post's own `reply_to`, so only a log written some other way loses a reply under this rule.
+
+docs/03 says this. The tests:
+- `TestFinishAfterATargetPostKeepsReplies`: a cut run, then an ordinary post in the target, then the finish. The second copy still replies to the first copy.
+- `TestCopyDropsAForwardReply`.
 
 ## Summary
 
