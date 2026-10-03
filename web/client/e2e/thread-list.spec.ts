@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -88,6 +89,61 @@ test('rows stay readable with a long title and six tags', async ({ browser }, in
     await page.setViewportSize(vp);
   }
   await ctx.close();
+});
+
+// TKT-01M3YSQPZX: a chip is a link to the forum's list filtered to its tag
+// (docs/06 "Filtering by tag"). Only the six-tag thread carries long-read.
+// One axe scan, of the filtered list with its chips and header.
+test('a tag chip filters the list, and Show all threads returns', async ({ page }) => {
+  await page.goto('/f/general');
+  const long = row(page, 'Comparing every rain barrel');
+  const chip = long.locator('.thread-tags a', { hasText: 'long-read' });
+  await expect(chip).toHaveAttribute('href', '/f/general?tag=long-read');
+  await chip.click();
+  await expect(page).toHaveURL(/\/f\/general\?tag=long-read$/);
+  await expect(page.locator('[data-tagged]')).toHaveText(/^Tagged long-read\s*Show all threads$/);
+  await expect(page.locator('[data-thread]')).toHaveCount(1);
+  await expect(row(page, 'Comparing every rain barrel')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
+  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`)).toEqual([]);
+
+  await page.locator('[data-tagged] a', { hasText: 'Show all threads' }).click();
+  await expect(page).toHaveURL(/\/f\/general$/);
+  await expect(page.locator('[data-tagged]')).toHaveCount(0);
+  await expect(page.locator('[data-thread]', { hasText: 'House rules' })).toBeVisible();
+});
+
+// On a phone a chip keeps its drawn size, under 44 px tall, and its target
+// is 44 px about its centre (docs/06 "Targets and gestures"): pressing 21 px
+// above and below it, and across where it is wide enough, still finds it,
+// as e2e/targets.spec.ts presses every control.
+test('a tag chip has a 44 px target on a phone without growing', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'the 44 px rule is the phone layout’s');
+  await page.goto('/f/general');
+  const chips = row(page, 'Comparing every rain barrel').locator('.thread-tags a');
+  await expect(chips).toHaveCount(6);
+  const found = await chips.evaluateAll((els) =>
+    els.map((el) => {
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const hit = (px: number, py: number) => {
+        const t = document.elementFromPoint(px, py);
+        return !!t && (t === el || el.contains(t));
+      };
+      return {
+        tag: el.textContent,
+        height: r.height,
+        reach: [hit(x, y), hit(x, y - 21), hit(x, y + 21), hit(x - Math.min(21, r.width / 2 - 1), y), hit(x + Math.min(21, r.width / 2 - 1), y)],
+      };
+    }),
+  );
+  for (const f of found) {
+    expect(f.height, f.tag!).toBeLessThan(30);
+    expect(f.reach, f.tag!).toEqual([true, true, true, true, true]);
+  }
 });
 
 // The links are followed with a dispatched click: Playwright's click

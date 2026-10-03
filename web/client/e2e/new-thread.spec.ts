@@ -92,6 +92,45 @@ test('a new thread’s title and body follow alice to another browser, and posti
   }
 });
 
+// TKT-01M3YSQPZX: tags from the one optional field. alice is a member, so
+// the reserved tag agent is refused and named under the field (docs/08
+// "Thread tags"); without it the thread is created and its head shows the
+// two tags, folded and sorted. One axe scan, of the screen with the refusal
+// shown.
+test('a member starts a thread with tags, and is refused agent', async ({ browser, isMobile, baseURL }, info) => {
+  const ctx = await asAlice(browser, isMobile, baseURL);
+  try {
+    await deleteDraft(ctx.request);
+    const page = await ctx.newPage();
+    const loaded = page.waitForResponse((r) => new URL(r.url()).pathname === draftUrl && r.request().method() === 'GET');
+    await page.goto(screen);
+    await loaded;
+    const stamp = `${info.project.name} ${Date.now()}`;
+    await page.locator('#new-thread-title').fill(`Tagged meetup ${stamp}`);
+    await page.locator('.composer textarea').fill(`A thread with tags, ${stamp}.`);
+    const tags = page.getByRole('textbox', { name: 'Tags (optional)' });
+    await tags.fill('agent, Picnic');
+    const postButton = page.locator(isMobile ? '[data-shell=phone-topbar] [data-shell-primary=post-thread]' : '.composer-foot [data-post-thread]');
+    const refused = page.waitForResponse((r) => new URL(r.url()).pathname === `/api/v1/forums/${forum}/threads` && r.request().method() === 'POST');
+    await postButton.click();
+    expect((await refused).status()).toBe(422);
+    await expect(page.locator('#new-thread-tags-error')).toHaveText('“agent” is reserved for moderators and agent accounts.');
+    await expect(tags).toHaveAttribute('aria-invalid', 'true');
+    await expect(page).toHaveURL(new RegExp(`${screen}$`));
+    const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    expect(violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`)).toEqual([]);
+
+    await tags.fill('Picnic summer-2026');
+    await postButton.click();
+    await expect(page).toHaveURL(/^[^?]*\/t\/[^/]+\/[^/?]+\?page=1$/);
+    await expect(page.locator('.thread-head .thread-tags a')).toHaveText(['picnic', 'summer-2026']);
+    await expect(page.locator('.thread-head .thread-tags a').first()).toHaveAttribute('href', `/f/${forum}?tag=picnic`);
+  } finally {
+    await deleteDraft(ctx.request);
+    await ctx.close();
+  }
+});
+
 test.describe('accessibility', () => {
   test.use({ storageState: stateFile('alice') });
 

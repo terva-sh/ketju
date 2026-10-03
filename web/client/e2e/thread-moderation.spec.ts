@@ -6,8 +6,9 @@ import { stateFile } from './session';
 // 390 px and 1440 px, against the real server: the seeded moderator, mona,
 // locks the garden forum's one thread with a reason and unlocks it, then
 // pins it in its forum and unpins it, and sets slow mode and turns it off
-// (TKT-01M3R0PM0K). Each project leaves the thread as it found it,
-// unlocked, unpinned and with slow mode off, and no other spec reads it
+// (TKT-01M3R0PM0K), and edits its tags (TKT-01M3YSQPZX). Each project
+// leaves the thread as it found it, unlocked, unpinned, with slow mode off
+// and no tags, and no other spec reads it
 // (cmd/ketju e2e.go seedSideThreads). The bodies each route takes, and the
 // order of its refusals, are the server's tests; this proves the screen and
 // the routes agree.
@@ -116,6 +117,55 @@ test('a moderator sets slow mode and turns it off', async ({ page, isMobile }) =
   await slow.getByRole('radio', { name: 'Off' }).check();
   await send(page, 'slow-mode', 'Save', 'PUT');
   if (!isMobile) await expect(page.locator('[data-slow-mode]')).toHaveCount(0);
+});
+
+// TKT-01M3YSQPZX: Edit tags, PUT …/tags, and the head's chips. The seed
+// gives the thread no tags, and the test takes them away again, so the next
+// run, and the other project, find it as the seed left it. One axe scan, of
+// the head with its chips.
+test('a moderator edits the tags and the head shows them', async ({ page, isMobile }) => {
+  await open(page);
+  const chips = page.locator('.thread-head .thread-tags a');
+  await expect(chips).toHaveCount(0);
+  await action(page, isMobile, 'tags');
+  const panel = page.getByRole('group', { name: 'Edit tags' });
+  const field = panel.getByRole('textbox', { name: 'Tags' });
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('');
+  await field.fill('Irrigation, drip-line');
+  const body = page.waitForRequest((r) => r.url().endsWith('/tags') && r.method() === 'PUT');
+  await send(page, 'tags', 'Save', 'PUT');
+  expect((await body).postDataJSON()).toEqual({ tags: ['Irrigation', 'drip-line'] });
+  await expect(chips).toHaveText(['drip-line', 'irrigation']);
+  await expect(chips.first()).toHaveAttribute('href', '/f/garden?tag=drip-line');
+  // On a phone each chip is what a press 21 px above or below its centre
+  // finds, as e2e/targets.spec.ts measures every control.
+  if (isMobile)
+    expect(
+      await chips.evaluateAll((els) =>
+        els.map((el) => {
+          el.scrollIntoView({ block: 'center' });
+          const r = el.getBoundingClientRect();
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          return [y - 21, y, y + 21].every((py) => {
+            const t = document.elementFromPoint(x, py);
+            return !!t && (t === el || el.contains(t));
+          });
+        }),
+      ),
+    ).toEqual([true, true]);
+  const { violations } = await new AxeBuilder({ page })
+    .include('.thread-head')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`)).toEqual([]);
+
+  await action(page, isMobile, 'tags');
+  await expect(field).toHaveValue('drip-line irrigation');
+  await field.fill('');
+  await send(page, 'tags', 'Save', 'PUT');
+  await expect(chips).toHaveCount(0);
 });
 
 // The pin panel, which has the most controls, and the slow mode panel fit
