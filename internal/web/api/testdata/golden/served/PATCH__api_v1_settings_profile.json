@@ -1,0 +1,12 @@
+{
+  "request": "PATCH /api/v1/settings/profile",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "bio": "Ask me about @alice's garden.",
+    "display_name": "Carol R."
+  }
+}

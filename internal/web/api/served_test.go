@@ -284,6 +284,7 @@ var servedCases = map[string]servedCase{
 	"GET /api/v1/settings/sessions":                    at("carol", "/api/v1/settings/sessions"),
 	"GET /api/v1/settings/identities":                  at("carol", "/api/v1/settings/identities"),
 	"GET /api/v1/settings/handle":                      at("carol", "/api/v1/settings/handle"),
+	"GET /api/v1/settings/profile":                     at("carol", "/api/v1/settings/profile"),
 	"GET /api/v1/apply/form":                           at("pre-user", "/api/v1/apply/form"),
 	"GET /api/v1/apply/status":                         at("pre-user", "/api/v1/apply/status"),
 
@@ -319,6 +320,7 @@ var servedCases = map[string]servedCase{
 	"DELETE /api/v1/settings/identities/{id}": {viewer: "carol", req: servedSecondIdentity},
 	"POST /api/v1/settings/deactivate":        at("carol", "/api/v1/settings/deactivate"),
 	"PUT /api/v1/settings/handle":             sending("carol", "/api/v1/settings/handle", `{"handle":"caroline"}`),
+	"PATCH /api/v1/settings/profile":          sending("carol", "/api/v1/settings/profile", `{"display_name":"Carol R.","bio":"Ask me about @alice's garden."}`),
 	"POST /api/v1/apply":                      sending("pre-user", "/api/v1/apply", validAnswers),
 	"POST /api/v1/apply/withdraw":             {viewer: "pre-user", req: servedWithdraw},
 	// The admin routes, each as the least viewer its gate admits: dana for
