@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQQ33K01M960MGMSZ90P2
 title: Show archived threads and offer archiving in the client
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: pr:361
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-SQQ33
+  branch: run/sqq33-thread-archive
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
+  commit: efca9c6d0f15c237a56c8e9f7d40065a6d30a7ed
+  session: null
+  claimed_at: 2026-10-03T00:53:48Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-02T22:47:33Z
+updated_at: 2026-10-03T00:53:51Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-run-orchestrator
+  id: agent:claude-code/phase4-run-SQQ33
   name: ""
 extensions: {}
 ---
