@@ -75,3 +75,9 @@
 .split-dialog .moderate-field {
   margin-bottom: 12px;
 }
+/* The merge dialog's word on its target (TKT-01M29CYSBA): the thread
+   found, or why none is. */
+.merge-target {
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}

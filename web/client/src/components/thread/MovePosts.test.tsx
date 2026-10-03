@@ -51,7 +51,7 @@ describe('the selection bar', () => {
         <>
           <SelectBox thread={source.id} ordinal={61} />
           <SelectBox thread={source.id} ordinal={62} />
-          <SelectionBar thread={source} admin={false} onDone={onDone} onSplit={onSplit} returnTo={() => title} />
+          <SelectionBar thread={source} admin={false} onDone={onDone} onSplit={onSplit} onMerge={vi.fn()} returnTo={() => title} />
         </>,
         root,
       ),
@@ -61,11 +61,12 @@ describe('the selection bar', () => {
   const box = (o: number) => root.querySelector<HTMLInputElement>(`[data-select-post="${o}"]`)!;
   const count = () => root.querySelector('[data-selection-count]')!;
 
-  it('counts the selection in a live region, and splits only a selection', async () => {
+  it('counts the selection in a live region, and splits or merges only a selection', async () => {
     const { b } = await bar();
     expect(count().textContent).toBe('0 posts selected');
     expect(count().getAttribute('aria-live')).toBe('polite');
     expect(b.querySelector<HTMLButtonElement>('.selection-split')!.disabled).toBe(true);
+    expect(b.querySelector<HTMLButtonElement>('.selection-merge')!.disabled).toBe(true);
     expect(box(61).getAttribute('aria-label')).toBe('Select post #61');
     await act(async () => box(61).click());
     expect(count().textContent).toBe('1 post selected');
@@ -75,8 +76,22 @@ describe('the selection bar', () => {
     await act(async () => box(61).click());
     expect(count().textContent).toBe('1 post selected');
     expect(b.querySelector<HTMLButtonElement>('.selection-split')!.disabled).toBe(false);
-    // Merge is TKT-01M29CYSBA's.
-    expect([...b.querySelectorAll('button')].find((x) => x.textContent === 'Merge…')!.disabled).toBe(true);
+    expect(b.querySelector<HTMLButtonElement>('.selection-merge')!.disabled).toBe(false);
+  });
+
+  it('opens the merge dialog over the bar, which takes Escape first and gives focus back to Merge…', async () => {
+    const { b, onDone } = await bar();
+    await act(async () => box(62).click());
+    const merge = b.querySelector<HTMLButtonElement>('.selection-merge')!;
+    merge.focus();
+    await act(async () => merge.click());
+    await wait();
+    const d = root.querySelector('[data-merge-dialog]')!;
+    expect(d.querySelector('h2')!.textContent).toBe('Merge 1 post into another thread');
+    await press('Escape');
+    expect(root.querySelector('[data-merge-dialog]')).toBeNull();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(merge);
   });
 
   it('hands Cancel and Escape to the page, and gives focus back when it goes', async () => {

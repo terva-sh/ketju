@@ -282,6 +282,22 @@ describe('a removed post', () => {
     expect(n.querySelector('a')?.getAttribute('href')).toBe(href);
   });
 
+  // TKT-01M29CYSBA: a merge's notice stands above its first copy, which
+  // reads as any post, with its own time.
+  it.each([
+    [{ id: '3yymw47g00042', slug: 'slack-exports', title: 'Slack exports' }, '2 posts were merged from Slack exports.', '/t/3yymw47g00042/slack-exports/9'],
+    [null, '2 posts were merged from another thread.', undefined],
+  ])('says where merged posts came from: %j', async (thread, text, href) => {
+    const notice = { count: 2, thread, ordinal: thread ? 9 : null };
+    serve(page([post(1), post(2, { merge_notice: notice }), post(3)]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    const n = root.querySelector('[data-merge-notice]')!;
+    expect(n.nextElementSibling).toBe(at(root, '#post-2'));
+    expect(n.textContent).toBe(text);
+    expect(n.querySelector('a')?.getAttribute('href')).toBe(href);
+    expect(root.querySelectorAll('[data-merge-notice]').length).toBe(1);
+  });
+
   it('says where a split thread came from, and only that it was split to a viewer not told', async () => {
     const p = page([post(1)]);
     serve({ ...p, thread: { ...p.thread, split_from: { thread: { id: '3yymw47g00002', slug: 'origin', title: 'The origin' } } } });

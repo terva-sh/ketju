@@ -2,19 +2,21 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { stateFile } from './session';
 
-// Splitting posts into a new thread (TKT-01M29CYSAM), at 390 px and 1440 px,
-// against the real server. mona, the seeded moderator, starts a thread of
-// three posts in events through the API, selects two from the thread page,
-// splits them into a new thread, and reads both ends: the new thread's
-// "split from" line, and the source's notice and tombstones. Who may split,
-// and what a viewer who cannot read the other thread is told, are the
-// server's tests (internal/service/threads split_test.go) and the screen's
-// unit tests; this proves the screen, the chunk and the route agree.
+// Splitting posts into a new thread (TKT-01M29CYSAM) and merging them back
+// (TKT-01M29CYSBA), at 390 px and 1440 px, against the real server. mona,
+// the seeded moderator, starts a thread of three posts in events through the
+// API, selects two from the thread page, splits them into a new thread, and
+// reads both ends: the new thread's "split from" line, and the source's
+// notice and tombstones; then she merges them back into the source and reads
+// the merge's notice above the copies. Who may move posts, and what a viewer
+// who cannot read the other thread is told, are the server's tests
+// (internal/service/threads split_test.go, merge_test.go) and the screen's
+// unit tests; this proves the screen, the chunk and the routes agree.
 //
 // The thread is the spec's own, one per project, as post-history.spec.ts
-// makes its own: the seeded side threads are read by other specs, and
-// merging posts back is TKT-01M29CYSBA's, so a split of a seeded thread
-// could not be undone. events is public, and no other spec's list reads it
+// makes its own: the seeded side threads are read by other specs, and a
+// moved post's ordinal stays moved, so a seeded thread could not be put back
+// as it was. events is public, and no other spec's list reads it
 // but new-thread.spec.ts and post-history.spec.ts, which find their own
 // threads by title. mona's stored session is used (session.setup.ts), so
 // nothing here spends /auth/*. Each test runs one axe scan at most
@@ -137,4 +139,44 @@ test('the source keeps its ordinals, with the notice at the first moved post', a
   }
   await expect(page.locator('#post-1 .post-body')).toContainText('kindling');
   await scan(page);
+});
+
+// TKT-01M29CYSBA: the split is undone by the opposite operation. mona
+// selects both posts of the split thread, merges them into the source by
+// pasting its link, and lands on the first copy, under the merge's notice;
+// the source's first moved posts stay moved.
+test('the merge dialog moves the posts back to the end of the source', async ({ page, isMobile }, info) => {
+  const t = await source(page.request, info.project.name);
+  const to = splits.get(info.project.name);
+  test.skip(!to, 'the split test did not run in this project');
+  await page.goto(`/t/${to!.id}/${to!.slug}`);
+  await expect(page.locator('#post-2')).toBeVisible();
+  await action(page, isMobile, 'select-posts');
+  const bar = page.getByRole('region', { name: 'Selected posts' });
+  await page.getByRole('checkbox', { name: 'Select post #1' }).check();
+  await page.getByRole('checkbox', { name: 'Select post #2' }).check();
+  await expect(bar.locator('[data-selection-count]')).toHaveText('2 posts selected');
+  await bar.getByRole('button', { name: 'Merge…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Merge 2 posts into another thread' });
+  const field = dialog.getByRole('textbox', { name: 'Thread link or id' });
+  await expect(field).toBeFocused();
+  const merge = dialog.getByRole('button', { name: 'Merge', exact: true });
+  await expect(merge).toBeDisabled();
+  await field.fill(new URL(`/t/${t.id}/${t.slug}`, page.url()).href);
+  await expect(dialog.locator('[data-merge-target]')).toContainText(t.title);
+  await expect(merge).toBeEnabled();
+  await scan(page);
+  const answer = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/merge'));
+  await merge.click();
+  const r = await answer;
+  expect(r.status(), await r.text()).toBe(200);
+
+  await expect(page).toHaveURL(new RegExp(`/t/${t.id}/${t.slug}/4`));
+  const notice = page.locator('[data-merge-notice]');
+  await expect(notice).toHaveText(`2 posts were merged from ${to!.title}.`);
+  await expect(notice.getByRole('link')).toHaveAttribute('href', `/t/${to!.id}/${to!.slug}/1`);
+  await expect(page.locator('#post-4 .post-body')).toContainText('old lantern hooks');
+  await expect(page.locator('#post-5 .post-body')).toContainText('second shelf');
+  await expect(page.locator('#post-2')).toHaveClass(/\btombstone\b/);
+  await expect(page.getByRole('region', { name: 'Selected posts' })).toHaveCount(0);
 });

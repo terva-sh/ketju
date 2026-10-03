@@ -33,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T03:29:34Z
+updated_at: 2026-10-03T04:14:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,14 +53,14 @@ Reversal is by the opposite operation rather than an undo, which is worth tellin
 
 ## Acceptance criteria
 
-- [ ] Merged posts keep their original authors and timestamps and carry an origin reference
-- [ ] Both threads carry notices linking to each other
-- [ ] Reply_to references inside the merged set still resolve after the move
-- [ ] Merged posts land at the end of the target in source order after a merge notice, as docs/06 decides, and the merge neither bumps the thread nor notifies anyone (TestMergeAppendsAtEndInSourceOrder, TestMergeDoesNotBumpThread, TestMergeNotifiesNobody)
-- [ ] A merge between forums is refused unless the actor holds moderate in both, by role or through a group; a target the actor cannot read is not-found; a refusal writes nothing (TestMergeAcrossForumsNeedsModerateInBoth)
-- [ ] Each notice names the other thread only to viewers who may read it, and the cached posts never hold it (TestMergeNoticesRevealOnlyToReaders, TestMergeNoticeNotInCachedPosts)
-- [ ] A merge into or out of an archived thread is refused, moderators and admins included (TestMergeRefusesArchived)
-- [ ] The merge dialog and notice pass the merge step of e2e/posts-split.spec.ts at 390 and 1440 px with one axe scan per test
+- [x] Merged posts keep their original authors and timestamps and carry an origin reference
+- [x] Both threads carry notices linking to each other
+- [x] Reply_to references inside the merged set still resolve after the move
+- [x] Merged posts land at the end of the target in source order after a merge notice, as docs/06 decides, and the merge neither bumps the thread nor notifies anyone (TestMergeAppendsAtEndInSourceOrder, TestMergeDoesNotBumpThread, TestMergeNotifiesNobody)
+- [x] A merge between forums is refused unless the actor holds moderate in both, by role or through a group; a target the actor cannot read is not-found; a refusal writes nothing (TestMergeAcrossForumsNeedsModerateInBoth)
+- [x] Each notice names the other thread only to viewers who may read it, and the cached posts never hold it (TestMergeNoticesRevealOnlyToReaders, TestMergeNoticeNotInCachedPosts)
+- [x] A merge into or out of an archived thread is refused, moderators and admins included (TestMergeRefusesArchived)
+- [x] The merge dialog and notice pass the merge step of e2e/posts-split.spec.ts at 390 and 1440 px with one axe scan per test
 - [ ] The committed dist is regenerated and the reader, MovePosts chunk included, stays within the 120000 B gzip budget
 
 ## Implementation plan
@@ -145,3 +145,28 @@ Reversal is by the opposite operation rather than an undo, which is worth tellin
 **agent:claude-code/phase4-groom-moving-posts** at 2026-10-02T17:21:10Z
 
 run decision: pending maintainer review. docs/06 'Moderator flow for drift' (2026-10-02). Merged posts land at the end of the target in source order, after a 'N posts were merged from <link>' notice, and keep their original authors and times. A merge neither bumps the thread nor notifies anyone. Interleaving by original time lost because ordinals are positions and docs/03 never renumbers. The merge dialog takes the target as a link or id.
+
+**agent:claude-code/phase4-run-cysba** at 2026-10-03T04:14:05Z
+
+Phase A done on run/cysba-merge-posts, cut from run/cysam-split-posts and unpushed; it rebases onto main after the split PR (TKT-01M29CYSAM) merges, and queues for the dist after it.
+
+### What landed
+
+- Route `POST /api/v1/admin/threads/{id}/merge` `{ordinals, into}` behind moderatesGate, with a row in adminRouteGates (eleven moderates routes). Body bounded at 128 KiB as the split's. Answers `MergedPosts {source, target}`, no-store.
+- `Service.Merge` (move.go): `into` that is not a thread id, or is the source, is validation-failed; then movePosts. `admitTarget` now maps forbidden and unauthenticated from the target's read check to not-found, so a merge never tells a hidden thread from a missing one. A restricted forum already answered not-found; a members-only forum to a viewer without read did not.
+- `Post.MergeNotice` drawn in `drawMoves` from the new `MergesIntoRange` query (post_moves grouped by merged_offset and source, opens_thread = 0, first copy in the page's range). It is read only when the page's snapshot holds a copy (EntryCopied), over the copies' range, so a thread nothing was moved into pays no statement: reading it on every page failed TestMentionsLensStatements and TestUnreadLensStatements, which hold the canonical page's statement count, and was rejected for that reason. Cached posts never hold it (TestMergeNoticeNotInCachedPosts).
+- docs/07 "Moving posts": route row, refusals, the ordering rule, `merge_notice`, and the post example.
+- Client: `MergeNotice` in removal.tsx (reader bundle); `MergeDialog`, `threadIdFrom` and `mergeRefusal` in the MovePosts chunk; Merge… enabled in the selection bar.
+
+### Deviations from the plan
+
+- The first copy's ordinal for navigation is `target.post_count - ordinals.length + 1` from the answer, not a field of its own. A reply landing in the target between the merge and the header read would put the landing one post late; MergedPosts stays `{source, target}` as planned.
+- The dialog reads the target's first page (`GET /threads/{id}?page=1`) for the preview, through apiGet and not the thread cache, so a refused lookup does not mark the thread refused in the cache.
+- A link is accepted from any origin: the id is looked up here and the dialog shows the thread found before Merge is offered.
+- TestMergeNotifiesNobody lives in internal/web/api (route plus generator). It asserts no notifications row is written and nobody lists one of the target. The originals' own mention and reply notifications stop being listed after the move, as TestNotificationsNeverWidenAccess (e) already holds for any moved post.
+
+### Tests
+
+Go: internal/service/threads/merge_test.go (TestMergeAcrossForumsNeedsModerateInBoth, TestMergeValidation, TestMergeNoticesRevealOnlyToReaders, TestMergeNoticeNotInCachedPosts, TestMergeRefusesArchived, TestMergeIntoArchivedForumAdminOnly, TestMergeAppendsAtEndInSourceOrder, TestMergeKeepsAuthorsTimesAndOrigin, TestMergeNoticesBothWays, TestMergeReplyToInsideSetResolves, TestMergeBackRestoresReading, TestMergeDoesNotBumpThread); internal/web/api/merge_test.go (TestMergeRouteGated, TestMergeNotifiesNobody). Vitest: MergeDialog.test.tsx, MergeNotice.test.tsx, MovePosts.test.tsx, ThreadPage.test.tsx, ThreadScreen.select.test.tsx. e2e: posts-split.spec.ts gains the merge-back test; it and thread, thread-moderation, thread-rename-move, targets and a11y pass at 390 and 1440 px.
+
+Bundle, measured with go generate and not committed: thread-view 84344 B gzip of 120000 (83279 B on the split branch). MovePosts chunk 3160 B JS and 548 B CSS gzip.

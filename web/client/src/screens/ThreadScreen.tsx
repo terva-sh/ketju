@@ -30,7 +30,7 @@ import { isOwn, noControls, postControls, readOnlyViewer } from '../components/t
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
 import { PostTime } from '../components/thread/PostTime';
-import { isTombstone, movedHref, MoveNotice } from '../components/thread/removal';
+import { isTombstone, MergeNotice, movedHref, MoveNotice } from '../components/thread/removal';
 import { expanderShown } from '../components/thread/ReplyExpander';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
@@ -470,6 +470,10 @@ export function ThreadScreen() {
                 stopSelecting();
                 route(`/t/${encodeURIComponent(to.id)}/${encodeURIComponent(to.slug)}`);
               }}
+              onMerge={(to, first) => {
+                stopSelecting();
+                route(permalink(to, first));
+              }}
               returnTo={() => title.current}
             />
           )}
@@ -708,6 +712,7 @@ function ThreadBody({
             {gaps.before.has(p.ordinal) && <GapDivider gap={gaps.before.get(p.ordinal)!} thread={thread} />}
             {p.ordinal === divider && <UnreadDivider unread={known.current - lastRead} lastRead={lastRead} at={read.last_read_at} />}
             {p.move_notice && <MoveNotice notice={p.move_notice} />}
+            {p.merge_notice && <MergeNotice notice={p.merge_notice} />}
             {isTombstone(p) ? (
               <Tombstone
                 post={p}

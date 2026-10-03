@@ -41,6 +41,7 @@ import type {
   ManagedForumList,
   MarkedRead,
   Me,
+  MergedPosts,
   MovedPosts,
   NotificationList,
   NotificationsRead,
@@ -150,6 +151,9 @@ import threadSplitAnon from '../../../../internal/dto/testdata/golden/thread-spl
 import postMovedUnfinishedMember from '../../../../internal/dto/testdata/golden/post-moved-unfinished.member.json';
 import postMovedHiddenMember from '../../../../internal/dto/testdata/golden/post-moved-hidden.member.json';
 import splitModerator from '../../../../internal/dto/testdata/golden/split.moderator.json';
+import threadMergedMember from '../../../../internal/dto/testdata/golden/thread-merged.member.json';
+import threadMergedAnon from '../../../../internal/dto/testdata/golden/thread-merged.anon.json';
+import mergeModerator from '../../../../internal/dto/testdata/golden/merge.moderator.json';
 import threadHintAnon from '../../../../internal/dto/testdata/golden/thread-hint.anon.json';
 import threadMember from '../../../../internal/dto/testdata/golden/thread.member.json';
 import threadModerator from '../../../../internal/dto/testdata/golden/thread.moderator.json';
@@ -270,6 +274,9 @@ export const contract = [
   matches<Post>()(postMovedUnfinishedMember),
   matches<Post>()(postMovedHiddenMember),
   matches<MovedPosts>()(splitModerator),
+  matches<ThreadPage>()(threadMergedMember),
+  matches<ThreadPage>()(threadMergedAnon),
+  matches<MergedPosts>()(mergeModerator),
   matches<ThreadPage>()(threadMember),
   matches<ThreadPage>()(threadModerator),
   matches<ThreadHint>()(threadHintAnon),

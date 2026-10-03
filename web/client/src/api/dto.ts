@@ -88,6 +88,13 @@ export interface MovedPosts {
   thread: ThreadHeader;
 }
 
+// MergedPosts is POST /admin/threads/{id}/merge's answer: both threads'
+// headers as their pages now serve them.
+export interface MergedPosts {
+  source: ThreadHeader;
+  target: ThreadHeader;
+}
+
 export interface ThreadViewer {
   last_read_ordinal: number;
   // last_read_at is when this viewer's place was last set, null with none.
@@ -160,6 +167,10 @@ export interface Post {
   moved_to: MovedTo | null;
   // move_notice is on the first post of each move: "N posts were moved".
   move_notice: MoveNotice | null;
+  // merge_notice is on the first copy of each merge into this thread: "N
+  // posts were merged from <link>", the link being the source and its first
+  // moved post, only to a viewer who may read it (docs/07 "Moving posts").
+  merge_notice: MoveNotice | null;
   machine_authored: boolean;
 }
 

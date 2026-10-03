@@ -84,3 +84,18 @@ export function MoveNotice({ notice }: { notice: MoveNoticeDTO }) {
     </p>
   );
 }
+
+// MergeNotice stands above the first copy of a merge into this thread
+// (TKT-01M29CYSBA): how many posts were merged and, to a viewer who may read
+// it, the thread they came from, linked at the first moved post there. The
+// copies after it keep their own times, which are older than the posts above
+// them: a merge appends and never interleaves (docs/06).
+export function MergeNotice({ notice }: { notice: MoveNoticeDTO }) {
+  const what = notice.count === 1 ? '1 post was merged' : `${notice.count} posts were merged`;
+  return (
+    <p class="move-notice" data-merge-notice>
+      {what} from{' '}
+      {notice.thread ? <a href={movedHref(notice.thread, notice.ordinal)}>{notice.thread.title}</a> : 'another thread'}.
+    </p>
+  );
+}

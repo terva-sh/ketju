@@ -1,6 +1,6 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Me, MovedPosts, ThreadPage } from '../api/dto';
+import type { Me, MergedPosts, MovedPosts, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { viewer } from '../state/viewer';
 import { preloadMovePosts, renderAt, route, stubServer, threadPage, unmount, type StubServer } from '../testing';
@@ -136,5 +136,32 @@ describe('selecting posts on the thread page', () => {
     expect(location.pathname).toBe('/t/01k4z3j0w8x7u/split-out');
     expect(bar()).toBeNull();
     expect(document.querySelector('[data-split-dialog]')).toBeNull();
+  });
+
+  // TKT-01M29CYSBA.
+  it('merges the selection into another thread and goes to the first copy', async () => {
+    const target = { ...threadPage({ id: other, slug: 'b', title: 'Other' }).thread, post_count: 12, log_length: 99999 };
+    const merged: MergedPosts = { source: { ...page(1).thread, log_length: page(1).thread.log_length + 10 }, target };
+    server.routes[`GET /api/v1/threads/${other}?page=1`] = () => ({ status: 200, body: threadPage({ id: other, slug: 'b', title: 'Other' }) });
+    server.routes[`POST /api/v1/admin/threads/${id}/merge`] = () => ({ status: 200, body: merged });
+    const root = await renderAt(`/t/${id}/a`);
+    await select(root);
+    await act(async () => root.querySelector<HTMLInputElement>('[data-select-post="61"]')!.click());
+    await act(async () => root.querySelector<HTMLInputElement>('[data-select-post="62"]')!.click());
+    await act(async () => bar()!.querySelector<HTMLButtonElement>('.selection-merge')!.click());
+    await wait();
+    const d = document.querySelector<HTMLElement>('[data-merge-dialog]')!;
+    const t = d.querySelector<HTMLInputElement>('input[type=text]')!;
+    t.value = `${location.origin}/t/${other}/b`;
+    await act(async () => void t.dispatchEvent(new Event('input', { bubbles: true })));
+    await wait();
+    expect(d.querySelector('[data-merge-target]')!.textContent).toBe('Other in General');
+    await act(async () => d.querySelector<HTMLButtonElement>('.flag-send')!.click());
+    await wait();
+    await wait();
+    expect(server.sent.filter((r) => r.method === 'POST').map((r) => r.body)).toEqual([{ ordinals: [61, 62], into: other }]);
+    expect(location.pathname).toBe(`/t/${other}/b/11`);
+    expect(bar()).toBeNull();
+    expect(document.querySelector('[data-merge-dialog]')).toBeNull();
   });
 });
