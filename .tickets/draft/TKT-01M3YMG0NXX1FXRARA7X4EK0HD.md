@@ -52,7 +52,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-03T10:54:04Z
+updated_at: 2026-10-03T11:19:00Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -308,3 +308,34 @@ Grooming also settled these, without a design-document line because no member se
 - **The checklist is a file**, docs/releases/v1.0-checklist.md.
 
 Phase 2's and 3's nine exit tests took 18.1 s together under -race on the grooming host (12 cores, b31d0938), as a baseline for criterion 5.
+
+**agent:claude-code/phase4-run-mg0nx** at 2026-10-03T11:19:00Z
+
+Prepared on branch run/mg0nx-phase4-exit (unpushed), from main at fbe569d4, while TKT-01M3V6XVVG, TKT-01M3V73KM1 and TKT-01M3YSQ4CR still merge. TestPhase4ExitAvatarsAreServedOnlyToMembers waits on TKT-01M3YSQ4CR's route.
+
+### Times under -race, locally (12-core host, load 1.4 to 4.5)
+
+- `go test -race ./cmd/ketju/ -run '^TestPhase4Exit' -count=1 -v`: 20.2 s for the seven tests written so far (1.5 s to 6.9 s each).
+- The whole `cmd/ketju` package: 234.5 s before (`-skip '^TestPhase4Exit'`) and 243.1 s after. The 900 s bound is CI's race step, quoted in the PR.
+
+### Where the tests differ from the plan, and why
+
+- **gail's refusals are `not-found`, not `forbidden`.** gail cannot read annex, and a move answers a forum or thread the actor cannot read as not-found, so it never tells a hidden forum from one that does not exist (TKT-01M29CYSBA). Both logs stay byte-identical and no thread file appears, as the plan asks. An extra refused case, otto splitting annex into vault (he moderates the source and reads the target), is the only one that reaches the split's target-forum check.
+- **The notices test merges both ways.** The plan merges annex into vault, yet asks pat (annex only) to see "merged from" with a null thread, which only a merge into annex can show. The test merges vault into annex and annex into vault, so gail and pat each see a merged-from notice without its thread.
+- **Each signed-in actor sends from a loopback address of its own** (127.0.0.11 and up). The write ceiling is per address, 60 burst at 2 a second (docs/08), and the archive test's 114 refused writes plus its setup are more than one address's burst. The shared `actor` helper gained an optional client (cmd/ketju/flow_test.go); every other test is unchanged.
+- **"Served from the response cache"** is read from `ketju_cache_hits_total{cache="response"}` on the world's metrics listener, before and after each second request.
+- **The backup is held after serve answers the snapshot** (a `backupOpts.ask` hook) until three more replies land, so the logs it copies have grown past the snapshot. The test also asks for `caught_up` 0 and no drift. Without the hold, copying logs whole went unseen.
+- **The e2e seed** gives the `moderators` group read on the `moderators` forum, with mona in it, as the forum's description says. The moderator role moderates everywhere but reads a restricted forum only through a grant, so mona could not split into it. No user or forum is added, so no id moves. forum-index, search, thread-rename-move, posts-split, phase3-exit, phase2-exit, admin-queue, thread-moderation, a11y, admin-applications, profile, new-thread and admin-forms pass on it.
+
+### Mutations, each caught
+
+- Dropping the target-forum moderate check from the split and the merge: TestPhase4ExitMovesNeedModerateInBoth.
+- Filling moved_to without the read check: TestPhase4ExitNoticesNameOnlyWhatTheViewerMayRead and TestPhase4ExitMovedPostsFollowTheTargetForum.
+- Serving a moved post's blob: TestPhase4ExitMovedPostsFollowTheTargetForum (blob and thumbnail 200 to gail).
+- Letting the actor's seal lapse on reopen: TestPhase4ExitArchivedThreadIsReadOnlyToEveryone (three replies 201 after the restart).
+- Copying logs whole in an online backup: TestPhase4ExitBackupRestoresAndPassesFsck (`caught_up` 1).
+- Serving /metrics on the main listener: TestPhase4ExitMetricsServeOnlyOnTheirOwnListener.
+
+### Found by the exit spec
+
+TKT-01M40PCE7P (Give a removed post's footer buttons the contrast its links have): axe color-contrast at 1440 px on a removed post's footer buttons, 4.44:1. Filed phase-4 because it fails criterion 1; this ticket depends on it, and its CSS fix rides in this PR with the regenerated dist once the dist is handed to this lane.
