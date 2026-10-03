@@ -1211,14 +1211,29 @@ post's rows for `quoted`, keeping the earlier posts it quotes, instead of
 rendering the source again.
 
 A database projected before migration 0025 has no rows for the posts it
-already holds. The migration therefore moves every `projection_state` row
-back to the end of its log's file header, and the next start's catch-up
-replays each log from the beginning over the rows already there, which
-fills the table. Every apply sets absolute values and an audit row is
-written once per record, so the replay changes nothing else. The notifier
-processes a thread only up to the length the projection holds, so it waits
-for the replay. The cost is one replay of every log at the first start
-after upgrading (Terva review 1998).
+already holds, so the first start after upgrading replays every log from
+the beginning over the rows already there, which fills the table (Terva
+review 1998). Every apply sets absolute values and an audit row is written
+once per record, so the replay changes nothing else:
+`TestBackfillReplayEqualsReindex` compares every projection table, `blobs`,
+`audit_log`, `notifications` and the search index with a fresh
+`ketju reindex`, table by table. The cost is one replay of every log.
+
+The replay is asked for with `projection_state.backfill`, not by moving
+`log_length` (migration 0030, TKT-01M41MTXWH). Migration 0025 as first
+written moved every `log_length` back to the end of the file header, which
+also threw away the length catch-up compares a log against: a log cut short
+before the upgrade was replayed as the truth instead of being quarantined
+(Terva review 2074). 0025 is left as it ran, because the migration runner
+refuses one whose text changed after it ran. 0030 gives each row 0025 moved
+back its length again from `threads.log_length_projected`, which the
+writer sets in the same transaction and 0025 left alone, and sets
+`backfill`. A row a catch-up had already replayed under 0025 keeps the
+length it replayed to. Nothing records what it held before, so a log cut
+before that replay is not found; only a database that ran 0025 without
+0030 can be in that state, and `ketju reindex` rebuilds it. The notifier
+reads no range of a thread whose backfill is still owed, so it waits for
+the replay.
 
 ### post_moves
 ```
@@ -1353,9 +1368,17 @@ plain text leaves out, for TKT-01M29CRJ3B.
 
 ### projection_state
 ```
-thread_id (pk), log_length, updated_at
+thread_id (pk), log_length, updated_at, backfill
 ```
-Drives startup catch-up (03, write path step 5).
+Drives startup catch-up (03, write path step 5). `backfill` (migration
+0030) is 1 when the next projection of the thread must replay its log from
+the end of the file header, over the rows already there, to at least
+`log_length`. The writer clears it in the transaction that records the new
+length. A migration that adds a projection sets it to fill the rows of
+posts projected before the table existed, and never moves `log_length`,
+which catch-up classifies the thread against first: a log shorter than it
+is quarantined whether a backfill is owed or not (03, "Durability and
+recovery").
 
 ## What deliberately is not in the database
 

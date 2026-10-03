@@ -24,10 +24,12 @@ type Report struct {
 	// Scanned is how many logs the walk found.
 	Scanned int
 
-	// Closed is how many gaps were closed, and Bytes how much log they
-	// replayed.
-	Closed int
-	Bytes  int64
+	// Closed is how many gaps were closed, and Backfilled how many threads
+	// were replayed from their header because a backfill was asked for
+	// (migration 0030), a gap or not. Bytes is how much log both replayed.
+	Closed     int
+	Backfilled int
+	Bytes      int64
 
 	// Corrupt are the threads whose log is shorter than their projection,
 	// including a projection with no log at all. They are quarantined: see
@@ -67,6 +69,12 @@ type Report struct {
 // open, so the projection stops at the last whole frame rather than failing
 // on the torn one.
 //
+// A thread whose backfill is asked for (migration 0030) is classified the
+// same way first, against the length it has projected. A corrupt one is
+// quarantined and keeps its backfill. Any other is opened and replayed from
+// the end of its header to its real length, gap or not, over the rows
+// already there (ProjectThread), and its backfill is then cleared.
+//
 // A log shorter than its projection cannot come from a crash, because the
 // projection is written after the log, so it is corruption. It is logged at
 // error level and quarantined, and the rest keep serving; nothing about it
@@ -92,10 +100,14 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	defer w.sweeping.Unlock()
 
 	projected := map[threadid.ID]int64{}
+	backfill := map[threadid.ID]bool{}
 	err := w.db.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		rows, err := q.ListProjectionLengths(ctx)
 		for _, r := range rows {
 			projected[threadid.ID(r.ThreadID)] = r.LogLength
+			if r.Backfill != 0 {
+				backfill[threadid.ID(r.ThreadID)] = true
+			}
 		}
 		return err
 	})
@@ -162,6 +174,9 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 				"and there is nothing to project", "thread", id)
 			continue
 		case ClassCurrent:
+			if backfill[id] {
+				break // replayed below, from its header
+			}
 			w.settle(id, size) // a gap held earlier that has since closed
 			continue
 		case ClassCorrupt:
@@ -169,8 +184,8 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 			continue
 		}
 
-		// A gap. Open the thread for its real length, which a torn tail makes
-		// shorter than the file.
+		// A gap, or a backfill. Open the thread for its real length, which a
+		// torn tail makes shorter than the file.
 		length, err := reopen(ctx, id)
 		if err != nil {
 			// Held for Run to retry, up to the size the walk saw, so the gap
@@ -187,6 +202,9 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 			quarantine(id, length, at)
 			continue
 		case ClassCurrent:
+			if backfill[id] {
+				break
+			}
 			w.settle(id, length) // the gap was a torn tail, and the open removed it
 			continue
 		}
@@ -194,8 +212,15 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 			rep.Failed = append(rep.Failed, id)
 			continue
 		}
-		rep.Closed++
-		rep.Bytes += length - at
+		if length > at {
+			rep.Closed++
+		}
+		if backfill[id] {
+			rep.Backfilled++
+			rep.Bytes += length - threadlog.FileHeaderSize
+		} else {
+			rep.Bytes += length - at
+		}
 	}
 
 	// A projection whose log is gone is the shortest log there is.
@@ -221,7 +246,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	w.mu.Unlock()
 
 	w.log.Info("projection catch-up finished",
-		"scanned", rep.Scanned, "closed", rep.Closed, "bytes", rep.Bytes,
+		"scanned", rep.Scanned, "closed", rep.Closed, "backfilled", rep.Backfilled, "bytes", rep.Bytes,
 		"corrupt", len(rep.Corrupt), "failed", len(rep.Failed), "unfinished", len(rep.Unfinished), "strays", len(rep.Strays),
 		"elapsed", rep.Elapsed)
 	return rep, nil

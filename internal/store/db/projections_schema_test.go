@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -47,13 +48,13 @@ func TestProjectionTablesAreMarked(t *testing.T) {
 	}
 }
 
-// TestPostQuotesMigrationRewindsTheProjection (Terva review 1998): 0025
-// moves every thread's projection_state back to the end of its file header,
-// so the next catch-up replays each log and fills post_quotes for posts
-// projected before the table existed. The rows stay, so a projection whose
-// log is gone still classifies as corrupt; nothing else in them moves, and
-// no authoritative table is touched (notification_progress included, so the
-// generator waits for the replay rather than repeating itself).
+// TestPostQuotesMigrationRewindsTheProjection (Terva review 1998): 0025, as
+// it ran, moves every thread's projection_state back to the end of its file
+// header, so the next catch-up replays each log and fills post_quotes for
+// posts projected before the table existed. The rows stay; nothing else in
+// them moves, and no authoritative table is touched (notification_progress
+// included). 0030 undoes the rewind
+// (TestBackfillMigrationKeepsTheProjectedLength), so this stops at 0025.
 func TestPostQuotesMigrationRewindsTheProjection(t *testing.T) {
 	d, _ := openUnmigrated(t)
 	if err := d.migrate(t.Context(), migrationsBefore(t, 25), "m"); err != nil {
@@ -63,7 +64,7 @@ func TestPostQuotesMigrationRewindsTheProjection(t *testing.T) {
 		`INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (1, 4096, 11), (2, 64, 12), (3, 200, 13)`,
 		`INSERT INTO notification_progress (thread_id, log_length, updated_at) VALUES (1, 4096, 21), (3, 150, 23)`,
 	)
-	if err := d.Migrate(t.Context()); err != nil {
+	if err := d.migrate(t.Context(), migrationsBefore(t, 26), "m"); err != nil {
 		t.Fatal(err)
 	}
 	var state, progress []string
@@ -79,6 +80,78 @@ func TestPostQuotesMigrationRewindsTheProjection(t *testing.T) {
 	}
 	if want := []string{"[1 4096 21]", "[3 150 23]"}; !slices.Equal(progress, want) {
 		t.Errorf("after 0025 notification_progress is %v, want %v", progress, want)
+	}
+}
+
+// TestBackfillMigrationKeepsTheProjectedLength is TKT-01M41MTXWH (Terva
+// review 2074): 0030 gives back the length 0025 took from every row no
+// catch-up has replayed since, from threads.log_length_projected, which the
+// writer sets in the same transaction and 0025 left alone, and asks for a
+// backfill instead. Catch-up then classifies each thread against its real
+// length before replaying it.
+//
+// The database is migrated to 0024 with five threads projected, then
+// through 0025, which rewinds them. The first start after 0025 then got as
+// far as replaying thread 3, as a build with 0025 and without 0030 would
+// have, before 0030 arrived. Thread 4's threads row is missing and thread
+// 5's is no longer than its header; neither can give a length back, so
+// each keeps 64 and is still replayed. notification_progress, which is
+// authoritative, does not move.
+func TestBackfillMigrationKeepsTheProjectedLength(t *testing.T) {
+	d, _ := openUnmigrated(t)
+	if err := d.migrate(t.Context(), migrationsBefore(t, 25), "m"); err != nil {
+		t.Fatal(err)
+	}
+	thread := func(id, length int) string {
+		return fmt.Sprintf(`INSERT INTO threads (id, forum_id, slug, title, author_id, created_at, last_post_at,
+			last_post_author_id, log_length_projected) VALUES (%d, 1, 't', 'T', 1, 1, 1, 1, %d)`, id, length)
+	}
+	execAll(t, d,
+		thread(1, 4096), thread(2, 300), thread(3, 200), thread(5, 64),
+		`INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES
+			(1, 4096, 11), (2, 300, 12), (3, 200, 13), (4, 500, 14), (5, 90, 15)`,
+		`INSERT INTO notification_progress (thread_id, log_length, updated_at) VALUES (1, 4096, 21), (3, 150, 23)`,
+	)
+	if err := d.migrate(t.Context(), migrationsBefore(t, 26), "m"); err != nil {
+		t.Fatal(err)
+	}
+	// Thread 3's replay, which records its log's length in both places.
+	execAll(t, d,
+		`UPDATE projection_state SET log_length = 180, updated_at = 33 WHERE thread_id = 3`,
+		`UPDATE threads SET log_length_projected = 180 WHERE id = 3`,
+	)
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var state, progress []string
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		state = rows(t, tx, `SELECT thread_id, log_length, backfill, updated_at FROM projection_state ORDER BY thread_id`)
+		progress = rows(t, tx, `SELECT thread_id, log_length, updated_at FROM notification_progress ORDER BY thread_id`)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"[1 4096 1 11]", "[2 300 1 12]", "[3 180 0 33]", "[4 64 1 14]", "[5 64 1 15]"}; !slices.Equal(state, want) {
+		t.Errorf("after 0030 projection_state is %v, want %v", state, want)
+	}
+	if want := []string{"[1 4096 21]", "[3 150 23]"}; !slices.Equal(progress, want) {
+		t.Errorf("after 0030 notification_progress is %v, want %v", progress, want)
+	}
+
+	// SetProjectionState, the writer's one statement for the row, clears it.
+	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		return q.SetProjectionState(t.Context(), dbq.SetProjectionStateParams{ThreadID: 1, LogLength: 4200, UpdatedAt: 41})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		state = rows(t, tx, `SELECT thread_id, log_length, backfill FROM projection_state WHERE thread_id = 1`)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"[1 4200 0]"}; !slices.Equal(state, want) {
+		t.Errorf("after SetProjectionState the row is %v, want %v", state, want)
 	}
 }
 

@@ -970,6 +970,13 @@ version was bumped first.
   take the whole forum down. (Decided 2026-09-24 in Phase 1 grooming,
   TKT-01M29C5Y1S.)
 
+  A migration that adds a projection asks catch-up to replay a thread from
+  its start with `projection_state.backfill` (04), never by lowering the
+  projected length. Catch-up classifies the thread against that length
+  first, so a log cut short before an upgrade is still quarantined, and
+  only a thread found intact is replayed (TKT-01M41MTXWH, Terva review
+  2074).
+
 ### What a rebuild can and cannot tell apart
 
 Verified byte by byte in `crash_test.go`, against TKT-01M29C2WTJ.

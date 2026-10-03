@@ -201,13 +201,18 @@ func (q *Queries) GetPostMove(ctx context.Context, arg GetPostMoveParams) (PostM
 }
 
 const getProjectionState = `-- name: GetProjectionState :one
-SELECT thread_id, log_length, updated_at FROM projection_state WHERE thread_id = ?
+SELECT thread_id, log_length, updated_at, backfill FROM projection_state WHERE thread_id = ?
 `
 
 func (q *Queries) GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error) {
 	row := q.db.QueryRowContext(ctx, getProjectionState, threadID)
 	var i ProjectionState
-	err := row.Scan(&i.ThreadID, &i.LogLength, &i.UpdatedAt)
+	err := row.Scan(
+		&i.ThreadID,
+		&i.LogLength,
+		&i.UpdatedAt,
+		&i.Backfill,
+	)
 	return i, err
 }
 
@@ -311,16 +316,19 @@ func (q *Queries) IsCarriedEdit(ctx context.Context, arg IsCarriedEditParams) (b
 }
 
 const listProjectionLengths = `-- name: ListProjectionLengths :many
-SELECT thread_id, log_length FROM projection_state
+SELECT thread_id, log_length, backfill FROM projection_state
 `
 
 type ListProjectionLengthsRow struct {
 	ThreadID  int64
 	LogLength int64
+	Backfill  int64
 }
 
 // Startup catch-up reads every thread's projected length in one statement
-// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
+// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S),
+// and replays a thread whose backfill is asked for even when there is no gap
+// (migration 0030).
 func (q *Queries) ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProjectionLengths)
 	if err != nil {
@@ -330,7 +338,7 @@ func (q *Queries) ListProjectionLengths(ctx context.Context) ([]ListProjectionLe
 	var items []ListProjectionLengthsRow
 	for rows.Next() {
 		var i ListProjectionLengthsRow
-		if err := rows.Scan(&i.ThreadID, &i.LogLength); err != nil {
+		if err := rows.Scan(&i.ThreadID, &i.LogLength, &i.Backfill); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -849,8 +857,9 @@ func (q *Queries) SetPostRevisionKeepEdited(ctx context.Context, arg SetPostRevi
 }
 
 const setProjectionState = `-- name: SetProjectionState :exec
-INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (?, ?, ?)
-ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at
+INSERT INTO projection_state (thread_id, log_length, updated_at, backfill) VALUES (?, ?, ?, 0)
+ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at,
+	backfill = 0
 `
 
 type SetProjectionStateParams struct {
@@ -859,6 +868,8 @@ type SetProjectionStateParams struct {
 	UpdatedAt int64
 }
 
+// Recording a length also clears a backfill: the writer sets it only after
+// replaying the log from its header when one was asked for (migration 0030).
 func (q *Queries) SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error {
 	_, err := q.db.ExecContext(ctx, setProjectionState, arg.ThreadID, arg.LogLength, arg.UpdatedAt)
 	return err

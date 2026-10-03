@@ -40,7 +40,10 @@
 // and the new progress, so a crash leaves both or neither. The generator
 // reads post_meta, threads and watches for the range, and stopping at what
 // the projection reached means it never reads them for a range they do not
-// yet describe.
+// yet describe. A thread whose projection still owes a backfill (migration
+// 0030) counts as not reached at all: its post_quotes may lack the rows of
+// posts projected before the table existed, so the generator waits for the
+// replay that fills them.
 //
 // The bus is a hint. A thread that fails, or that the projection has not
 // reached, joins a behind set that Run retries and Lag reports. A batch
@@ -559,8 +562,8 @@ func (g *Generator) process(ctx context.Context, id threadid.ID) (int64, error) 
 			return err
 		}
 		upTo := st.LogLength
-		if upTo <= from {
-			return nil
+		if upTo <= from || st.Backfill != 0 {
+			return nil // a backfill owed: post_quotes may not describe the range yet
 		}
 		items, err := g.scan(id, from, upTo, since, horizon)
 		if err != nil {

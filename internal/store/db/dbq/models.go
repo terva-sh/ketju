@@ -271,6 +271,7 @@ type ProjectionState struct {
 	ThreadID  int64
 	LogLength int64
 	UpdatedAt int64
+	Backfill  int64
 }
 
 type ReadPosition struct {

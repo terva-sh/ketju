@@ -817,7 +817,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		"version", bi.Version, "commit", bi.Commit,
 		"listen", ln.Addr().String(), "data_dir", cfg.DataDir,
 		"subscribers", bus.Subscribers(), "open_threads", cache.Bound(),
-		"caught_up", report.Closed, "corrupt", len(report.Corrupt), "catch_up_elapsed", report.Elapsed,
+		"caught_up", report.Closed, "backfilled", report.Backfilled, "corrupt", len(report.Corrupt), "catch_up_elapsed", report.Elapsed,
 		"search_indexing", indexer.Indexing())
 	if o.ready != nil {
 		o.ready(ln.Addr().String())

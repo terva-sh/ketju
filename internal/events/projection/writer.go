@@ -17,6 +17,14 @@
 // every apply sets absolute values, so a range applied twice anyway, as a
 // reindex from the start of the log does, converges on the same rows.
 //
+// The one deliberate exception is a backfill (migration 0030): a row whose
+// projection_state.backfill is set is replayed from the end of its file
+// header, over the rows already there, to at least the length it records,
+// and the flag is cleared in the same transaction. A migration that adds a
+// projection asks for one so the rows of posts projected before it are
+// filled. The recorded length is kept meanwhile, so catch-up still
+// classifies the thread against it first.
+//
 // # Failure
 //
 // A thread whose projection fails is kept, not dropped: it joins a behind set
@@ -380,6 +388,12 @@ func (w *Writer) project(ctx context.Context, id threadid.ID, target int64) erro
 //
 // Startup catch-up and reindex (TKT-01M29C5Y1S, TKT-01M29C5Y25) call this
 // directly with the log's length.
+//
+// A thread whose backfill is asked for (projection_state.backfill, migration
+// 0030) is replayed from the end of its file header instead, to upTo or the
+// length already projected, whichever is longer, and its backfill is cleared
+// with the length. A log shorter than that fails as a log shorter than upTo
+// does: the replay never records a length below the one it found.
 func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) (int64, error) {
 	var from int64 = -1
 	err := w.db.Write(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
@@ -392,7 +406,10 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 		default:
 			from = st.LogLength
 		}
-		if upTo <= from {
+		start := from // where the frames to apply begin
+		if err == nil && st.Backfill != 0 {
+			start, upTo = threadlog.FileHeaderSize, max(upTo, from)
+		} else if upTo <= from {
 			return nil // already there; an event can arrive after a sweep
 		}
 
@@ -413,7 +430,7 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 		}
 
 		var applyErr error
-		scanErr := threadlog.ScanFramesFrom(f, from, upTo, func(rec threadlog.ScanRecord) bool {
+		scanErr := threadlog.ScanFramesFrom(f, start, upTo, func(rec threadlog.ScanRecord) bool {
 			applyErr = w.apply(ctx, q, id, rec)
 			return applyErr == nil
 		})

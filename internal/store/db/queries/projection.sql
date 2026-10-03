@@ -8,9 +8,11 @@ SELECT tag FROM thread_tags WHERE thread_id = ? ORDER BY tag;
 SELECT * FROM projection_state WHERE thread_id = ?;
 
 -- Startup catch-up reads every thread's projected length in one statement
--- and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
+-- and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S),
+-- and replays a thread whose backfill is asked for even when there is no gap
+-- (migration 0030).
 -- name: ListProjectionLengths :many
-SELECT thread_id, log_length FROM projection_state;
+SELECT thread_id, log_length, backfill FROM projection_state;
 
 -- The statements ClearProjections runs, one per table in ProjectionTables.
 -- name: ClearThreads :exec
@@ -178,9 +180,12 @@ WHERE pq.thread_id = sqlc.arg(thread_id) AND pq.quoted_ordinal IN (sqlc.slice('q
   AND pm.deleted = 0 AND pm.moved = 0
 ORDER BY pq.quoted_ordinal, pq.ordinal;
 
+-- Recording a length also clears a backfill: the writer sets it only after
+-- replaying the log from its header when one was asked for (migration 0030).
 -- name: SetProjectionState :exec
-INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (?, ?, ?)
-ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at;
+INSERT INTO projection_state (thread_id, log_length, updated_at, backfill) VALUES (?, ?, ?, 0)
+ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at,
+	backfill = 0;
 
 -- A post's direct replies when its thread is not open (post_meta_reply_to),
 -- in ordinal order as the index would give them. The replies endpoint uses it

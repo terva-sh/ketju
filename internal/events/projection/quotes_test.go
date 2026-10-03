@@ -3,6 +3,7 @@ package projection
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -150,27 +151,50 @@ func TestQuotesAreRecordedAsBacklinks(t *testing.T) {
 	}
 }
 
-// rewindAsMigration0025 leaves the database as migration 0025 leaves one
-// projected before it: post_quotes empty, since no build wrote it, and every
-// projection_state row moved back to the end of its file header, as the
-// migration's UPDATE does (db TestPostQuotesMigrationRewindsTheProjection
-// holds the migration to that).
-func (f *fixture) rewindAsMigration0025() {
+// asAfterMigration0030 leaves the database as migrations 0025 and 0030 leave
+// one projected before them: post_quotes empty, since no build wrote it, and
+// a backfill asked for on every projection_state row, whose length 0030
+// keeps (db TestBackfillMigrationKeepsTheProjectedLength holds the
+// migrations to that).
+func (f *fixture) asAfterMigration0030() {
 	f.t.Helper()
 	f.exec(`DELETE FROM post_quotes`)
-	f.exec(`UPDATE projection_state SET log_length = 64 WHERE log_length > 64`)
+	f.exec(`UPDATE projection_state SET backfill = 1`)
 }
 
-// TestCatchUpBackfillsTheBacklinksAfterTheMigration (Terva review 1998): a
-// database whose threads were projected before post_quotes existed gets
-// every backlink at the next start, because catch-up replays each rewound
-// log over the rows already there, and ends on exactly the rows a projection
-// that had the table all along made, audit rows included.
-func TestCatchUpBackfillsTheBacklinksAfterTheMigration(t *testing.T) {
-	f := newFixture(t)
+// backfillOwed is the threads whose projection_state still asks for a
+// backfill.
+func (f *fixture) backfillOwed() []threadid.ID {
+	f.t.Helper()
+	var out []threadid.ID
+	err := f.db.Read(f.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		rows, err := tx.QueryContext(f.t.Context(), `SELECT thread_id FROM projection_state WHERE backfill = 1 ORDER BY thread_id`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			out = append(out, threadid.ID(id))
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return out
+}
+
+// quotingThreads is n threads whose posts quote each other, with an edit and
+// a moderator's delete, each projected to its end.
+func (f *fixture) quotingThreads(n int) []threadid.ID {
+	f.t.Helper()
 	f.users(5, 6, 7)
 	var ids []threadid.ID
-	for i := range 3 {
+	for i := range n {
 		id, _ := f.thread(fmt.Sprintf("Quotes %d", i), "meta")
 		f.quoter(id, 5, "first")
 		f.quoter(id, 6, quote(1))
@@ -184,26 +208,137 @@ func TestCatchUpBackfillsTheBacklinksAfterTheMigration(t *testing.T) {
 		f.project(id, end)
 		ids = append(ids, id)
 	}
+	return ids
+}
+
+// TestCatchUpBackfillsTheBacklinksAfterTheMigration (Terva reviews 1998 and
+// 2074): a database whose threads were projected before post_quotes existed
+// gets every backlink at the next start, because catch-up replays each log
+// whose backfill is asked for over the rows already there, though none has a
+// gap. It ends on exactly the rows a projection that had the table all along
+// made, audit rows included, with no backfill left owed.
+func TestCatchUpBackfillsTheBacklinksAfterTheMigration(t *testing.T) {
+	f := newFixture(t)
+	ids := f.quotingThreads(3)
 	want := f.dump()
 	audits := len(f.auditRows())
 	if f.countQuotes() != 9 || audits == 0 {
 		t.Fatalf("the setup has %d backlinks and %d audit rows, want 9 and some", f.countQuotes(), audits)
 	}
 
-	f.rewindAsMigration0025()
+	f.asAfterMigration0030()
 	var reopens atomic.Int64
 	rep, err := f.w.CatchUp(t.Context(), reopenWith(f.cache, &reopens))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Closed != len(ids) || len(rep.Failed) != 0 || len(rep.Corrupt) != 0 {
-		t.Fatalf("catch-up report %+v, want every thread replayed", rep)
+	if rep.Backfilled != len(ids) || rep.Closed != 0 || len(rep.Failed) != 0 || len(rep.Corrupt) != 0 {
+		t.Fatalf("catch-up report %+v, want every thread backfilled and no gap closed", rep)
 	}
 	if got := f.dump(); got != want {
 		t.Fatalf("after the migration and a catch-up the rows differ:\n%s\n---\n%s", want, got)
 	}
 	if got := len(f.auditRows()); got != audits {
 		t.Fatalf("the replay left %d audit rows, want the %d there were", got, audits)
+	}
+	if owed := f.backfillOwed(); len(owed) != 0 {
+		t.Fatalf("backfills still owed after the catch-up: %v", owed)
+	}
+
+	// Once is enough: the next catch-up finds nothing to do.
+	rep, err = f.w.CatchUp(t.Context(), reopenWith(f.cache, &reopens))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Backfilled != 0 || rep.Closed != 0 || rep.Bytes != 0 {
+		t.Fatalf("a second catch-up report %+v, want nothing replayed", rep)
+	}
+}
+
+// TestBackfillKeepsTheCorruptionCheck is TKT-01M41MTXWH (Terva review 2074):
+// a log cut before the upgrade, at a frame boundary above its header or to
+// exactly its header, is still a log shorter than its projection while a
+// backfill is owed. Catch-up quarantines both without opening either,
+// leaves their rows and their backfill as they were, and backfills the
+// rest. A gap and a backfill on one thread are closed by one replay.
+func TestBackfillKeepsTheCorruptionCheck(t *testing.T) {
+	f := newFixture(t)
+	ids := f.quotingThreads(4)
+	toFrame, toHeader, grown, intact := ids[0], ids[1], ids[2], ids[3]
+	// The last whole frame of toFrame ends here; the cut is at the one before.
+	cut := logSize(t, f.root, toFrame)
+	f.asAfterMigration0030()
+	before := f.dump()
+	end := f.quoter(grown, 6, quote(2)) // a gap as well as a backfill
+	c := f.restart()
+	ends := frameEnds(t, f.root, toFrame)
+	if ends[len(ends)-1] != cut || len(ends) < 2 {
+		t.Fatalf("frames of %s end at %v", toFrame, ends)
+	}
+	for id, n := range map[threadid.ID]int64{toFrame: ends[len(ends)-2], toHeader: threadlog.FileHeaderSize} {
+		if err := os.Truncate(id.LogPath(f.root), n); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var reopens atomic.Int64
+	rep, err := f.w.CatchUp(t.Context(), reopenWith(c, &reopens))
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt := []threadid.ID{toFrame, toHeader}
+	slices.Sort(corrupt)
+	if !slices.Equal(rep.Corrupt, corrupt) || rep.Backfilled != 2 || rep.Closed != 1 || len(rep.Failed) != 0 {
+		t.Fatalf("catch-up report %+v, want %v corrupt, two backfilled and one gap closed", rep, corrupt)
+	}
+	if n := reopens.Load(); n != 2 {
+		t.Errorf("opened %d threads, want the two it replayed", n)
+	}
+	for _, id := range corrupt {
+		if !f.w.Quarantined(id) {
+			t.Errorf("thread %s, cut to %d, is not quarantined", id, logSize(t, f.root, id))
+		}
+	}
+	if owed := f.backfillOwed(); !slices.Equal(owed, corrupt) {
+		t.Errorf("backfills owed after the catch-up: %v, want the quarantined %v", owed, corrupt)
+	}
+	got := f.projected()
+	if got[grown] != end || got[intact] != logSize(t, f.root, intact) {
+		t.Errorf("projected lengths %v, want %s at %d and %s at its end", got, grown, end, intact)
+	}
+	// The quarantined threads' rows are as they were; theirs are the lines
+	// that name them.
+	for line := range strings.Lines(before) {
+		for _, id := range corrupt {
+			if strings.Contains(line, fmt.Sprintf("thread_id=%d ", int64(id))) && !strings.Contains(f.dump(), line) {
+				t.Errorf("catch-up changed a quarantined thread's row: %s", line)
+			}
+		}
+	}
+	if q := f.quotes(intact); !slices.Equal(q, []string{"2>3", "3>1", "3>2"}) {
+		t.Errorf("the intact thread's backlinks are %v", q)
+	}
+	if q := f.quotes(grown); !slices.Equal(q, []string{"2>3", "3>1", "3>2", "4>2"}) {
+		t.Errorf("the grown thread's backlinks are %v", q)
+	}
+}
+
+// TestAnyProjectionPaysAnOwedBackfill: a backfill catch-up could not finish
+// (its thread held, say) is paid by the next projection of the thread from
+// any path, here an event's, which replays from the header rather than from
+// the recorded length, even when the event reports no more than that.
+func TestAnyProjectionPaysAnOwedBackfill(t *testing.T) {
+	f := newFixture(t)
+	ids := f.quotingThreads(1)
+	want := f.dump()
+	f.asAfterMigration0030()
+	end := f.projected()[ids[0]]
+	f.project(ids[0], end)
+	if got := f.dump(); got != want {
+		t.Fatalf("the event's projection did not backfill:\n%s\n---\n%s", want, got)
+	}
+	if owed := f.backfillOwed(); len(owed) != 0 {
+		t.Fatalf("backfills still owed: %v", owed)
 	}
 }
 
@@ -245,4 +380,27 @@ func TestReindexRebuildsTheBacklinks(t *testing.T) {
 			}
 		})
 	}
+}
+
+// frameEnds is the offset at which each whole frame of thread id's log under
+// root ends, in order.
+func frameEnds(t *testing.T, root string, id threadid.ID) []int64 {
+	t.Helper()
+	f, err := os.Open(id.LogPath(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	var ends []int64
+	err = threadlog.ScanFramesFrom(f, threadlog.FileHeaderSize, logSize(t, root, id), func(rec threadlog.ScanRecord) bool {
+		if rec.Err != nil {
+			t.Fatalf("thread %s: frame at %d: %v", id, rec.Offset, rec.Err)
+		}
+		ends = append(ends, rec.Offset+int64(rec.Size))
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ends
 }

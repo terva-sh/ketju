@@ -476,7 +476,9 @@ type Querier interface {
 	// against what is there.
 	ListPermissions(ctx context.Context) ([]ListPermissionsRow, error)
 	// Startup catch-up reads every thread's projected length in one statement
-	// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
+	// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S),
+	// and replays a thread whose backfill is asked for even when there is no gap
+	// (migration 0030).
 	ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error)
 	ListSearchDocOrdinals(ctx context.Context, threadID int64) ([]int64, error)
 	// Catch-up reads every thread's indexed length in one statement and
@@ -794,6 +796,8 @@ type Querier interface {
 	// its own time, as the index entry keeps the edited flag and moves to this
 	// revision. The two read paths then agree on edited_at.
 	SetPostRevisionKeepEdited(ctx context.Context, arg SetPostRevisionKeepEditedParams) (int64, error)
+	// Recording a length also clears a backfill: the writer sets it only after
+	// replaying the log from its header when one was asked for (migration 0030).
 	SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error
 	SetSearchState(ctx context.Context, arg SetSearchStateParams) error
 	SetSearchVersion(ctx context.Context, version int64) error

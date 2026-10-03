@@ -174,8 +174,9 @@ func TestQuotedReadsTheRecordedBacklinks(t *testing.T) {
 	})
 
 	// A post projected before migration 0025, and not yet generated, has
-	// no rows; the migration rewinds the projection, and the generator waits
-	// for the replay that writes them (Terva review 1998).
+	// no rows. Migration 0030 asks for a backfill, and the generator's
+	// projection of the thread pays it before the range is read (Terva
+	// reviews 1998 and 2074).
 	t.Run("projected before the table existed", func(t *testing.T) {
 		f := newFixture(t)
 		id, created := f.thread(f.forum)
@@ -185,7 +186,43 @@ func TestQuotedReadsTheRecordedBacklinks(t *testing.T) {
 		}
 		project(f, id, evs...)
 		f.exec(`DELETE FROM post_quotes`)
-		f.exec(`UPDATE projection_state SET log_length = 64 WHERE log_length > 64`) // as 0025 does
+		f.exec(`UPDATE projection_state SET backfill = 1`) // as 0030 does
+		f.deliver(evs...)
+		f.want("bob quoted #2 by alice")
+	})
+
+	// While the backfill is still owed, because the projection failed, the
+	// range is not read at all: its post_quotes rows may be missing, and
+	// reading them would lose the quoted for good (TKT-01M41MTXWH).
+	t.Run("a backfill still owed", func(t *testing.T) {
+		f := newFixture(t)
+		id, created := f.thread(f.forum)
+		evs := []events.Event{created,
+			f.post(id, "bob", "bob's", 0),
+			f.post(id, "alice", quote("1", "quoting bob"), 0),
+		}
+		project(f, id, evs...)
+		f.exec(`DELETE FROM post_quotes`)
+		f.exec(`UPDATE projection_state SET backfill = 1`)
+		held, err := New(Options{DB: f.db, Root: f.root, Perm: f.perm, Since: 1,
+			Project:     func(context.Context, threadid.ID, int64) error { return errors.New("the replay failed") },
+			Sweep:       func(context.Context) error { return nil },
+			Quarantined: f.proj.Quarantined,
+			Now:         func() time.Time { return time.UnixMilli(f.clock.Load() + int64(time.Hour/time.Millisecond)) },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := held.Deliver(t.Context(), events.Batch{Events: evs}); err != nil {
+			t.Fatal(err)
+		}
+		f.want()
+		if n := f.count(`SELECT count(*) FROM notification_progress WHERE thread_id = ? AND log_length > 64`, int64(id)); n != 0 {
+			t.Fatalf("the generator moved past a range whose backfill is owed")
+		}
+		if l := held.Lag(); l.Threads != 1 {
+			t.Fatalf("lag %+v, want the thread held", l)
+		}
 		f.deliver(evs...)
 		f.want("bob quoted #2 by alice")
 	})
