@@ -2082,8 +2082,8 @@ sent. When the key is not set and `limits.attachment_mb` is above 100, the
 bound defaults to `limits.attachment_mb` instead, so an installation that
 raised the cap before the bound existed still starts after the upgrade.
 The sum reads the partial index `blobs_uploader_unreferenced` (migration
-0027), which holds only blobs at refcount zero. The bound is asked once, after the file is read and hashed, in the
-write that stores new bytes. So two uploads at once cannot both pass, and
+0028), which holds only blobs at refcount zero. The bound is asked once,
+after the file is read and hashed, in the write that stores new bytes. So two uploads at once cannot both pass, and
 bytes the server already holds, which store nothing new, are never refused
 for this and cost no one. An upload over it is `validation-failed` with
 `{field: "file", code: "upload_budget"}`, and the staged file is removed.
